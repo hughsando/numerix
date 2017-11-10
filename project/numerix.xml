@@ -1,0 +1,20 @@
+<xml>
+   <!-- <set name="static_link" value="1" /> -->
+   <include name="${HXCPP}/toolchain/haxe-target.xml" />
+
+
+   <files id="numerix" >
+     <compilerflag value="-Iinclude" />
+
+     <file name="src/Api.cpp" />
+     <file name="src/Tensor.cpp" />
+
+   </files>
+
+   <target id="default" tool="linker" toolid="dll" output="numerix" >
+      <files id="numerix" />
+      <outdir name="../ndll/${BINDIR}" />
+      <ext value=".ndll" />
+   </target>
+
+</xml>

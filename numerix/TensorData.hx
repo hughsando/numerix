@@ -1,0 +1,7 @@
+package numerix;
+
+class TensorData
+{
+
+}
+
