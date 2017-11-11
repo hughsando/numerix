@@ -41,10 +41,19 @@ Tensor::Tensor( int inType, const Shape &inShape )
    refCount = 1;
    elementCount = 1;
    if (shape.size()==0)
+   {
       shape.push_back(1);
+      strides.push_back(1);
+   }
    else
-      for(int i=0;i<shape.size();i++)
+   {
+      strides.resize(shape.size());
+      for(int i=shape.size()-1;i>=0;i--)
+      {
+         strides[i] = elementCount;
          elementCount *= shape[i];
+      }
+   }
 
    int nType = inType & NumberMask;
    if (nType==SignedInteger || nType==UnsignedInteger || nType==Floating)
@@ -57,16 +66,6 @@ Tensor::Tensor( int inType, const Shape &inShape )
       throw std::logic_error("bad tensor type");
 }
 
-
-
-void Tensor::fill(int inType, const u8 *inData, unsigned int inLength)
-{
-   if (inType==type)
-   {
-      int len = elementCount < inLength ? elementCount : inLength;
-      memcpy(data, inData, len * elementSize);
-   }
-}
 
 
 
@@ -109,4 +108,33 @@ int Tensor::decRef()
    return refCount;
 }
 
+
+
+
+void Tensor::fill(int inType, const unsigned char *inData, int inOffsetElem,  unsigned int inCount)
+{
+}
+
+void Tensor::zero(int inOffsetElem, unsigned int inCount)
+{
+   memset( data + inOffsetElem*elementSize, 0, inCount*elementSize );
+}
+
+void Tensor::setInt32(int inValue, int inOffsetElem, unsigned int inCount)
+{
+   if (inValue==0)
+      zero(inOffsetElem,inCount);
+   else
+   {
+   }
+}
+
+void Tensor::setFloat64(double inValue, int inOffsetElem, unsigned int inCount)
+{
+   if (inValue==0)
+      zero(inOffsetElem,inCount);
+   else
+   {
+   }
+}
 

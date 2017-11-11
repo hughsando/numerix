@@ -34,13 +34,17 @@ class Tensor
 
       u8    *data;
       Shape shape;
+      Shape strides;
       int   type;
       int   elementSize;
       unsigned int elementCount;
 
       Tensor(int inType, const Shape &inShape);
 
-      void fill(int inType, const u8 *inData, unsigned int inCount);
+      void fill(int inType, const u8 *inData, int inOffsetElem,  unsigned int inCount);
+      void zero(int inOffsetElem, unsigned int inCount);
+      void setInt32(int inValue, int inOffsetElem, unsigned int inCount);
+      void setFloat64(double inValue, int inOffsetElem, unsigned int inCount);
 
       void checkData();
       int addRef();
