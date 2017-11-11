@@ -11,6 +11,7 @@ enum DataType
    AsciiString     = 0x08000000,
 
    BitsMask        = 0x00ffffff,
+   NumberMask      = 0x07000000,
 
    Float32        = Floating | 32,
    Float64        = Floating | 64,
@@ -28,18 +29,25 @@ typedef std::vector<int> Shape;
 
 class Tensor
 {
-   typedef unsigned char *u8;
-
    public:
+      typedef unsigned char u8;
+
       u8    *data;
       Shape shape;
       int   type;
-      int   elementCount;
+      int   elementSize;
+      unsigned int elementCount;
 
-      Tensor(u8 *inData, int inType, const Shape &inShape );
+      Tensor(int inType, const Shape &inShape);
 
+      void fill(int inType, const u8 *inData, unsigned int inCount);
+
+      void checkData();
       int addRef();
       int decRef();
+
+      static unsigned char *allocData(unsigned int inLength);
+      static void freeData(u8 *data);
 
    protected:
       int refCount;
