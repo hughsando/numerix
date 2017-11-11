@@ -108,6 +108,10 @@ static int combineTypes(int t0, int t1)
 {
    if (t0==t1)
       return t0;
+   if (t0<0)
+      return t1;
+   if (t1<0)
+      return t0;
 
    if ( (t0|t1) & Floating )
    {
@@ -186,12 +190,15 @@ int getArrayType(value inFrom)
 static void fillTensorDim(Tensor *tensor, value inFrom, int inDim, int inOffset)
 {
    if (arrayObject != (ArrayStore)(int)val_field_numeric( inFrom, _id_hx_storeType ))
+   {
       val_throw( alloc_string("non-array data in tensor") );
+   }
    int length = (int)val_field_numeric( inFrom, _id_length );
    int stride = tensor->strides[inDim];
    int end = std::min(length, tensor->shape[inDim]);
 
-   if (inDim+1==tensor->shape.size())
+   int nextDim = inDim + 1;
+   if (nextDim+1>=tensor->shape.size())
    {
       for(int i=0;i<end;i++)
       {
@@ -199,10 +206,13 @@ static void fillTensorDim(Tensor *tensor, value inFrom, int inDim, int inOffset)
          int haveType = getArrayType(from);
          int l = (int)val_field_numeric( from, _id_length );
          unsigned char *pointer = 0;
-         pointer = (unsigned char *)val_data(from);
+         value ptrVal = val_field(from,_id_hx_pointer);
+         if (!val_is_null(ptrVal))
+            pointer = (unsigned char *)val_data(ptrVal);
          if (!pointer)
              val_throw( alloc_string("non-pointer data in tensor") );
-         fillTensorRow(tensor, inOffset, haveType, pointer, length );
+         int len = (int)val_field_numeric( from, _id_length );
+         fillTensorRow(tensor, inOffset, haveType, pointer, len );
          inOffset += stride;
       }
    }
@@ -211,7 +221,7 @@ static void fillTensorDim(Tensor *tensor, value inFrom, int inDim, int inOffset)
       for(int i=0;i<end;i++)
       {
          value from = val_array_i(inFrom, i);
-         fillTensorDim(tensor, from, inDim+1, inOffset);
+         fillTensorDim(tensor, from, nextDim, inOffset);
          inOffset += stride;
       }
    }
@@ -283,11 +293,11 @@ value tdFromDynamic(value inFrom, int inType, value inShape)
    if (nType!=SignedInteger && nType!=UnsignedInteger && nType!=Floating)
       val_throw( alloc_string("Could not determine tensor type"));
 
-   if (haveShape.size()>shape.size())
-      val_throw( alloc_string("too mach data for provided shape"));
-
    if (shape.size()==0)
       shape = haveShape;
+
+   if (haveShape.size()>shape.size())
+      val_throw( alloc_string("too much data for provided shape"));
 
    Tensor *tensor = new Tensor(inType,shape);
    value result = alloc_abstract(tensorKind,tensor);
@@ -348,6 +358,13 @@ int tdGetType(value inTensor)
    TO_TENSOR
    return tensor->type;
 }
-DEFINE_PRIME1(tdGetType);
+DEFINE_PRIME1(tdGetType)
 
+
+void tdPrint(value inTensor, int maxElems)
+{
+   TO_TENSOR
+   return tensor->print(maxElems);
+}
+DEFINE_PRIME2v(tdPrint);
 

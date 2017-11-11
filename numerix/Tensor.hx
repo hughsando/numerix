@@ -22,6 +22,11 @@ abstract Tensor(Dynamic)
       this = null;
    }
 
+   public function print(maxElems = 12)
+   {
+      tdPrint(this, maxElems);
+   }
+
    public function get_shape() : Array<Int>
    {
       var shape = new Array<Int>();
@@ -56,6 +61,7 @@ abstract Tensor(Dynamic)
    }
 
 
+
    static function handleToString(handle:Dynamic)
    {
       var shape = new Array<Int>();
@@ -70,6 +76,7 @@ abstract Tensor(Dynamic)
    static var tdGetElementCount = Loader.load("tdGetElementCount","oi");
    static var tdGetType = Loader.load("tdGetType","oi");
    static var tdRelease = Loader.load("tdRelease","ov");
+   static var tdPrint = Loader.load("tdPrint","oiv");
 
 }
 

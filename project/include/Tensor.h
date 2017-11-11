@@ -2,6 +2,18 @@
 #define TENSOR_H_INCLUDED
 
 #include <vector>
+#include <string>
+
+#ifdef _WIN32
+typedef __int64 TInt64;
+typedef unsigned __int64 TUInt64;
+// TODO - EMSCRIPTEN?
+#else
+typedef int64_t TInt64;
+typedef uint64_t TUInt64;
+#endif
+
+
 
 enum DataType
 {
@@ -41,10 +53,14 @@ class Tensor
 
       Tensor(int inType, const Shape &inShape);
 
+      void print(int inMaxElems);
       void fill(int inType, const u8 *inData, int inOffsetElem,  unsigned int inCount);
       void zero(int inOffsetElem, unsigned int inCount);
       void setInt32(int inValue, int inOffsetElem, unsigned int inCount);
       void setFloat64(double inValue, int inOffsetElem, unsigned int inCount);
+
+      int    getIntAt(int inIndex);
+      double getFloatAt(int inIndex);
 
       void checkData();
       int addRef();
@@ -54,6 +70,7 @@ class Tensor
       static void freeData(u8 *data);
 
    protected:
+      void printSub(const std::string &indent, int offset, int dim, int inMaxElems);
       int refCount;
       ~Tensor();
 };
