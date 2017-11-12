@@ -69,22 +69,22 @@ Tensor::Tensor( int inType, const Shape &inShape )
 void Tensor::printSub(const std::string &indent, int offset, int dim, int inMaxElems)
 {
    int elems = inMaxElems - (shape.size() - dim - 1) * 4;
-   if (elems<2)
-      elems = 2;
 
    bool dotdotdot = false;
    int size = shape[dim];
+   if (elems<2)
+      elems = 2;
    if (size<elems)
       elems = size;
    else if (size>elems)
    {
       dotdotdot = true;
-      elems = size-1;
+      elems--;
    }
 
    if (shape.size()==dim+1)
    {
-      printf("%s[ ",indent.c_str());
+      printf("%s[ ", indent.c_str());
       if (!(type & Floating))
       {
          for(int i=0;i<elems;i++)
@@ -116,8 +116,8 @@ void Tensor::printSub(const std::string &indent, int offset, int dim, int inMaxE
 
       if (dotdotdot)
       {
-         printf("... ");
-         printSub(next, offset + (size-1)*strides[dim], shape[dim]-1,inMaxElems);
+         printf("%s   ...\n", indent.c_str());
+         printSub(next, offset + (size-2)*strides[dim], dim+1,inMaxElems);
       }
 
       printf("%s]\n",indent.c_str());
