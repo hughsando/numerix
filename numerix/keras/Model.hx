@@ -4,8 +4,8 @@ import hdf5.*;
 class Model
 {
    var className:String;
-   var input:Layer;
-   var output:Layer;
+   var inputLayer:InputLayer;
+   var outputLayer:Layer;
    var layers:Array<Layer>;
 
    public function new(filename:String)
@@ -20,19 +20,24 @@ class Model
       //        .filter( i -> i.type==DatasetItem ).map( i -> return i.path ).join("\n"));
 
       layers = [];
-      var prev:Layer = null;
+      inputLayer = new InputLayer();
+      var prev:Layer = inputLayer;
       for(l in (attribs.config:Array<Dynamic>))
       {
          var layer = createLayer(file,l,prev);
-         if (input==null)
-            input = layer;
          prev = layer;
          layers.push(layer);
       }
-      output = prev;
+      outputLayer = prev;
       file.close();
 
       trace(layers);
+   }
+
+   public function run(input:Tensor) : Tensor
+   {
+      inputLayer.set(input);
+      return outputLayer.getOutput();
    }
 
    function createLayer(file:Group, config:Dynamic, prev:Layer) : Layer

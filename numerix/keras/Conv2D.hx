@@ -13,8 +13,9 @@ class Conv2D extends Layer
    var padding:String;
    var weights:Tensor;
    var bias:Tensor;
+   var result:Tensor;
 
-   public function new(file:hdf5.Group, config:Dynamic, ?input:Layer)
+   public function new(file:hdf5.Group, config:Dynamic, input:Layer)
    {
       super(config,input);
       kernelSize = config.kernel_size;
@@ -29,6 +30,30 @@ class Conv2D extends Layer
       weights = file.read('model_weights/$name/$name/kernel:0');
       if (useBias)
          bias = file.read('model_weights/$name/$name/bias:0');
+   }
+
+   override public function getOutput() : Tensor
+   {
+      if (!valid)
+      {
+         valid = true;
+         var src = inputs[0].getOutput();
+         if (!validSize)
+         {
+            validSize = true;
+            var inShape = src.shape;
+            if (inShape.length!=3)
+                throw "Conv2D should be HWC format";
+            // TODO - shape / strides
+            var h = inShape[0];
+            var w = inShape[1];
+            result = new Tensor( Nx.float32, [h, w, filters]);
+         }
+
+         // Run( src, result );
+      }
+
+      return result;
    }
 
    override public function toString() return 'Conv2D($name:$kernelSize x $filters $activation $weights $bias)';
