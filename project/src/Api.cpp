@@ -234,19 +234,27 @@ value tdFromDynamic(value inFrom, int inType, value inShape)
 
    Shape shape = shapeFromVal(inShape);
 
-   ArrayStore storeType = (ArrayStore)(int)val_field_numeric( inFrom, _id_hx_storeType );
-   int elementSize = (int)val_field_numeric( inFrom, _id_hx_elementSize );
-   int length = (int)val_field_numeric( inFrom, _id_length );
+   ArrayStore storeType = arrayNull;
+   int elementSize = 0;
+   int length = 0;
    unsigned char *pointer = 0;
 
    Shape haveShape;
    int haveType = -1;
 
-   if (length && elementSize)
+
+   if (!val_is_null(inFrom))
    {
-      value ptrVal = val_field(inFrom,_id_hx_pointer);
-      if (!val_is_null(ptrVal))
-         pointer = (unsigned char *)val_data(ptrVal);
+      storeType = (ArrayStore)(int)val_field_numeric( inFrom, _id_hx_storeType );
+      elementSize = (int)val_field_numeric( inFrom, _id_hx_elementSize );
+      length = (int)val_field_numeric( inFrom, _id_length );
+
+      if (length && elementSize )
+      {
+         value ptrVal = val_field(inFrom,_id_hx_pointer);
+         if (!val_is_null(ptrVal))
+            pointer = (unsigned char *)val_data(ptrVal);
+      }
    }
 
    if (storeType==arrayObject && elementSize>0)
@@ -359,6 +367,14 @@ int tdGetType(value inTensor)
    return tensor->type;
 }
 DEFINE_PRIME1(tdGetType)
+
+
+value tdGetData(value inTensor)
+{
+   TO_TENSOR
+   return alloc_abstract(dataKind,tensor->data);
+}
+DEFINE_PRIME1(tdGetData)
 
 
 void tdPrint(value inTensor, int maxElems)

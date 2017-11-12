@@ -268,13 +268,34 @@ void Tensor::zero(int inOffsetElem, unsigned int inCount)
    memset( data + inOffsetElem*elementSize, 0, inCount*elementSize );
 }
 
+
+
+template<typename SRC,typename DEST>
+void TSet(SRC inValue, DEST *dest, unsigned int inCount)
+{
+   for(int i=0;i<inCount;i++)
+      dest[i] = inValue;
+}
+
 void Tensor::setInt32(int inValue, int inOffsetElem, unsigned int inCount)
 {
    if (inValue==0)
       zero(inOffsetElem,inCount);
    else
    {
-      printf("TODO Fill non-zero\n");
+      switch(type)
+      {
+         case Float32: TSet(inValue, ((float *)data) + inOffsetElem, inCount); break;
+         case Float64: TSet(inValue, ((double *)data) + inOffsetElem, inCount); break;
+         case UInt8:   TSet(inValue, ((unsigned char *)data) + inOffsetElem, inCount); break;
+         case UInt16:  TSet(inValue, ((unsigned short *)data) + inOffsetElem, inCount); break;
+         case UInt32:  TSet(inValue, ((unsigned int *)data) + inOffsetElem, inCount); break;
+         case UInt64:  TSet(inValue, ((TUInt64 *)data) + inOffsetElem, inCount); break;
+         case Int8:    TSet(inValue, ((signed char *)data) + inOffsetElem, inCount); break;
+         case Int16:   TSet(inValue, ((short *)data) + inOffsetElem, inCount); break;
+         case Int32:   TSet(inValue, ((int *)data) + inOffsetElem, inCount); break;
+         case Int64:   TSet(inValue, ((TInt64 *)data) + inOffsetElem, inCount); break;
+      }
    }
 }
 
@@ -284,7 +305,19 @@ void Tensor::setFloat64(double inValue, int inOffsetElem, unsigned int inCount)
       zero(inOffsetElem,inCount);
    else
    {
-      printf("TODO Fill non-zero\n");
+      switch(type)
+      {
+         case Float32: TSet(inValue, ((float *)data) + inOffsetElem, inCount); break;
+         case Float64: TSet(inValue, ((double *)data) + inOffsetElem, inCount); break;
+         case UInt8:   TSet(inValue, ((unsigned char *)data) + inOffsetElem, inCount); break;
+         case UInt16:  TSet(inValue, ((unsigned short *)data) + inOffsetElem, inCount); break;
+         case UInt32:  TSet(inValue, ((unsigned int *)data) + inOffsetElem, inCount); break;
+         case UInt64:  TSet(inValue, ((TUInt64 *)data) + inOffsetElem, inCount); break;
+         case Int8:    TSet(inValue, ((signed char *)data) + inOffsetElem, inCount); break;
+         case Int16:   TSet(inValue, ((short *)data) + inOffsetElem, inCount); break;
+         case Int32:   TSet(inValue, ((int *)data) + inOffsetElem, inCount); break;
+         case Int64:   TSet(inValue, ((TInt64 *)data) + inOffsetElem, inCount); break;
+      }
    }
 }
 

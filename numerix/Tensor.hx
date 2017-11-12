@@ -7,7 +7,7 @@ abstract Tensor(Dynamic)
    public var elementSize(get,never):Int;
    public var type(get,never):Int;
    public var typename(get,never):String;
-   //public var data(get,null):cpp.Pointer<cpp.Void>;
+   public var data(get,never):Dynamic;
 
    public function new(inArrayLike:Dynamic,inStoreType = -1, ?inShape:Array<Int>)
    {
@@ -60,6 +60,11 @@ abstract Tensor(Dynamic)
       return handleToString(this);
    }
 
+   public function get_data() : Dynamic
+   {
+      return tdGetData(this);
+   }
+
 
 
    static function handleToString(handle:Dynamic)
@@ -75,6 +80,7 @@ abstract Tensor(Dynamic)
    static var tdGetDimAt = Loader.load("tdGetDimAt","oii");
    static var tdGetElementCount = Loader.load("tdGetElementCount","oi");
    static var tdGetType = Loader.load("tdGetType","oi");
+   static var tdGetData = Loader.load("tdGetData","oo");
    static var tdRelease = Loader.load("tdRelease","ov");
    static var tdPrint = Loader.load("tdPrint","oiv");
 
