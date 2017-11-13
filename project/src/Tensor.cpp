@@ -299,6 +299,8 @@ void Tensor::setInt32(int inValue, int inOffsetElem, unsigned int inCount)
    }
 }
 
+
+
 void Tensor::setFloat64(double inValue, int inOffsetElem, unsigned int inCount)
 {
    if (inValue==0)
@@ -320,4 +322,97 @@ void Tensor::setFloat64(double inValue, int inOffsetElem, unsigned int inCount)
       }
    }
 }
+
+
+
+template<typename DATA>
+void TReorder(const DATA *src, void *inDest,
+              const std::vector<int> &shape,
+              const std::vector<int> &strides,
+              const std::vector<int> &order)
+{
+   DATA *dest = (DATA *)inDest;
+   if (order.size()<2)
+   {
+      memcpy(dest, src, sizeof(DATA)*shape[0]);
+      return;
+   }
+
+
+   int len4    = order.size() > 4 ? shape[ order[4] ] : 1;
+   int stride4 = order.size() > 4 ? strides[ order[4] ] : 0;
+   int len3    = order.size() > 3 ? shape[ order[3] ] : 1;
+   int stride3 = order.size() > 3 ? strides[ order[3] ] : 0;
+   int len2    = order.size() > 2 ? shape[ order[2] ] : 1;
+   int stride2 = order.size() > 2 ? strides[ order[2] ] : 0;
+   int len1    = order.size() > 1 ? shape[ order[1] ] : 1;
+   int stride1 = order.size() > 1 ? strides[ order[1] ] : 0;
+   int len0    = shape[ order[0] ];
+   int stride0 = strides[ order[0] ];
+
+   int src4 = 0;
+   for(int i4=0;i4<len4;i4++)
+   {
+      int src3 = src4;
+      src4 += stride4;
+      for(int i3=0;i3<len3;i3++)
+      {
+         int src2 = src3;
+         src3 += stride3;
+         for(int i2=0;i2<len2;i2++)
+         {
+            int src1 = src2;
+            src2 += stride2;
+            for(int i1=0;i1<len1;i1++)
+            {
+               int src0 = src1;
+               src1 += stride1;
+               for(int i0=0;i0<len0;i0++)
+               {
+                  *dest++ = src[src0];
+                  src0 += stride0;
+               }
+            }
+         }
+      }
+   }
+}
+
+
+
+
+Tensor *Tensor::reorder(const std::vector<int> &order)
+{
+   if (order.size()!=shape.size())
+      TensorThrow( "Wrong number of coordinate in reorer" );
+
+   for(int i=0;i<order.size();i++)
+      if (std::find(order.begin(), order.end(), i) == order.end())
+         TensorThrow( "Missing coordinate in reorder" );
+
+   if (order.size()>5)
+      TensorThrow( "reorder - not implemented with this many coordinates" );
+
+   std::vector<int> targetShape(order.size());
+   for(int i=0;i<order.size();i++)
+      targetShape[i] = shape[ order[i] ];
+   Tensor *t = new Tensor(type, targetShape);
+   void *d = t->data;
+   switch(type)
+   {
+      case Float32: TReorder(((float *)data)         , d, shape, strides, order ); break;
+      case Float64: TReorder(((double *)data)        , d, shape, strides, order ); break;
+      case UInt8:   TReorder(((unsigned char *)data) , d, shape, strides, order ); break;
+      case UInt16:  TReorder(((unsigned short *)data), d, shape, strides, order ); break;
+      case UInt32:  TReorder(((unsigned int *)data)  , d, shape, strides, order ); break;
+      case UInt64:  TReorder(((TUInt64 *)data)       , d, shape, strides, order ); break;
+      case Int8:    TReorder(((signed char *)data)   , d, shape, strides, order ); break;
+      case Int16:   TReorder(((short *)data)         , d, shape, strides, order ); break;
+      case Int32:   TReorder(((int *)data)           , d, shape, strides, order ); break;
+      case Int64:   TReorder(((TInt64 *)data)        , d, shape, strides, order ); break;
+   }
+
+   return t;
+}
+
 

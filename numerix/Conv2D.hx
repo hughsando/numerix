@@ -1,35 +1,30 @@
-package numerix.keras;
-import numerix.*;
+package numerix;
 using numerix.Hdf5Tools;
 
 class Conv2D extends Layer
 {
-   var kernelSize:Array<Int>;
-   var dilationRate:Array<Int>;
-   var strides:Array<Int>;
-   var filters:Int;
-   var useBias:Bool;
-   var activation:String;
-   var padding:String;
-   var weights:Tensor;
-   var bias:Tensor;
-   var result:Tensor;
+   public var kernelSize(default,null):Array<Int>;
+   public var dilation(default,null):Array<Int>;
+   public var strides(default,null):Array<Int>;
+   public var filters(default,null):Int;
+   public var useBias(default,null):Bool;
+   public var activation(default,null):String;
+   public var padding(default,null):String;
+   public var weights(default,null):Tensor;
+   public var bias(default,null):Tensor;
+   public var result(default,null):Tensor;
 
    public function new(file:hdf5.Group, config:Dynamic, input:Layer)
    {
       super(config,input);
-      kernelSize = config.kernel_size;
-      dilationRate = config.dilation_rate;
+
+      kernelSize = config.kernelSize;
+      dilation = config.dilation;
       strides = config.strides;
       filters = config.filters;
-      useBias = config.use_bias;
+      useBias = config.useBias;
       activation = config.activation;
       padding = config.padding;
-      config.kernel_initializer  = null;
-
-      weights = file.read('model_weights/$name/$name/kernel:0');
-      if (useBias)
-         bias = file.read('model_weights/$name/$name/bias:0');
    }
 
    override public function getOutput() : Tensor
@@ -47,7 +42,9 @@ class Conv2D extends Layer
             // TODO - shape / strides
             var h = inShape[0];
             var w = inShape[1];
-            result = new Tensor( Nx.float32, [h, w, filters]);
+            if (result!=null)
+               result.release();
+            result = Tensor.create( Nx.float32, [h, w, filters]);
          }
 
          // Run( src, result );
@@ -55,6 +52,14 @@ class Conv2D extends Layer
 
       return result;
    }
+
+
+   override public function setWeights(inWeights:Array<Tensor>)
+   {
+      weights = inWeights[0];
+      bias = inWeights[1];
+   }
+
 
    override public function toString() return 'Conv2D($name:$kernelSize x $filters $activation $weights $bias)';
 

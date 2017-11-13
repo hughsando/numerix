@@ -39,6 +39,8 @@ enum DataType
 
 typedef std::vector<int> Shape;
 
+void TensorThrow(const char *err);
+
 class Tensor
 {
    public:
@@ -58,6 +60,8 @@ class Tensor
       void zero(int inOffsetElem, unsigned int inCount);
       void setInt32(int inValue, int inOffsetElem, unsigned int inCount);
       void setFloat64(double inValue, int inOffsetElem, unsigned int inCount);
+
+      Tensor *reorder(const std::vector<int> &order);
 
       int    getIntAt(int inIndex);
       double getFloatAt(int inIndex);

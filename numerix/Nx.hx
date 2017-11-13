@@ -16,12 +16,12 @@ class Nx
 
    public static function array(arrayLike:Dynamic, dataType=-1, ?inShape:Array<Int>)
    {
-      return new Tensor(arrayLike, dataType, inShape);
+      return Tensor.create(arrayLike, dataType, inShape);
    }
 
    public static function tensor(arrayLike:Dynamic, dataType=-1, ?inShape:Array<Int>) : Tensor
    {
-      return new Tensor(arrayLike, dataType, inShape);
+      return Tensor.create(arrayLike, dataType, inShape);
    }
 }
 

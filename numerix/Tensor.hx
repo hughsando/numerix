@@ -9,22 +9,32 @@ abstract Tensor(Dynamic)
    public var typename(get,never):String;
    public var data(get,never):Dynamic;
 
-   public function new(inArrayLike:Dynamic,inStoreType = -1, ?inShape:Array<Int>)
+   function new(inHandle:Dynamic)
    {
-      this = tdFromDynamic(inArrayLike, inStoreType, inShape);
-      if (this!=null)
-         this._hxcpp_toString = handleToString;
+      this = inHandle;
    }
 
-   inline public function release()
+   public static function create(?inArrayLike:Dynamic,inStoreType = -1, ?inShape:Array<Int>)
+   {
+      return new Tensor( tdFromDynamic(inArrayLike, inStoreType, inShape) );
+   }
+
+   public function release()
    {
       tdRelease(this);
-      this = null;
    }
 
    public function print(maxElems = 12)
    {
       tdPrint(this, maxElems);
+   }
+
+   public function reorder(order:Array<Int>, inRelease = false):Tensor
+   {
+      var result = new Tensor(tdReorder(this, order));
+      if (inRelease)
+         release();
+      return result;
    }
 
    public function get_shape() : Array<Int>
@@ -69,6 +79,8 @@ abstract Tensor(Dynamic)
 
    static function handleToString(handle:Dynamic)
    {
+      if (handle==null)
+         return "Tensor(null)";
       var shape = new Array<Int>();
       for(i in 0...tdGetDimCount(handle))
          shape.push(tdGetDimAt(handle,i));
@@ -83,6 +95,7 @@ abstract Tensor(Dynamic)
    static var tdGetData = Loader.load("tdGetData","oo");
    static var tdRelease = Loader.load("tdRelease","ov");
    static var tdPrint = Loader.load("tdPrint","oiv");
+   static var tdReorder = Loader.load("tdReorder","ooo");
 
 }
 

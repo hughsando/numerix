@@ -34,6 +34,7 @@ extern "C" void InitIDs()
 
 }
 
+
 Shape shapeFromVal(value inShape)
 {
    int *data = val_array_int(inShape);
@@ -61,6 +62,25 @@ extern "C" int numerix_register_prims()
 {
    InitIDs();
    return 0;
+}
+
+
+void TensorThrow(const char *err)
+{
+   val_throw( alloc_string(err) );
+}
+
+void fromValue( std::vector<int> &out, value inValue)
+{
+   int len = (int)val_field_numeric( inValue, _id_length );
+   out.resize(len);
+   int *ptr= val_array_int(inValue);
+   if (ptr)
+      for(int i=0;i<len;i++)
+         out[i] = ptr[i];
+   else
+      for(int i=0;i<len;i++)
+         out[i] = val_int(val_array_i(inValue,i) );
 }
 
 
@@ -383,4 +403,15 @@ void tdPrint(value inTensor, int maxElems)
    return tensor->print(maxElems);
 }
 DEFINE_PRIME2v(tdPrint);
+
+
+value tdReorder(value inTensor, value inNewOrder)
+{
+   TO_TENSOR
+   std::vector<int> newOrder;
+   fromValue(newOrder, inNewOrder);
+   Tensor *result =  tensor->reorder(newOrder);
+   return alloc_abstract(tensorKind,result);
+}
+DEFINE_PRIME2v(tdReorder);
 

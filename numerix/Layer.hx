@@ -1,4 +1,4 @@
-package numerix.keras;
+package numerix;
 import numerix.*;
 
 class Layer
@@ -20,6 +20,7 @@ class Layer
       validSize = false;
    }
 
+
    public function invalidate(inSameSize:Bool)
    {
       if (valid)
@@ -31,6 +32,12 @@ class Layer
             o.invalidate(inSameSize);
       }
    }
+
+   public function setWeights(inWeights:Array<Tensor>)
+   {
+   }
+
+
 
    public function getOutput() : Tensor
    {

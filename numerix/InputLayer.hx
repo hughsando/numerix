@@ -1,5 +1,4 @@
-package numerix.keras;
-import numerix.*;
+package numerix;
 
 class InputLayer extends Layer
 {
