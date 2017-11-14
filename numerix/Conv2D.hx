@@ -52,9 +52,6 @@ class Conv2D extends Layer
       bias = inWeights[1];
       release();
 
-      var buf = Io.encode(weights);
-      sys.io.File.saveBytes("weights.nx", buf);
-
       handle = layCreateConv2D(strides, activation, padding, weights, bias);
    }
 

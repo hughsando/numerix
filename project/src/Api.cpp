@@ -273,6 +273,8 @@ value tdFromDynamic(value inFrom, int inType, value inShape)
    int haveType = -1;
 
 
+   CffiBytes bytes;
+
    if (!val_is_null(inFrom))
    {
       storeType = (ArrayStore)(int)val_field_numeric( inFrom, _id_hx_storeType );
@@ -285,9 +287,12 @@ value tdFromDynamic(value inFrom, int inType, value inShape)
          if (!val_is_null(ptrVal))
             pointer = (unsigned char *)val_data(ptrVal);
       }
+      if (!pointer)
+         bytes = getByteData(inFrom);
    }
 
-   if (storeType==arrayObject && elementSize>0)
+
+   if (storeType==arrayObject && elementSize>0 && !bytes.data)
    {
       int   dims[64] = { 0 };
 
@@ -341,7 +346,7 @@ value tdFromDynamic(value inFrom, int inType, value inShape)
    value result = alloc_abstract(tensorKind,tensor);
    val_gc(result, destroyTensor);
 
-   if (storeType==arrayNull)
+   if (storeType==arrayNull && !bytes.data)
    {
       if (haveType & (UnsignedInteger|SignedInteger))
          tensor->setInt32(val_int(inFrom),0, tensor->elementCount);
@@ -352,17 +357,24 @@ value tdFromDynamic(value inFrom, int inType, value inShape)
    {
       fillTensorRow(tensor, 0, haveType, pointer, length);
    }
+   else if (bytes.data)
+   {
+      int elems = bytes.length/tensor->elementSize;
+      if (elems!=tensor->elementCount)
+         TensorThrow("provided data length does not match the requested shape");
+
+      tensor->fill(inType, bytes.data, 0, tensor->elementCount);
+   }
    else
    {
       if (haveShape.size()!=shape.size())
-         val_throw( alloc_string("provided data does not match the requested shape"));
+         TensorThrow("provided data does not match the requested shape");
       /*
       if (haveShape.size()<shape.size())
       {
          broadcastFill(tensor, inFrom, haveShape, 0);
       }
       */
-
       fillTensorDim(tensor, inFrom, 0, 0);
    }
 

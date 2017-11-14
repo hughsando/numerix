@@ -13,12 +13,20 @@ abstract Tensor(Dynamic)
    function new(inHandle:Dynamic)
    {
       this = inHandle;
+      if (this!=null)
+         this._hxcpp_toString = handleToString;
    }
 
    public static function create(?inArrayLike:Dynamic,inStoreType = -1, ?inShape:Array<Int>)
    {
       return new Tensor( tdFromDynamic(inArrayLike, inStoreType, inShape) );
    }
+
+   public static function fromBytes(inBytes:haxe.io.Bytes,inStoreType:Int, inShape:Array<Int>)
+   {
+      return create(inBytes, inStoreType, inShape);
+   }
+
 
    public static function fromHandle(inHandle:Dynamic) return new Tensor(inHandle);
 

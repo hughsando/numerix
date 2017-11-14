@@ -41,6 +41,28 @@ class DataType
       return "Bad Type";
    }
 
+   public static function fromString(type:String):Int
+   {
+      return switch(type)
+      {
+         case "Float32" : Float32;
+         case "Float64" : Float64;
+         case "UInt8" : UInt8;
+         case "UInt16" : UInt16;
+         case "UInt32" : UInt32;
+         case "UInt64" : UInt64;
+         case "Int8" : Int8;
+         case "Int16" : Int16;
+         case "Int32" : Int32;
+         case "Int64" : Int64;
+         case "Boolean" : Boolean;
+         case "AsciiString" : AsciiString;
+         default:
+             throw "Unknown type " + type;
+             0;
+      }
+   }
+
    public static function size(type:Int):Int
    {
       if ( (type & (SignedInteger|UnsignedInteger|Floating)) > 0 )
