@@ -14,20 +14,6 @@ class InputLayer extends Layer
    public function set(tensor:Tensor)
    {
       value = tensor;
-      var inShape = tensor.shape;
-      var sameSize = inShape.length == lastShape.length;
-      if (sameSize)
-      {
-         for(i in 0...inShape.length)
-            if (inShape[i]!=lastShape[i])
-            {
-                sameSize = false;
-                lastShape = inShape;
-                break;
-            }
-      }
-      for(o in outputs)
-         o.invalidate(sameSize);
    }
 
    override public function getOutput() : Tensor

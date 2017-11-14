@@ -8,6 +8,7 @@
 
      <file name="src/Api.cpp" />
      <file name="src/Tensor.cpp" />
+     <file name="src/Conv2D.cpp" />
 
    </files>
 

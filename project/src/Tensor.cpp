@@ -197,6 +197,12 @@ int Tensor::addRef()
    return refCount;
 }
 
+Tensor *Tensor::incRef()
+{
+   addRef();
+   return this;
+}
+
 int Tensor::decRef()
 {
    // TODO - atomic
@@ -338,17 +344,19 @@ void TReorder(const DATA *src, void *inDest,
       return;
    }
 
+   int s = order.size();
+   int l = s-1;
 
-   int len4    = order.size() > 4 ? shape[ order[4] ] : 1;
-   int stride4 = order.size() > 4 ? strides[ order[4] ] : 0;
-   int len3    = order.size() > 3 ? shape[ order[3] ] : 1;
-   int stride3 = order.size() > 3 ? strides[ order[3] ] : 0;
-   int len2    = order.size() > 2 ? shape[ order[2] ] : 1;
-   int stride2 = order.size() > 2 ? strides[ order[2] ] : 0;
-   int len1    = order.size() > 1 ? shape[ order[1] ] : 1;
-   int stride1 = order.size() > 1 ? strides[ order[1] ] : 0;
-   int len0    = shape[ order[0] ];
-   int stride0 = strides[ order[0] ];
+   int len4    = s > 4 ? shape[ order[l-4] ] : 1;
+   int stride4 = s > 4 ? strides[ order[l-4] ] : 0;
+   int len3    = s > 3 ? shape[ order[l-3] ] : 1;
+   int stride3 = s > 3 ? strides[ order[l-3] ] : 0;
+   int len2    = s > 2 ? shape[ order[l-2] ] : 1;
+   int stride2 = s > 2 ? strides[ order[l-2] ] : 0;
+   int len1    = s > 1 ? shape[ order[l-1] ] : 1;
+   int stride1 = s > 1 ? strides[ order[l-1] ] : 0;
+   int len0    = shape[ order[l] ];
+   int stride0 = strides[ order[l] ];
 
    int src4 = 0;
    for(int i4=0;i4<len4;i4++)

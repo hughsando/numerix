@@ -5,6 +5,7 @@ abstract Tensor(Dynamic)
    public var shape(get,never):Array<Int>;
    public var elementCount(get,never):Int;
    public var elementSize(get,never):Int;
+   public var dataSize(get,never):Int;
    public var type(get,never):Int;
    public var typename(get,never):String;
    public var data(get,never):Dynamic;
@@ -18,6 +19,8 @@ abstract Tensor(Dynamic)
    {
       return new Tensor( tdFromDynamic(inArrayLike, inStoreType, inShape) );
    }
+
+   public static function fromHandle(inHandle:Dynamic) return new Tensor(inHandle);
 
    public function release()
    {
@@ -34,6 +37,19 @@ abstract Tensor(Dynamic)
       var result = new Tensor(tdReorder(this, order));
       if (inRelease)
          release();
+      return result;
+   }
+
+   public function getBytes():haxe.io.Bytes
+   {
+      var size = dataSize;
+      if (size<1)
+         return haxe.io.Bytes.alloc(0);
+
+      var result = haxe.io.Bytes.alloc(size);
+
+      tdFillData(this,result);
+
       return result;
    }
 
@@ -54,6 +70,12 @@ abstract Tensor(Dynamic)
    {
       return DataType.size( tdGetType(this) );
    }
+
+   public function get_dataSize() : Int
+   {
+      return tdGetElementCount(this) * DataType.size( tdGetType(this) );
+   }
+
 
    public function get_typename() : String
    {
@@ -93,6 +115,7 @@ abstract Tensor(Dynamic)
    static var tdGetElementCount = Loader.load("tdGetElementCount","oi");
    static var tdGetType = Loader.load("tdGetType","oi");
    static var tdGetData = Loader.load("tdGetData","oo");
+   static var tdFillData = Loader.load("tdFillData","oov");
    static var tdRelease = Loader.load("tdRelease","ov");
    static var tdPrint = Loader.load("tdPrint","oiv");
    static var tdReorder = Loader.load("tdReorder","ooo");

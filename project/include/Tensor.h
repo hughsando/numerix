@@ -37,7 +37,22 @@ enum DataType
    Int64          = SignedInteger | 64,
 };
 
+enum Activation
+{
+   actLinear,
+   actRelu,
+   actSigmoid,
+};
+
+enum Padding
+{
+   actSame,
+   actValid,
+};
+
+
 typedef std::vector<int> Shape;
+typedef const std::vector<int> &CShape;
 
 void TensorThrow(const char *err);
 
@@ -67,6 +82,7 @@ class Tensor
       double getFloatAt(int inIndex);
 
       void checkData();
+      Tensor *incRef();
       int addRef();
       int decRef();
 
@@ -77,6 +93,18 @@ class Tensor
       void printSub(const std::string &indent, int offset, int dim, int inMaxElems);
       int refCount;
       ~Tensor();
+};
+
+class Layer
+{
+public:
+   static Layer *createConv2D(int inStrideY, int inStrideX,
+                              Activation activation, Padding padding,
+                              Tensor *weights, Tensor *bias);
+
+   virtual ~Layer() { };
+
+   virtual Tensor *run(Tensor *inSrc0, Tensor *inBuffer) = 0;
 };
 
 

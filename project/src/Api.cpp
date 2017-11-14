@@ -10,6 +10,7 @@
 
 vkind dataKind;
 vkind tensorKind;
+vkind layerKind;
 
 
 
@@ -19,11 +20,13 @@ static int _id_hx_storeType;
 static int _id_hx_elementSize;
 static int _id_hx_pointer;
 static int _id_length;
+static int _id_resultBuffer;
 
 extern "C" void InitIDs()
 {
    kind_share(&dataKind,"data");
    kind_share(&tensorKind,"Tensor");
+   kind_share(&layerKind,"Layer");
 
    _id_name = val_id("name");
    _id_type = val_id("type");
@@ -31,6 +34,7 @@ extern "C" void InitIDs()
    _id_hx_storeType = val_id("_hx_storeType");
    _id_hx_elementSize = val_id("_hx_elementSize");
    _id_hx_pointer = val_id("_hx_pointer");
+   _id_resultBuffer = val_id("resultBuffer");
 
 }
 
@@ -93,6 +97,10 @@ void ClearGc(value inValue)
    if (val_kind(inTensor)!=tensorKind) val_throw(alloc_string("object not a tensor")); \
    Tensor *tensor = (Tensor *)val_data(inTensor);
 
+#define TO_TENSOR_NAME(from,to) \
+   Tensor *to = (!val_is_null(from) && val_kind(from)==tensorKind) ? (Tensor *)val_data(from) : 0;
+
+
 void destroyTensor(value inTensor)
 {
    TO_TENSOR
@@ -104,10 +112,12 @@ void destroyTensor(value inTensor)
 
 void tdRelease(value inTensor)
 {
-   TO_TENSOR
-
-   tensor->decRef();
-   val_gc(inTensor,0);
+   TO_TENSOR_NAME(inTensor, tensor);
+   if (tensor)
+   {
+      tensor->decRef();
+      val_gc(inTensor,0);
+   }
 }
 
 DEFINE_PRIME1v(tdRelease)
@@ -397,6 +407,23 @@ value tdGetData(value inTensor)
 DEFINE_PRIME1(tdGetData)
 
 
+void tdFillData(value inTensor, value outBuffer)
+{
+   TO_TENSOR
+
+   CffiBytes bytes = getByteData(outBuffer);
+
+   if (!bytes.data)
+      TensorThrow("tdFillData - bad buffer");
+   int len = tensor->elementCount * tensor->elementSize;
+   if (len<bytes.length)
+      len = bytes.length;
+   memcpy(bytes.data, tensor->data, len);
+}
+DEFINE_PRIME2v(tdFillData)
+
+
+
 void tdPrint(value inTensor, int maxElems)
 {
    TO_TENSOR
@@ -414,4 +441,90 @@ value tdReorder(value inTensor, value inNewOrder)
    return alloc_abstract(tensorKind,result);
 }
 DEFINE_PRIME2v(tdReorder);
+
+// ----------- Layer
+
+
+#define TO_LAYER \
+   if (val_kind(inLayer)!=layerKind) val_throw(alloc_string("object not a layer")); \
+   Layer *layer = (Layer *)val_data(inLayer);
+
+void destroyLayer(value inLayer)
+{
+   TO_LAYER
+
+   if (layer)
+      delete layer;
+}
+
+
+value layCreateConv2D(value inStrides, int activation, int padding, value inWeights, value inBias)
+{
+   TO_TENSOR_NAME(inWeights, weights);
+   if (!weights)
+      TensorThrow("Conv2D - invalid weights");
+
+   TO_TENSOR_NAME(inBias, bias);
+
+   int sx = 1;
+   int sy = 1;
+   if (val_is_int(inStrides))
+      sx = sy = val_int(inStrides);
+   else if (!val_is_null(inStrides))
+   {
+      Shape strides;
+      fromValue(strides, inStrides);
+      sy = strides.size() > 0 ? strides[0] : 1;
+      sx = strides.size() > 1 ? strides[1] : sy;
+   }
+
+   Layer *layer = Layer::createConv2D(sx, sy, (Activation)activation, (Padding)padding, weights, bias);
+
+   value result = alloc_abstract(layerKind, layer);
+   val_gc(result, destroyLayer);
+   return result;
+}
+DEFINE_PRIME5(layCreateConv2D);
+
+value layRun(value inLayer, value inOwner, value inSrc0)
+{
+   TO_LAYER
+   TO_TENSOR_NAME(inSrc0, src0)
+
+   value valBuf = val_field(inOwner, _id_resultBuffer);
+   TO_TENSOR_NAME(valBuf, buffer);
+
+   Tensor *result = layer->run(src0, buffer);
+   if (result!=buffer)
+   {
+      if (buffer)
+         tdRelease(valBuf);
+      if (result)
+      {
+         valBuf = alloc_abstract(tensorKind, result);
+         val_gc(valBuf, destroyTensor);
+      }
+      else
+         valBuf = alloc_null();
+
+      alloc_field(inOwner, _id_resultBuffer, valBuf);
+   }
+
+   return valBuf;
+}
+DEFINE_PRIME3(layRun);
+
+void layRelease(value inLayer)
+{
+   if (!val_is_null(inLayer))
+   {
+      TO_LAYER
+
+      delete layer;
+      ClearGc(inLayer);
+   }
+}
+DEFINE_PRIME1v(layRelease);
+
+
 
