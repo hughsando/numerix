@@ -215,6 +215,15 @@ int Tensor::decRef()
    return refCount;
 }
 
+void Tensor::setFlat()
+{
+   shape = Shape();
+   shape.push_back(elementCount);
+   strides = Shape();
+   strides.push_back(1);
+}
+
+
 
 
 template<typename DEST,typename SRC>
@@ -423,4 +432,76 @@ Tensor *Tensor::reorder(const std::vector<int> &order)
    return t;
 }
 
+
+
+
+template<typename SRC, typename T>
+void TTVisitTensor(const SRC *data,int n, T &visitor)
+{
+   for(int i=0;i<n;i++)
+      visitor.visit(data[i]);
+}
+
+template<typename T>
+void TVisitTensor(Tensor *tensor, T &visitor)
+{
+   int n = tensor->elementCount;
+   void *d = tensor->data;
+
+   switch(tensor->type)
+   {
+      case Float32: TTVisitTensor(((float *)d)         , n, visitor ); break;
+      case Float64: TTVisitTensor(((double *)d)        , n, visitor ); break;
+      case UInt8:   TTVisitTensor(((unsigned char *)d) , n, visitor ); break;
+      case UInt16:  TTVisitTensor(((unsigned short *)d), n, visitor ); break;
+      case UInt32:  TTVisitTensor(((unsigned int *)d)  , n, visitor ); break;
+      case UInt64:  TTVisitTensor(((TUInt64 *)d)       , n, visitor ); break;
+      case Int8:    TTVisitTensor(((signed char *)d)   , n, visitor ); break;
+      case Int16:   TTVisitTensor(((short *)d)         , n, visitor ); break;
+      case Int32:   TTVisitTensor(((int *)d)           , n, visitor ); break;
+      case Int64:   TTVisitTensor(((TInt64 *)d)        , n, visitor ); break;
+   }
+
+}
+
+
+struct MinVisitor
+{
+   double result;
+   MinVisitor(double init) : result(init) { }
+
+   template<typename T>
+   void visit(const T &val)
+   {
+      if (val<result)
+         result = val;
+   }
+};
+
+double Tensor::getMin()
+{
+   MinVisitor visitor( getFloatAt(0) );
+   TVisitTensor(this, visitor);
+   return visitor.result;
+}
+
+
+struct MaxVisitor
+{
+   double result;
+   MaxVisitor(double init) : result(init) { }
+
+   template<typename T>
+   void visit(const T &val)
+   {
+      if (val>result)
+         result = val;
+   }
+};
+double Tensor::getMax()
+{
+   MaxVisitor visitor( getFloatAt(0) );
+   TVisitTensor(this, visitor);
+   return visitor.result;
+}
 

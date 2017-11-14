@@ -1,5 +1,5 @@
 import numerix.*;
-import nme.display.*;
+import Sys.println;
 
 class Test
 {
@@ -18,8 +18,11 @@ class Test
       var bmpname = args.shift();
       if (bmpname!=null)
       {
-            var bmp = BitmapData.loadFromBytes( nme.utils.ByteArray.readFile(bmpname) );
-         trace(bmp.width + "x" + bmp.height);
+         var val = NmeTools.loadImageF32( bmpname, NmeTools.TRANS_STD );
+         println( val + ": " + val.min + "..." + val.max );
+
+         var result = model.run(val);
+         println(result);
       }
    }
 }

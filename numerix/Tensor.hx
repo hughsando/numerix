@@ -9,6 +9,8 @@ abstract Tensor(Dynamic)
    public var type(get,never):Int;
    public var typename(get,never):String;
    public var data(get,never):Dynamic;
+   public var min(get,never):Float;
+   public var max(get,never):Float;
 
    function new(inHandle:Dynamic)
    {
@@ -17,9 +19,14 @@ abstract Tensor(Dynamic)
          this._hxcpp_toString = handleToString;
    }
 
-   public static function create(?inArrayLike:Dynamic,inStoreType = -1, ?inShape:Array<Int>)
+   public static function create(inArrayLike:Dynamic,inStoreType = -1, ?inShape:Array<Int>)
    {
       return new Tensor( tdFromDynamic(inArrayLike, inStoreType, inShape) );
+   }
+
+   public static function empty(inStoreType, inShape:Array<Int>)
+   {
+      return create(null, inStoreType, inShape);
    }
 
    public static function fromBytes(inBytes:haxe.io.Bytes,inStoreType:Int, inShape:Array<Int>)
@@ -40,6 +47,36 @@ abstract Tensor(Dynamic)
       tdPrint(this, maxElems);
    }
 
+   /*
+   public function getMin(axis:Int) : Tensor
+   {
+      var result:Dynamic = tdGetMinAxis(this,axis);
+      return fromHandle(result);
+   }
+   */
+
+   function get_min() : Float
+   {
+      var result:Dynamic = tdGetMin(this);
+      return result;
+   }
+
+   /*
+   public function getMax(axis:Int) : Tensor
+   {
+      var result:Dynamic = tdGetMaxAxis(this,axis);
+      return fromHandle(result);
+   }
+   */
+
+   function get_max() : Float
+   {
+      var result:Dynamic = tdGetMax(this);
+      return result;
+   }
+
+
+
    public function reorder(order:Array<Int>, inRelease = false):Tensor
    {
       var result = new Tensor(tdReorder(this, order));
@@ -47,6 +84,12 @@ abstract Tensor(Dynamic)
          release();
       return result;
    }
+
+   public function setFlat():Void
+   {
+      tdSetFlat(this);
+   }
+
 
    public function getBytes():haxe.io.Bytes
    {
@@ -127,6 +170,11 @@ abstract Tensor(Dynamic)
    static var tdRelease = Loader.load("tdRelease","ov");
    static var tdPrint = Loader.load("tdPrint","oiv");
    static var tdReorder = Loader.load("tdReorder","ooo");
+   static var tdGetMin = Loader.load("tdGetMin","od");
+   static var tdGetMax = Loader.load("tdGetMax","od");
+   static var tdSetFlat = Loader.load("tdSetFlat","ov");
+   //static var tdGetMinAxis = Loader.load("tdGetMin","ooo");
+   //static var tdGetMaxAxis = Loader.load("tdGetMax","oio");
 
 }
 

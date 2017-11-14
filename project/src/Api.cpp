@@ -419,6 +419,29 @@ value tdGetData(value inTensor)
 DEFINE_PRIME1(tdGetData)
 
 
+double tdGetMin(value inTensor)
+{
+   TO_TENSOR
+   return tensor->getMin();
+}
+DEFINE_PRIME1(tdGetMin)
+
+double tdGetMax(value inTensor)
+{
+   TO_TENSOR
+   return tensor->getMax();
+}
+DEFINE_PRIME1(tdGetMax)
+
+
+void tdSetFlat(value inTensor)
+{
+   TO_TENSOR
+   tensor->setFlat();
+}
+DEFINE_PRIME1v(tdSetFlat)
+
+
 void tdFillData(value inTensor, value outBuffer)
 {
    TO_TENSOR

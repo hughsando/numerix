@@ -45,8 +45,10 @@ class Model extends numerix.Model
 
             var conv2D = new Conv2D(file, cfg, prev);
             var weights = file.read('model_weights/$data/$data/kernel:0');
-            weights = weights.reorder([2,0,1,3],true);
+            weights = weights.reorder([3,0,1,2],true);
             var bias = conv2D.useBias ? file.read('model_weights/$data/$data/bias:0') : null;
+            if (bias!=null)
+               bias.setFlat();
             conv2D.setWeights([weights,bias]);
             return conv2D;
 

@@ -46,8 +46,8 @@ enum Activation
 
 enum Padding
 {
-   actSame,
-   actValid,
+   padSame,
+   padValid,
 };
 
 
@@ -75,11 +75,15 @@ class Tensor
       void zero(int inOffsetElem, unsigned int inCount);
       void setInt32(int inValue, int inOffsetElem, unsigned int inCount);
       void setFloat64(double inValue, int inOffsetElem, unsigned int inCount);
+      void setFlat();
 
       Tensor *reorder(const std::vector<int> &order);
 
       int    getIntAt(int inIndex);
       double getFloatAt(int inIndex);
+
+      double getMin();
+      double getMax();
 
       void checkData();
       Tensor *incRef();
