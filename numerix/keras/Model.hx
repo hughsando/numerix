@@ -28,8 +28,6 @@ class Model extends numerix.Model
       }
       outputLayer = prev;
       file.close();
-
-      trace(layers);
    }
 
    function createLayer(file:Group, config:Dynamic, prev:Layer) : Layer
