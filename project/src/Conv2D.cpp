@@ -53,6 +53,14 @@ public:
          bias->decRef();
    }
 
+   float dot(const float *w, const float *s, int n)
+   {
+      float sum = 0;
+      for(int i=0;i<n;i++)
+         sum += w[i]*s[i];
+      return sum;
+   }
+
    
    virtual Tensor *run(Tensor *inSrc0, Tensor *inBuffer)
    {
@@ -111,23 +119,90 @@ public:
       }
       const float *src = (const float *)inSrc0->data;
       const float *b = bias ? (const float *)bias->data : 0;
-      float *dest = (float *)destTensor->data;
       const int *srcStride = &inSrc0->strides[0];
       const int *destStride = &destTensor->strides[0];
 
-      for(int y=0;y<destH;y++)
+      float *dest = (float *)destTensor->data;
+      const float *w0 = (float *)weights->data;
+
+      if (filterX==1 && filterY==1)
       {
-         int srcY = srcStride[0]*y;
+         const float *src = (const float *)inSrc0->data;
+         for(int y=0;y<destH;y++)
+            for(int x=0;x<destW;x++)
+            {
+               const float *w = w0;
+               for(int o=0;o<outputs;o++)
+               {
+                  float sum = dot(w, src, outputs);
+                  if (b)
+                     sum+=b[o];
+                  if (activation==actRelu && sum<0)
+                     sum = 0;
+                  *dest++ = sum;
+                  w+=outputs;
+               }
+               src+=inputs;
+            }
+      }
+      else
+      {
+         std::vector<float> srcBuf(filterX*filterY*inputs);
+         float *srcPtr = &srcBuf[0];
+         int filterW = filterX*inputs;
+         int filterRow = filterW*sizeof(float);
 
-         int diMin = std::max(padOy-srcY,0);
-         int diMax = std::min(srcH+padOy-srcY,filterY);
-         int rows = diMax-diMin;
-
-         const float *destY = dest + destStride[0]*y;
-
-         for(int x=0;x<destW;x++)
+         const float *sIn = (float *)inSrc0->data;
+         for(int y=0;y<destH;y++)
          {
-            // TODO
+            int srcY = y;
+
+            int dyMin = std::max(padOy-srcY,0);
+            int dyMax = std::min(srcH+padOy-srcY,filterY);
+
+            if (dyMin>0)
+               memset(srcPtr,0,filterRow*dyMin);
+            if (dyMax<filterY)
+               memset(srcPtr,dyMax*filterRow,filterRow*(filterY-dyMax) );
+
+            for(int x=0;x<destW;x++)
+            {
+               int srcX = x;
+
+               int dxMin = std::max(padOx-srcX,0);
+               int dxMax = std::min(srcW+padOx-srcX,filterX);
+
+               const float *s = sIn + (srcY+dyMin-padOy)*srcStride[0] + (srcX+dxMin-padOx)*srcStride[1];
+               for(int dy=dyMin;dy<dyMax;dy++)
+               {
+                  float *sp = srcPtr + filterW*dy;
+
+                  if (dxMin>0)
+                  {
+                     memset(sp, 0, dxMin*inputs*sizeof(float));
+                     sp +=dxMin*inputs;
+                  }
+
+                  memcpy(sp, s, (dxMax-dxMin)*inputs*sizeof(float));
+                  s+= srcStride[0];
+
+                  if (dxMax<filterX)
+                     memset(sp + (dxMax-dxMin)*inputs, 0, (filterX-dxMax)*inputs*sizeof(float));
+               }
+
+               const float *w = w0;
+               for(int o=0;o<outputs;o++)
+               {
+                  float sum = dot(w, srcPtr, outputs);
+                  if (b)
+                     sum+=b[o];
+                  if (activation==actRelu && sum<0)
+                     sum = 0;
+                  *dest++ = sum;
+                  w+=outputs;
+               }
+               srcPtr+=inputs;
+            }
          }
       }
 
