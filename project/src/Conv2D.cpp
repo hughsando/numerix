@@ -124,6 +124,7 @@ public:
 
       float *dest = (float *)destTensor->data;
       const float *w0 = (float *)weights->data;
+      int featureSize = filterX*filterY*inputs;
 
       if (filterX==1 && filterY==1)
       {
@@ -134,11 +135,13 @@ public:
                const float *w = w0;
                for(int o=0;o<outputs;o++)
                {
-                  float sum = dot(w, src, outputs);
+                  float sum = dot(w, src, featureSize);
                   if (b)
                      sum+=b[o];
                   if (activation==actRelu && sum<0)
                      sum = 0;
+                  else if (activation==actSigmoid)
+                     sum = 1.0 / (1.0 + exp(-sum));
                   *dest++ = sum;
                   w+=outputs;
                }
@@ -147,9 +150,9 @@ public:
       }
       else
       {
-         std::vector<float> srcBuf(filterX*filterY*inputs);
-         float *srcPtr = &srcBuf[0];
          int filterW = filterX*inputs;
+         std::vector<float> srcBuf(filterW*filterY+1);
+         float *srcPtr = &srcBuf[0];
          int filterRow = filterW*sizeof(float);
 
          const float *sIn = (float *)inSrc0->data;
@@ -163,7 +166,7 @@ public:
             if (dyMin>0)
                memset(srcPtr,0,filterRow*dyMin);
             if (dyMax<filterY)
-               memset(srcPtr,dyMax*filterRow,filterRow*(filterY-dyMax) );
+               memset(srcPtr+dyMax*filterW,0,filterRow*(filterY-dyMax) );
 
             for(int x=0;x<destW;x++)
             {
@@ -193,15 +196,17 @@ public:
                const float *w = w0;
                for(int o=0;o<outputs;o++)
                {
-                  float sum = dot(w, srcPtr, outputs);
+                  float sum = dot(w, srcPtr, featureSize);
                   if (b)
                      sum+=b[o];
                   if (activation==actRelu && sum<0)
                      sum = 0;
+                  else if (activation==actSigmoid)
+                     sum = 1.0 / (1.0 + exp(-sum));
+
                   *dest++ = sum;
                   w+=outputs;
                }
-               srcPtr+=inputs;
             }
          }
       }

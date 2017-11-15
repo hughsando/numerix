@@ -24,5 +24,26 @@ class NmeTools
       bmp.dispose();
       return result;
    }
+
+   public static function saveImageF32(tensor:Tensor, filename:String, transform=TRANS_UNIT_SCALE):Void
+   {
+      var shape = tensor.shape;
+      var channels = 0;
+      if (shape.length==2)
+         channels = 1;
+      else if (shape.length==3)
+         channels = shape[2];
+      if (channels!=1 && channels!=3)
+          throw 'Could not write $channels channels';
+
+      var h = shape[0];
+      var w = shape[1];
+      var bmp = channels==1 ? BitmapData.createGrey(w,h) : new BitmapData(w,h,false,0);
+      bmp.setFloats32(tensor.data, 0, 0,channels==1 ? PixelFormat.pfLuma : PixelFormat.pfRGB,transform);
+      var dot = filename.lastIndexOf('.');
+      var data = bmp.encode( dot<0 ? "png" : filename.substr(dot+1) );
+      data.writeFile(filename);
+   }
+
 }
 

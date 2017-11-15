@@ -22,7 +22,10 @@ class Test
          println( val + ": " + val.min + "..." + val.max );
 
          var result = model.run(val);
-         println(result);
+         println( result.min + "..." + result.max );
+         Io.writeFile("result.nx", result);
+
+         NmeTools.saveImageF32(result, "result.png", NmeTools.TRANS_UNIT_SCALE );
       }
    }
 }
