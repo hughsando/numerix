@@ -52,7 +52,7 @@ class Conv2D extends Layer
       bias = inWeights[1];
       release();
 
-      handle = layCreateConv2D(strides, activation, padding, weights, bias);
+      handle = layCreateConv2D(strides, activation, padding, weights, null, bias);
    }
 
 
@@ -60,7 +60,7 @@ class Conv2D extends Layer
 
 
 
-   static var layCreateConv2D = Loader.load("layCreateConv2D","oiiooo");
+   static var layCreateConv2D = Loader.load("layCreateConv2D","oiioooo");
 
 
 }

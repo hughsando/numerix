@@ -75,8 +75,9 @@ class Tensor
       void zero(int inOffsetElem, unsigned int inCount);
       void setInt32(int inValue, int inOffsetElem, unsigned int inCount);
       void setFloat64(double inValue, int inOffsetElem, unsigned int inCount);
-      void setFlat();
 
+      void setFlat();
+      void setShape(CShape inShape);
       Tensor *reorder(const std::vector<int> &order);
 
       int    getIntAt(int inIndex);
@@ -95,6 +96,7 @@ class Tensor
 
    protected:
       void printSub(const std::string &indent, int offset, int dim, int inMaxElems);
+      void updateStrides();
       int refCount;
       ~Tensor();
 };
@@ -104,7 +106,7 @@ class Layer
 public:
    static Layer *createConv2D(int inStrideY, int inStrideX,
                               Activation activation, Padding padding,
-                              Tensor *weights, Tensor *bias);
+                              Tensor *weights, Tensor *pweights, Tensor *bias);
 
    virtual ~Layer() { };
 

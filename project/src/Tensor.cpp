@@ -47,12 +47,7 @@ Tensor::Tensor( int inType, const Shape &inShape )
    }
    else
    {
-      strides.resize(shape.size());
-      for(int i=shape.size()-1;i>=0;i--)
-      {
-         strides[i] = elementCount;
-         elementCount *= shape[i];
-      }
+      updateStrides();
    }
 
    int nType = inType & NumberMask;
@@ -65,6 +60,18 @@ Tensor::Tensor( int inType, const Shape &inShape )
    else
       throw std::logic_error("bad tensor type");
 }
+
+void Tensor::updateStrides()
+{
+   elementCount = 1;
+   strides.resize(shape.size());
+   for(int i=shape.size()-1;i>=0;i--)
+   {
+      strides[i] = elementCount;
+      elementCount *= shape[i];
+   }
+}
+
 
 void Tensor::printSub(const std::string &indent, int offset, int dim, int inMaxElems)
 {
@@ -219,8 +226,25 @@ void Tensor::setFlat()
 {
    shape = Shape();
    shape.push_back(elementCount);
-   strides = Shape();
-   strides.push_back(1);
+   updateStrides();
+}
+
+void Tensor::setShape(CShape inShape)
+{
+   if (inShape.empty())
+      setFlat();
+   else
+   {
+      int n = inShape[0];
+
+      for(int i=1;i<inShape.size();i++)
+         n *= inShape[i];
+      if (n!=elementCount)
+         TensorThrow("setShape - sizes do not match");
+
+      shape = inShape;
+      updateStrides();
+   }
 }
 
 

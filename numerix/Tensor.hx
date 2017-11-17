@@ -90,6 +90,11 @@ abstract Tensor(Dynamic)
       tdSetFlat(this);
    }
 
+   public function setShape(inShape:Array<Int>):Void
+   {
+      tdSetShape(this,inShape);
+   }
+
 
    public function getBytes():haxe.io.Bytes
    {
@@ -173,6 +178,7 @@ abstract Tensor(Dynamic)
    static var tdGetMin = Loader.load("tdGetMin","od");
    static var tdGetMax = Loader.load("tdGetMax","od");
    static var tdSetFlat = Loader.load("tdSetFlat","ov");
+   static var tdSetShape = Loader.load("tdSetShape","oov");
    //static var tdGetMinAxis = Loader.load("tdGetMin","ooo");
    //static var tdGetMaxAxis = Loader.load("tdGetMax","oio");
 

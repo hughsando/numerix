@@ -10,31 +10,55 @@ class Conv2D : public Layer
    int        filterX;
    int        inputs;
    int        outputs;
+   int        diSize;
 
    Activation activation;
    Padding    padding;
    Tensor     *weights;
+   Tensor     *pweights;
    Tensor     *bias;
 
 public:
    Conv2D(int inStrideY, int inStrideX,
           Activation inActivation, Padding inPadding,
-          Tensor *inWeights, Tensor *inBias)
+          Tensor *inWeights, Tensor *inPWeights, Tensor *inBias)
    {
       strideY = inStrideY;
       strideX = inStrideX;
       activation = inActivation;
       padding = inPadding;
+      diSize = 0;
 
       // Output x Height x Width x Input
-      Shape s = inWeights->shape;
-      if (s.size()!=4)
+      CShape s = inWeights->shape;
+      if (!inPWeights && s.size()!=4)
          TensorThrow("Invalid Conv2D weigth shape");
+      if (inPWeights && s.size()!=3)
+         TensorThrow("Invalid SeparableConv2D depthwise shape");
 
-      outputs = s[0];
-      filterY = s[1];
-      filterX = s[2];
-      inputs =  s[3];
+      if (inPWeights)
+      {
+         CShape p = inPWeights->shape;
+         if (p.size()!=2)
+            TensorThrow("Invalid SeparableConv2D pointwise shape");
+         if (s[0]!=p[1])
+            TensorThrow("SeparableConv2D mismatched weights");
+         diSize = p[1];
+
+         outputs = p[0];
+         inputs =  s[0];
+         filterY = s[1];
+         filterX = s[2];
+         if (filterX==1 && filterY==1)
+            TensorThrow("SeparableConv2D 1x1 not supported");
+      }
+      else
+      {
+         outputs = s[0];
+         filterY = s[1];
+         filterX = s[2];
+         inputs =  s[3];
+      }
 
       if (inBias && inBias->shape.size()!=1)
          TensorThrow("Conv2D - bias should be one dimensional");
@@ -44,11 +68,14 @@ public:
 
 
       weights = inWeights->incRef();
+      pweights = inPWeights ? inPWeights->incRef() : 0;
       bias = inBias ? inBias->incRef() : 0;
    }
    ~Conv2D()
    {
       weights->decRef();
+      if (pweights)
+         pweights->decRef();
       if (bias)
          bias->decRef();
    }
@@ -58,6 +85,17 @@ public:
       float sum = 0;
       for(int i=0;i<n;i++)
          sum += w[i]*s[i];
+      return sum;
+   }
+
+   float dotSkip(const float *w, const float *s, int n, int inSkip)
+   {
+      float sum = 0;
+      for(int i=0;i<n;i++)
+      {
+         sum += w[i]*(*s);
+         s+=inSkip;
+      }
       return sum;
    }
 
@@ -121,12 +159,15 @@ public:
       const float *b = bias ? (const float *)bias->data : 0;
       const int *srcStride = &inSrc0->strides[0];
       const int *destStride = &destTensor->strides[0];
+      std::vector<float> diBuffer(diSize);
+      float *di = pweights ? &diBuffer[0] : 0;
 
       float *dest = (float *)destTensor->data;
       const float *w0 = (float *)weights->data;
       int featureSize = filterX*filterY*inputs;
+      int filters = filterX*filterY;
 
-      if (filterX==1 && filterY==1)
+      if (filters==1)
       {
          const float *src = (const float *)inSrc0->data;
          for(int y=0;y<destH;y++)
@@ -143,7 +184,7 @@ public:
                   else if (activation==actSigmoid)
                      sum = 1.0 / (1.0 + exp(-sum));
                   *dest++ = sum;
-                  w+=outputs;
+                  w+=featureSize;
                }
                src+=inputs;
             }
@@ -193,19 +234,47 @@ public:
                      memset(sp + (dxMax-dxMin)*inputs, 0, (filterX-dxMax)*inputs*sizeof(float));
                }
 
-               const float *w = w0;
-               for(int o=0;o<outputs;o++)
-               {
-                  float sum = dot(w, srcPtr, featureSize);
-                  if (b)
-                     sum+=b[o];
-                  if (activation==actRelu && sum<0)
-                     sum = 0;
-                  else if (activation==actSigmoid)
-                     sum = 1.0 / (1.0 + exp(-sum));
 
-                  *dest++ = sum;
-                  w+=outputs;
+               const float *w = w0;
+               if (pweights)
+               {
+                  for(int d=0;d<diSize;d++)
+                  {
+                     int srcOff = d; // todo - depth_multiplier > 1
+                     di[d] = dotSkip(w, srcPtr+srcOff, filters, inputs);
+                     w+=filters;
+                  }
+
+                  const float *w = (const float *)pweights->data;
+                  for(int o=0;o<outputs;o++)
+                  {
+                     float sum = dot(w, di, diSize);
+                     w+=diSize;
+                     if (b)
+                        sum+=b[o];
+                     if (activation==actRelu && sum<0)
+                        sum = 0;
+                     else if (activation==actSigmoid)
+                        sum = 1.0 / (1.0 + exp(-sum));
+
+                     *dest++ = sum;
+                  }
+               }
+               else
+               {
+                  for(int o=0;o<outputs;o++)
+                  {
+                     float sum = dot(w, srcPtr, featureSize);
+                     if (b)
+                        sum+=b[o];
+                     if (activation==actRelu && sum<0)
+                        sum = 0;
+                     else if (activation==actSigmoid)
+                        sum = 1.0 / (1.0 + exp(-sum));
+
+                     *dest++ = sum;
+                     w+=featureSize;
+                  }
                }
             }
          }
@@ -217,7 +286,7 @@ public:
 
 Layer *Layer::createConv2D(int strideY, int strideX,
                     Activation activation, Padding padding,
-                    Tensor *weights, Tensor *bias)
+                    Tensor *weights, Tensor *pweights, Tensor *bias)
 {
-   return new Conv2D(strideY, strideX, activation, padding, weights, bias);
+   return new Conv2D(strideY, strideX, activation, padding, weights, pweights, bias);
 }

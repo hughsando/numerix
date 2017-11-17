@@ -198,6 +198,17 @@ void fillTensorRow(Tensor *tensor, int inOffset, int haveType, unsigned char *po
       tensor->zero( inOffset + length, lastSize-length );
 }
 
+void fillTensorData(Tensor *tensor, int haveType, unsigned char *pointer, int length)
+{
+   int count = tensor->elementCount;
+   if (length>count)
+      length = count;
+   tensor->fill(haveType, pointer, 0, length);
+   if (count>length)
+      tensor->zero( length, count-length );
+}
+
+
 int getArrayType(value inFrom)
 {
    ArrayStore storeType = (ArrayStore)(int)val_field_numeric( inFrom, _id_hx_storeType );
@@ -353,9 +364,9 @@ value tdFromDynamic(value inFrom, int inType, value inShape)
       else
          tensor->setFloat64(val_float(inFrom), 0, tensor->elementCount);
    }
-   else if (shape.size()==1 && haveShape.size()==1 && pointer)
+   else if (haveShape.size()==1 && pointer)
    {
-      fillTensorRow(tensor, 0, haveType, pointer, length);
+      fillTensorData(tensor, haveType, pointer, length);
    }
    else if (bytes.data)
    {
@@ -441,6 +452,19 @@ void tdSetFlat(value inTensor)
 }
 DEFINE_PRIME1v(tdSetFlat)
 
+void tdSetShape(value inTensor,value inShape)
+{
+   TO_TENSOR
+
+   Shape shape;
+   fromValue(shape, inShape);
+
+   tensor->setShape(shape);
+}
+DEFINE_PRIME2v(tdSetShape)
+
+
+
 
 void tdFillData(value inTensor, value outBuffer)
 {
@@ -493,13 +517,14 @@ void destroyLayer(value inLayer)
 }
 
 
-value layCreateConv2D(value inStrides, int activation, int padding, value inWeights, value inBias)
+value layCreateConv2D(value inStrides, int activation, int padding, value inWeights, value inPWeights, value inBias)
 {
    TO_TENSOR_NAME(inWeights, weights);
    if (!weights)
       TensorThrow("Conv2D - invalid weights");
 
    TO_TENSOR_NAME(inBias, bias);
+   TO_TENSOR_NAME(inPWeights, pweights);
 
    int sx = 1;
    int sy = 1;
@@ -513,13 +538,13 @@ value layCreateConv2D(value inStrides, int activation, int padding, value inWeig
       sx = strides.size() > 1 ? strides[1] : sy;
    }
 
-   Layer *layer = Layer::createConv2D(sx, sy, (Activation)activation, (Padding)padding, weights, bias);
+   Layer *layer = Layer::createConv2D(sx, sy, (Activation)activation, (Padding)padding, weights, pweights, bias);
 
    value result = alloc_abstract(layerKind, layer);
    val_gc(result, destroyLayer);
    return result;
 }
-DEFINE_PRIME5(layCreateConv2D);
+DEFINE_PRIME6(layCreateConv2D);
 
 value layRun(value inLayer, value inOwner, value inSrc0)
 {
