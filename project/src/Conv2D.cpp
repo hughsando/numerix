@@ -1,6 +1,11 @@
 #include <Tensor.h>
+#include <Ops.h>
+#include <NxThread.h>
 #include <stdexcept>
 #include <algorithm>
+
+
+using namespace numerix;
 
 class Conv2D : public Layer
 {
@@ -12,11 +17,21 @@ class Conv2D : public Layer
    int        outputs;
    int        diSize;
 
+   int        srcW;
+   int        srcH;
+   int        destW;
+   int        destH;
+   int        padOx;
+   int        padOy;
+
    Activation activation;
    Padding    padding;
    Tensor     *weights;
    Tensor     *pweights;
    Tensor     *bias;
+
+   std::vector <float *> srcBuffers;
+   std::vector <float *> diBuffers;
 
 public:
    Conv2D(int inStrideY, int inStrideX,
@@ -70,9 +85,22 @@ public:
       weights = inWeights->incRef();
       pweights = inPWeights ? inPWeights->incRef() : 0;
       bias = inBias ? inBias->incRef() : 0;
+
+      int threads = GetWorkerCount();
+      for(int i=0;i<threads;i++)
+      {
+         srcBuffers.push_back( (float *)Tensor::allocData(filterX*filterY*inputs*sizeof(float)) );
+         if (diSize)
+            diBuffers.push_back( (float *)Tensor::allocData(diSize*sizeof(float)) );
+      }
    }
    ~Conv2D()
    {
+      for(int i=0;i<srcBuffers.size();i++)
+         Tensor::freeData( (unsigned char *)srcBuffers[i] );
+      for(int i=0;i<diBuffers.size();i++)
+         Tensor::freeData( (unsigned char *)diBuffers[i] );
+
       weights->decRef();
       if (pweights)
          pweights->decRef();
@@ -80,24 +108,6 @@ public:
          bias->decRef();
    }
 
-   float dot(const float *w, const float *s, int n)
-   {
-      float sum = 0;
-      for(int i=0;i<n;i++)
-         sum += w[i]*s[i];
-      return sum;
-   }
-
-   float dotSkip(const float *w, const float *s, int n, int inSkip)
-   {
-      float sum = 0;
-      for(int i=0;i<n;i++)
-      {
-         sum += w[i]*(*s);
-         s+=inSkip;
-      }
-      return sum;
-   }
 
    
    virtual Tensor *run(Tensor *inSrc0, Tensor *inBuffer)
@@ -116,13 +126,13 @@ public:
          TensorThrow("Conv2D - weights do not match the number of input channels");
       }
 
-      int srcH = sin[0];
-      int srcW = sin[1];
+      srcH = sin[0];
+      srcW = sin[1];
 
-      int destH = 0;
-      int destW = 0;
-      int padOx = 0;
-      int padOy = 0;
+      destH = 0;
+      destW = 0;
+      padOx = 0;
+      padOy = 0;
 
       if (padding==padSame)
       {
@@ -146,59 +156,79 @@ public:
          CShape &s = inBuffer->shape;
          match = s[0]==destH && s[1]==destW && s[2]==outputs;
       }
-      Tensor *destTensor = inBuffer;
+      Tensor *result = inBuffer;
       if (!match)
       {
          Shape s(3);
          s[0] = destH;
          s[1] = destW;
          s[2] = outputs;
-         destTensor = new Tensor( Float32, s );
+         result = new Tensor( Float32, s );
       }
-      const float *src = (const float *)inSrc0->data;
-      const float *b = bias ? (const float *)bias->data : 0;
-      const int *srcStride = &inSrc0->strides[0];
-      const int *destStride = &destTensor->strides[0];
-      std::vector<float> diBuffer(diSize);
-      float *di = pweights ? &diBuffer[0] : 0;
 
-      float *dest = (float *)destTensor->data;
+      src0 = inSrc0;
+      destTensor = result;
+      runThreaded();
+      src0 = 0;
+      destTensor = 0;
+
+      return result;
+   }
+
+   Tensor *src0;
+   Tensor *destTensor;
+
+
+   void runThread(int threadId)
+   {
+      const float *b = bias ? (const float *)bias->data : 0;
+      const int *srcStride = &src0->strides[0];
+      const int *destStride = &destTensor->strides[0];
+      float *di = pweights ? &diBuffers[threadId][0] : 0;
+
       const float *w0 = (float *)weights->data;
       int featureSize = filterX*filterY*inputs;
       int filters = filterX*filterY;
 
       if (filters==1)
       {
-         const float *src = (const float *)inSrc0->data;
-         for(int y=0;y<destH;y++)
+         while(true)
+         {
+            int y = getNextJob();
+            if (y>=destH)
+               break;
+
+            const float *src = (const float *)src0->data + srcW*inputs*y;
+            float *dest = (float *)destTensor->data + destW*outputs*y;
             for(int x=0;x<destW;x++)
             {
                const float *w = w0;
                for(int o=0;o<outputs;o++)
                {
-                  float sum = dot(w, src, featureSize);
-                  if (b)
-                     sum+=b[o];
-                  if (activation==actRelu && sum<0)
-                     sum = 0;
-                  else if (activation==actSigmoid)
-                     sum = 1.0 / (1.0 + exp(-sum));
+                  float sum = dot(b?b[o] : 0.0f, w, src, featureSize, activation);
                   *dest++ = sum;
                   w+=featureSize;
                }
                src+=inputs;
             }
+         }
       }
       else
       {
          int filterW = filterX*inputs;
-         std::vector<float> srcBuf(filterW*filterY+1);
-         float *srcPtr = &srcBuf[0];
+         float *srcPtr = &srcBuffers[threadId][0];
          int filterRow = filterW*sizeof(float);
 
-         const float *sIn = (float *)inSrc0->data;
-         for(int y=0;y<destH;y++)
+         const float *sIn = (float *)src0->data;
+
+         while(true)
          {
+            int y = getNextJob();
+            if (y>=destH)
+               break;
+
+
+            float *dest = (float *)destTensor->data + destW*outputs*y;
             int srcY = y;
 
             int dyMin = std::max(padOy-srcY,0);
@@ -248,30 +278,16 @@ public:
                   const float *w = (const float *)pweights->data;
                   for(int o=0;o<outputs;o++)
                   {
-                     float sum = dot(w, di, diSize);
-                     w+=diSize;
-                     if (b)
-                        sum+=b[o];
-                     if (activation==actRelu && sum<0)
-                        sum = 0;
-                     else if (activation==actSigmoid)
-                        sum = 1.0 / (1.0 + exp(-sum));
-
+                     float sum = dot(b?b[o]:0.0f, w, di, diSize, activation);
                      *dest++ = sum;
+                     w+=diSize;
                   }
                }
                else
                {
                   for(int o=0;o<outputs;o++)
                   {
-                     float sum = dot(w, srcPtr, featureSize);
-                     if (b)
-                        sum+=b[o];
-                     if (activation==actRelu && sum<0)
-                        sum = 0;
-                     else if (activation==actSigmoid)
-                        sum = 1.0 / (1.0 + exp(-sum));
-
+                     float sum = dot(b?b[o]:0.0f, w, srcPtr, featureSize, activation);
                      *dest++ = sum;
                      w+=featureSize;
                   }
@@ -279,8 +295,6 @@ public:
             }
          }
       }
-
-      return destTensor;
    }
 };
 

@@ -9,6 +9,8 @@
      <file name="src/Api.cpp" />
      <file name="src/Tensor.cpp" />
      <file name="src/Conv2D.cpp" />
+     <file name="src/NxThread.cpp" />
+     <file name="src/Layer.cpp" />
 
    </files>
 

@@ -103,7 +103,9 @@ class Tensor
 
 class Layer
 {
+   volatile int jobId;
 public:
+
    static Layer *createConv2D(int inStrideY, int inStrideX,
                               Activation activation, Padding padding,
                               Tensor *weights, Tensor *pweights, Tensor *bias);
@@ -111,6 +113,12 @@ public:
    virtual ~Layer() { };
 
    virtual Tensor *run(Tensor *inSrc0, Tensor *inBuffer) = 0;
+
+   virtual void runThread(int inThreadId) { }
+
+   int getNextJob();
+
+   void runThreaded();
 };
 
 
