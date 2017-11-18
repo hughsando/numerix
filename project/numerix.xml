@@ -5,6 +5,9 @@
 
    <files id="numerix" >
      <compilerflag value="-Iinclude" />
+     <depend name="include/Tensor.h" />
+     <depend name="include/Ops.h" />
+     <depend name="include/NxThread.h" />
 
      <file name="src/Api.cpp" />
      <file name="src/Tensor.cpp" />

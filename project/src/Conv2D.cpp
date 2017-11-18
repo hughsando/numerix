@@ -4,7 +4,6 @@
 #include <stdexcept>
 #include <algorithm>
 
-
 using namespace numerix;
 
 class Conv2D : public Layer
@@ -30,8 +29,14 @@ class Conv2D : public Layer
    Tensor     *pweights;
    Tensor     *bias;
 
+   bool       is1x1Aligned;
+   bool       is1x1;
+
    std::vector <float *> srcBuffers;
    std::vector <float *> diBuffers;
+   float                 *alignedWeightsBuffer;
+   float                 *alignedWeights;
+   int                   alignedWeightSize;
 
 public:
    Conv2D(int inStrideY, int inStrideX,
@@ -86,12 +91,51 @@ public:
       pweights = inPWeights ? inPWeights->incRef() : 0;
       bias = inBias ? inBias->incRef() : 0;
 
-      int threads = GetWorkerCount();
-      for(int i=0;i<threads;i++)
+
+      alignedWeightsBuffer = 0;
+      alignedWeights = (float *)weights->data;
+      alignedWeightSize = filterX*filterY*inputs;
+
+      if ( !pweights && (alignedWeightSize & 0x3) && outputs>1 )
       {
-         srcBuffers.push_back( (float *)Tensor::allocData(filterX*filterY*inputs*sizeof(float)) );
-         if (diSize)
-            diBuffers.push_back( (float *)Tensor::allocData(diSize*sizeof(float)) );
+         alignedWeightSize = (alignedWeightSize + 3) & ~3;
+         alignedWeightsBuffer = (float *)Tensor::allocData(alignedWeightSize*outputs*sizeof(float));
+         int wSize = filterX*filterY*inputs;
+         for(int o=0;o<outputs;o++)
+         {
+            memcpy(alignedWeightsBuffer + o*alignedWeightSize, alignedWeights + o*wSize, wSize*sizeof(float));
+         }
+         alignedWeights = alignedWeightsBuffer;
+      }
+
+
+      is1x1Aligned = true;
+      is1x1 = filterX*filterY==1;
+
+      if (is1x1)
+      {
+         is1x1Aligned = (inputs & 0x3) == 0;
+         if (!is1x1Aligned)
+         {
+            int wBytes = weights->elementCount * sizeof(float);
+
+            for(int i=1;i<4;i++)
+            {
+               float *buffer = (float *)Tensor::allocData(wBytes - sizeof(float)*i);
+               memcpy(buffer, weights->data + sizeof(float)*i, wBytes - sizeof(float)*i);
+               srcBuffers.push_back(buffer);
+            }
+         }
+      }
+      else
+      {
+         int threads = GetWorkerCount();
+         for(int i=0;i<threads;i++)
+         {
+            srcBuffers.push_back( (float *)Tensor::allocData(filterX*filterY*inputs*sizeof(float)) );
+            if (diSize)
+               diBuffers.push_back( (float *)Tensor::allocData(diSize*sizeof(float)) );
+         }
       }
    }
    ~Conv2D()
@@ -100,6 +144,9 @@ public:
          Tensor::freeData( (unsigned char *)srcBuffers[i] );
       for(int i=0;i<diBuffers.size();i++)
          Tensor::freeData( (unsigned char *)diBuffers[i] );
+      if (alignedWeightsBuffer)
+         Tensor::freeData( (unsigned char *)alignedWeightsBuffer );
+
 
       weights->decRef();
       if (pweights)
@@ -181,116 +228,168 @@ public:
 
    void runThread(int threadId)
    {
+      if (is1x1)
+         runThread1x1(threadId);
+      else
+         runThreadMulti(threadId);
+   }
+
+   void runThread1x1(int threadId)
+   {
+      const float *b = bias ? (const float *)bias->data : 0;
+
+      const float *w0 = alignedWeights;
+      const float *w1 = is1x1Aligned ? w0 : srcBuffers[0];
+      const float *w2 = is1x1Aligned ? w0 : srcBuffers[1];
+      const float *w3 = is1x1Aligned ? w0 : srcBuffers[2];
+
+      while(true)
+      {
+         int y = getNextJob();
+         if (y>=destH)
+            break;
+
+         const float *src = (const float *)src0->data + srcW*inputs*y;
+         float *dest = (float *)destTensor->data + destW*outputs*y;
+         for(int x=0;x<destW;x++)
+         {
+            const float *w;
+            switch( (size_t)src & 0x3 )
+            {
+               case 0:
+                  w = w0;
+                  for(int o=0;o<outputs;o++)
+                  {
+                     float sum = dot(b?b[o] : 0.0f, w, src, inputs, activation);
+                     *dest++ = sum;
+                     w+=alignedWeightSize;
+                  }
+                  break;
+               case 1:
+                  w = w3;
+                  for(int o=0;o<outputs;o++)
+                  {
+                     float sum = b?b[o] : 0.0f;
+                     sum += w0[0]*src[0] + w0[1]*src[1] + w0[2]*src[2];
+                     sum = dot(sum, w, src+3, inputs-3, activation);
+                     *dest++ = sum;
+                     w+=alignedWeightSize;
+                  }
+                  break;
+               case 2:
+                  w = w2;
+                  for(int o=0;o<outputs;o++)
+                  {
+                     float sum = b?b[o] : 0.0f;
+                     sum += w0[0]*src[0] + w0[1]*src[1];
+                     sum = dot(sum, w, src+2, inputs-2, activation);
+                     *dest++ = sum;
+                     w+=alignedWeightSize;
+                  }
+                  break;
+               case 3:
+                  w = w1;
+                  for(int o=0;o<outputs;o++)
+                  {
+                     float sum = b?b[o] : 0.0f;
+                     sum += w0[0]*src[0];
+                     sum = dot(sum, w, src+1, inputs-1, activation);
+                     *dest++ = sum;
+                     w+=alignedWeightSize;
+                  }
+                  break;
+
+            }
+            src+=inputs;
+         }
+      }
+   }
+
+   void runThreadMulti(int threadId)
+   {
       const float *b = bias ? (const float *)bias->data : 0;
       const int *srcStride = &src0->strides[0];
       const int *destStride = &destTensor->strides[0];
       float *di = pweights ? &diBuffers[threadId][0] : 0;
 
-      const float *w0 = (float *)weights->data;
       int featureSize = filterX*filterY*inputs;
       int filters = filterX*filterY;
 
-      if (filters==1)
-      {
-         while(true)
-         {
-            int y = getNextJob();
-            if (y>=destH)
-               break;
+      int filterW = filterX*inputs;
+      float *srcPtr = &srcBuffers[threadId][0];
+      int filterRow = filterW*sizeof(float);
 
-            const float *src = (const float *)src0->data + srcW*inputs*y;
-            float *dest = (float *)destTensor->data + destW*outputs*y;
-            for(int x=0;x<destW;x++)
+      const float *sIn = (float *)src0->data;
+
+      while(true)
+      {
+         int y = getNextJob();
+         if (y>=destH)
+            break;
+
+
+         float *dest = (float *)destTensor->data + destW*outputs*y;
+         int srcY = y;
+
+         int dyMin = std::max(padOy-srcY,0);
+         int dyMax = std::min(srcH+padOy-srcY,filterY);
+
+         if (dyMin>0)
+            memset(srcPtr,0,filterRow*dyMin);
+         if (dyMax<filterY)
+            memset(srcPtr+dyMax*filterW,0,filterRow*(filterY-dyMax) );
+
+         for(int x=0;x<destW;x++)
+         {
+            int srcX = x;
+
+            int dxMin = std::max(padOx-srcX,0);
+            int dxMax = std::min(srcW+padOx-srcX,filterX);
+
+            const float *s = sIn + (srcY+dyMin-padOy)*srcStride[0] + (srcX+dxMin-padOx)*srcStride[1];
+            for(int dy=dyMin;dy<dyMax;dy++)
             {
-               const float *w = w0;
+               float *sp = srcPtr + filterW*dy;
+
+               if (dxMin>0)
+               {
+                  memset(sp, 0, dxMin*inputs*sizeof(float));
+                  sp +=dxMin*inputs;
+               }
+
+               memcpy(sp, s, (dxMax-dxMin)*inputs*sizeof(float));
+               s+= srcStride[0];
+
+               if (dxMax<filterX)
+                  memset(sp + (dxMax-dxMin)*inputs, 0, (filterX-dxMax)*inputs*sizeof(float));
+            }
+
+
+            const float *w = alignedWeights;
+            if (pweights)
+            {
+               for(int d=0;d<diSize;d++)
+               {
+                  int srcOff = d; // todo - depth_multiplier > 1
+                  di[d] = dotSkip(w, srcPtr+srcOff, filters, inputs);
+                  w+=filters;
+               }
+
+               const float *w = (const float *)pweights->data;
                for(int o=0;o<outputs;o++)
                {
-                  float sum = dot(b?b[o] : 0.0f, w, src, featureSize, activation);
+                  float sum = dot(b?b[o]:0.0f, w, di, diSize, activation);
                   *dest++ = sum;
-                  w+=featureSize;
+                  w+=diSize;
                }
-               src+=inputs;
             }
-         }
-      }
-      else
-      {
-         int filterW = filterX*inputs;
-         float *srcPtr = &srcBuffers[threadId][0];
-         int filterRow = filterW*sizeof(float);
-
-         const float *sIn = (float *)src0->data;
-
-         while(true)
-         {
-            int y = getNextJob();
-            if (y>=destH)
-               break;
-
-
-            float *dest = (float *)destTensor->data + destW*outputs*y;
-            int srcY = y;
-
-            int dyMin = std::max(padOy-srcY,0);
-            int dyMax = std::min(srcH+padOy-srcY,filterY);
-
-            if (dyMin>0)
-               memset(srcPtr,0,filterRow*dyMin);
-            if (dyMax<filterY)
-               memset(srcPtr+dyMax*filterW,0,filterRow*(filterY-dyMax) );
-
-            for(int x=0;x<destW;x++)
+            else
             {
-               int srcX = x;
-
-               int dxMin = std::max(padOx-srcX,0);
-               int dxMax = std::min(srcW+padOx-srcX,filterX);
-
-               const float *s = sIn + (srcY+dyMin-padOy)*srcStride[0] + (srcX+dxMin-padOx)*srcStride[1];
-               for(int dy=dyMin;dy<dyMax;dy++)
+               for(int o=0;o<outputs;o++)
                {
-                  float *sp = srcPtr + filterW*dy;
-
-                  if (dxMin>0)
-                  {
-                     memset(sp, 0, dxMin*inputs*sizeof(float));
-                     sp +=dxMin*inputs;
-                  }
-
-                  memcpy(sp, s, (dxMax-dxMin)*inputs*sizeof(float));
-                  s+= srcStride[0];
-
-                  if (dxMax<filterX)
-                     memset(sp + (dxMax-dxMin)*inputs, 0, (filterX-dxMax)*inputs*sizeof(float));
-               }
-
-
-               const float *w = w0;
-               if (pweights)
-               {
-                  for(int d=0;d<diSize;d++)
-                  {
-                     int srcOff = d; // todo - depth_multiplier > 1
-                     di[d] = dotSkip(w, srcPtr+srcOff, filters, inputs);
-                     w+=filters;
-                  }
-
-                  const float *w = (const float *)pweights->data;
-                  for(int o=0;o<outputs;o++)
-                  {
-                     float sum = dot(b?b[o]:0.0f, w, di, diSize, activation);
-                     *dest++ = sum;
-                     w+=diSize;
-                  }
-               }
-               else
-               {
-                  for(int o=0;o<outputs;o++)
-                  {
-                     float sum = dot(b?b[o]:0.0f, w, srcPtr, featureSize, activation);
-                     *dest++ = sum;
-                     w+=featureSize;
-                  }
+                  float sum = dot(b?b[o]:0.0f, w, srcPtr, featureSize, activation);
+                  *dest++ = sum;
+                  w+=alignedWeightSize;
                }
             }
          }
