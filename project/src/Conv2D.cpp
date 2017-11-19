@@ -29,13 +29,18 @@ class Conv2D : public Layer
    Tensor     *pweights;
    Tensor     *bias;
 
+   bool       interlacedWeights;
+   int        interlacedCount;
    bool       is1x1Aligned;
    bool       is1x1;
 
    std::vector <float *> srcBuffers;
    std::vector <float *> diBuffers;
+   std::vector <float *> weightBuffers;
+
    float                 *alignedWeightsBuffer;
    float                 *alignedWeights;
+   float                 *alignedBias;
    int                   alignedWeightSize;
 
 public:
@@ -90,6 +95,7 @@ public:
       weights = inWeights->incRef();
       pweights = inPWeights ? inPWeights->incRef() : 0;
       bias = inBias ? inBias->incRef() : 0;
+      alignedBias = bias ? (float *)bias->data : 0;
 
 
       alignedWeightsBuffer = 0;
@@ -99,7 +105,7 @@ public:
       if ( !pweights && (alignedWeightSize & 0x3) && outputs>1 )
       {
          alignedWeightSize = (alignedWeightSize + 3) & ~3;
-         alignedWeightsBuffer = (float *)Tensor::allocData(alignedWeightSize*outputs*sizeof(float));
+         alignedWeightsBuffer = allocFloats(alignedWeightSize*outputs);
          int wSize = filterX*filterY*inputs;
          for(int o=0;o<outputs;o++)
          {
@@ -109,19 +115,23 @@ public:
       }
 
 
-      is1x1Aligned = true;
       is1x1 = filterX*filterY==1;
+      is1x1Aligned = is1x1 && (inputs & 0x3) == 0;
+      interlacedWeights = false;
+      interlacedCount = 0;
+      #ifdef NUMERIX_SIMD
+      interlacedWeights = (outputs & 0x3)==0  && !pweights && (!is1x1 || is1x1Aligned);
+      #endif
 
       if (is1x1)
       {
-         is1x1Aligned = (inputs & 0x3) == 0;
          if (!is1x1Aligned)
          {
             int wBytes = weights->elementCount * sizeof(float);
 
             for(int i=1;i<4;i++)
             {
-               float *buffer = (float *)Tensor::allocData(wBytes - sizeof(float)*i);
+               float *buffer = allocFloats( weights->elementCount - i);
                memcpy(buffer, weights->data + sizeof(float)*i, wBytes - sizeof(float)*i);
                srcBuffers.push_back(buffer);
             }
@@ -130,24 +140,94 @@ public:
       else
       {
          int threads = GetWorkerCount();
+         int paddedSize = (filterX*filterY*inputs + 3) & ~0x3;
          for(int i=0;i<threads;i++)
          {
-            srcBuffers.push_back( (float *)Tensor::allocData(filterX*filterY*inputs*sizeof(float)) );
+            srcBuffers.push_back( allocFloats(paddedSize,true) );
             if (diSize)
-               diBuffers.push_back( (float *)Tensor::allocData(diSize*sizeof(float)) );
+               diBuffers.push_back( (float *)allocFloats(diSize) );
          }
       }
+
+      if (interlacedWeights)
+      {
+         createInterlacedWeights();
+      }
    }
+
+   void createInterlacedWeights()
+   {
+      if (!alignedBias)
+      {
+         alignedBias = allocFloats(outputs);
+         memset(alignedBias,0,outputs*sizeof(float));
+      }
+      int count = weights->strides[0];
+      int paddedSize = (count + 3) & ~0x3;
+      int odd = count & 0x3;
+      interlacedCount = paddedSize>>2;
+      float *wSrc = (float *)weights->data;
+      for(int o=0; o<outputs; o+=4)
+      {
+         float *interlacedBuf = allocFloats( paddedSize * 4, true );
+         float *b = interlacedBuf;
+         float *w0 = wSrc; wSrc+=count;
+         float *w1 = wSrc; wSrc+=count;
+         float *w2 = wSrc; wSrc+=count;
+         float *w3 = wSrc; wSrc+=count;
+         int fours = count>>2;
+         for(int i=0;i<fours;i++)
+         {
+            *b++ = *w0++;
+            *b++ = *w0++;
+            *b++ = *w0++;
+            *b++ = *w0++;
+
+            *b++ = *w1++;
+            *b++ = *w1++;
+            *b++ = *w1++;
+            *b++ = *w1++;
+
+            *b++ = *w2++;
+            *b++ = *w2++;
+            *b++ = *w2++;
+            *b++ = *w2++;
+
+            *b++ = *w3++;
+            *b++ = *w3++;
+            *b++ = *w3++;
+            *b++ = *w3++;
+         }
+         if (odd)
+         {
+            *b++ = *w0++;
+            *b++ = odd<2 ? 0 : *w0++;
+            *b++ = odd<3 ? 0 : *w0;
+            *b++ = 0;
+
+            *b++ = *w1++;
+            *b++ = odd<2 ? 0 : *w1++;
+            *b++ = odd<3 ? 0 : *w1;
+            *b++ = 0;
+
+            *b++ = *w2++;
+            *b++ = odd<2 ? 0 : *w2++;
+            *b++ = odd<3 ? 0 : *w2;
+            *b++ = 0;
+
+            *b++ = *w3++;
+            *b++ = odd<2 ? 0 : *w3++;
+            *b++ = odd<3 ? 0 : *w3;
+            *b++ = 0;
+         }
+
+         weightBuffers.push_back(interlacedBuf);
+      }
+   }
+
+
    ~Conv2D()
    {
-      for(int i=0;i<srcBuffers.size();i++)
-         Tensor::freeData( (unsigned char *)srcBuffers[i] );
-      for(int i=0;i<diBuffers.size();i++)
-         Tensor::freeData( (unsigned char *)diBuffers[i] );
-      if (alignedWeightsBuffer)
-         Tensor::freeData( (unsigned char *)alignedWeightsBuffer );
-
-
       weights->decRef();
       if (pweights)
          pweights->decRef();
@@ -236,7 +316,7 @@ public:
 
    void runThread1x1(int threadId)
    {
-      const float *b = bias ? (const float *)bias->data : 0;
+      const float *b = alignedBias;
 
       const float *w0 = alignedWeights;
       const float *w1 = is1x1Aligned ? w0 : srcBuffers[0];
@@ -253,52 +333,65 @@ public:
          float *dest = (float *)destTensor->data + destW*outputs*y;
          for(int x=0;x<destW;x++)
          {
-            const float *w;
-            switch( (size_t)src & 0x3 )
+            if (interlacedWeights)
             {
-               case 0:
-                  w = w0;
-                  for(int o=0;o<outputs;o++)
-                  {
-                     float sum = dot(b?b[o] : 0.0f, w, src, inputs, activation);
-                     *dest++ = sum;
-                     w+=alignedWeightSize;
-                  }
-                  break;
-               case 1:
-                  w = w3;
-                  for(int o=0;o<outputs;o++)
-                  {
-                     float sum = b?b[o] : 0.0f;
-                     sum += w0[0]*src[0] + w0[1]*src[1] + w0[2]*src[2];
-                     sum = dot(sum, w, src+3, inputs-3, activation);
-                     *dest++ = sum;
-                     w+=alignedWeightSize;
-                  }
-                  break;
-               case 2:
-                  w = w2;
-                  for(int o=0;o<outputs;o++)
-                  {
-                     float sum = b?b[o] : 0.0f;
-                     sum += w0[0]*src[0] + w0[1]*src[1];
-                     sum = dot(sum, w, src+2, inputs-2, activation);
-                     *dest++ = sum;
-                     w+=alignedWeightSize;
-                  }
-                  break;
-               case 3:
-                  w = w1;
-                  for(int o=0;o<outputs;o++)
-                  {
-                     float sum = b?b[o] : 0.0f;
-                     sum += w0[0]*src[0];
-                     sum = dot(sum, w, src+1, inputs-1, activation);
-                     *dest++ = sum;
-                     w+=alignedWeightSize;
-                  }
-                  break;
+               int bid = 0;
+               for(int o=0;o<outputs;o+=4)
+               {
+                  dot4Interlaced(dest, alignedBias+bid*4, weightBuffers[bid], src, interlacedCount, activation);
+                  bid++;
+                  dest+=4;
+               }
+            }
+            else
+            {
+               const float *w;
+               switch( (size_t)src & 0x3 )
+               {
+                  case 0:
+                     w = w0;
+                     for(int o=0;o<outputs;o++)
+                     {
+                        float sum = dot(b?b[o] : 0.0f, w, src, inputs, activation);
+                        *dest++ = sum;
+                        w+=alignedWeightSize;
+                     }
+                     break;
+                  case 1:
+                     w = w3;
+                     for(int o=0;o<outputs;o++)
+                     {
+                        float sum = b?b[o] : 0.0f;
+                        sum += w0[0]*src[0] + w0[1]*src[1] + w0[2]*src[2];
+                        sum = dot(sum, w, src+3, inputs-3, activation);
+                        *dest++ = sum;
+                        w+=alignedWeightSize;
+                     }
+                     break;
+                  case 2:
+                     w = w2;
+                     for(int o=0;o<outputs;o++)
+                     {
+                        float sum = b?b[o] : 0.0f;
+                        sum += w0[0]*src[0] + w0[1]*src[1];
+                        sum = dot(sum, w, src+2, inputs-2, activation);
+                        *dest++ = sum;
+                        w+=alignedWeightSize;
+                     }
+                     break;
+                  case 3:
+                     w = w1;
+                     for(int o=0;o<outputs;o++)
+                     {
+                        float sum = b?b[o] : 0.0f;
+                        sum += w0[0]*src[0];
+                        sum = dot(sum, w, src+1, inputs-1, activation);
+                        *dest++ = sum;
+                        w+=alignedWeightSize;
+                     }
+                     break;
 
+               }
             }
             src+=inputs;
          }
@@ -385,11 +478,24 @@ public:
             }
             else
             {
-               for(int o=0;o<outputs;o++)
+               if (interlacedWeights)
                {
-                  float sum = dot(b?b[o]:0.0f, w, srcPtr, featureSize, activation);
-                  *dest++ = sum;
-                  w+=alignedWeightSize;
+                  int bid = 0;
+                  for(int o=0;o<outputs;o+=4)
+                  {
+                     dot4Interlaced(dest, alignedBias+bid*4, weightBuffers[bid], srcPtr, interlacedCount, activation);
+                     bid++;
+                     dest+=4;
+                  }
+               }
+               else
+               {
+                  for(int o=0;o<outputs;o++)
+                  {
+                     float sum = dot(b?b[o]:0.0f, w, srcPtr, featureSize, activation);
+                     *dest++ = sum;
+                     w+=alignedWeightSize;
+                  }
                }
             }
          }

@@ -5,6 +5,8 @@
 
    <files id="numerix" >
      <compilerflag value="-Iinclude" />
+     <compilerflag value="-DNUMERIX_SIMD" />
+
      <depend name="include/Tensor.h" />
      <depend name="include/Ops.h" />
      <depend name="include/NxThread.h" />
