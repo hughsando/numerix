@@ -270,7 +270,7 @@ inline float dot(float s0,const float *w, const float *s, int n, Activation acti
    return sum;
 }
 
-float dotSkip(const float *w, const float *s, int n, int inSkip)
+inline float dotSkip(const float *w, const float *s, int n, int inSkip)
 {
    float sum = 0;
    for(int i=0;i<n;i++)

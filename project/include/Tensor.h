@@ -112,6 +112,11 @@ public:
                               Activation activation, Padding padding,
                               Tensor *weights, Tensor *pweights, Tensor *bias);
 
+   static Layer *createMaxPool(int inSizeX, int inSizeY,
+                               int inStrideY, int inStrideX,
+                               Padding padding);
+
+
    virtual ~Layer();
 
    virtual Tensor *run(Tensor *inSrc0, Tensor *inBuffer) = 0;

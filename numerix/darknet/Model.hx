@@ -135,8 +135,8 @@ class Model extends numerix.Model
             file.readBytes(buffer,0,buffer.length);
             var weights = Tensor.fromBytes(buffer,Nx.float32,[n,c,size,size]);
             weights = weights.reorder([0,2,3,1],true);
-            println(" weight " + weights.min + "..." + weights.max );
-            println('Conv2D $weights $bias');
+            //println(" weight " + weights.min + "..." + weights.max );
+            //println('Conv2D $weights $bias');
 
             conv2D.setWeights([weights,bias]);
             if (conv2D.padding==Layer.PAD_SAME)
@@ -146,13 +146,35 @@ class Model extends numerix.Model
             }
             else
             {
-               params.w = cpp.NativeMath.idiv(params.w - stride+1,stride);
-               params.h = cpp.NativeMath.idiv(params.h - stride+1,stride);
+               params.w = cpp.NativeMath.idiv(params.w - size+1,stride);
+               params.h = cpp.NativeMath.idiv(params.h - size+1,stride);
             }
             params.c = n;
-            println(' -> $w,$h,$c');
+            //println(' -> ${params.w},${params.h},${params.c}');
 
             return conv2D;
+
+         case "maxpool" :
+            var size:Int = config.size;
+            config.kernelSize = [ size,size ];
+            var stride:Int = config.stride;
+            config.strides = [ stride,stride ];
+            config.padding = 'same';
+            println('Maxpool ${params.w},${params.h},${params.c}');
+            var maxPool = new MaxPool(config, params.layer);
+            if (maxPool.padding==Layer.PAD_SAME)
+            {
+               params.w = cpp.NativeMath.idiv(params.w + stride-1,stride);
+               params.h = cpp.NativeMath.idiv(params.h + stride-1,stride);
+            }
+            else
+            {
+               params.w = cpp.NativeMath.idiv(params.w - size+1 + stride-1,stride);
+               params.h = cpp.NativeMath.idiv(params.h - size+1 + stride-1,stride);
+            }
+            //println(' -> ${params.w},${params.h},${params.c}');
+
+
 
          /*
          case "Conv2D" :

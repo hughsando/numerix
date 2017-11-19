@@ -546,6 +546,46 @@ value layCreateConv2D(value inStrides, int activation, int padding, value inWeig
 }
 DEFINE_PRIME6(layCreateConv2D);
 
+
+
+value layCreateMaxPool(value inSize, value inStrides, int padding)
+{
+   int sx = 1;
+   int sy = 1;
+   if (val_is_int(inSize))
+      sx = sy = val_int(inSize);
+   else if (!val_is_null(inSize))
+   {
+      Shape size;
+      fromValue(size, inSize);
+      sy = size.size() > 0 ? size[0] : 1;
+      sx = size.size() > 1 ? size[1] : sy;
+   }
+
+   int stepX = sx;
+   int stepY = sy;
+   if (val_is_int(inStrides))
+      stepX = stepY = val_int(inStrides);
+   else if (!val_is_null(inStrides))
+   {
+      Shape strides;
+      fromValue(strides, inStrides);
+      stepY = strides.size() > 0 ? strides[0] : 1;
+      stepX = strides.size() > 1 ? strides[1] : sy;
+   }
+
+   Layer *layer = Layer::createMaxPool(sx, sy, stepX, stepY, (Padding)padding);
+
+   value result = alloc_abstract(layerKind, layer);
+   val_gc(result, destroyLayer);
+   return result;
+}
+DEFINE_PRIME3(layCreateMaxPool);
+
+
+
+
+
 value layRun(value inLayer, value inOwner, value inSrc0)
 {
    TO_LAYER
