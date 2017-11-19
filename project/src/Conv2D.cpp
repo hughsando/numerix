@@ -57,7 +57,7 @@ public:
       // Output x Height x Width x Input
       CShape s = inWeights->shape;
       if (!inPWeights && s.size()!=4)
-         TensorThrow("Invalid Conv2D weigth shape");
+         TensorThrow("Invalid Conv2D weight shape");
       if (inPWeights && s.size()!=3)
          TensorThrow("Invalid SeparableConv2D depthwise shape");
 

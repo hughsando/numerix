@@ -9,6 +9,7 @@ class Layer
    static public inline var ACT_LINEAR = 0;
    static public inline var ACT_RELU = 1;
    static public inline var ACT_SIGMOID = 2;
+   static public inline var ACT_LEAKY = 3;
 
 
 

@@ -16,14 +16,14 @@ class Test
    public static function main()
    {
       var args = Sys.args();
-      var filename = args.shift();
-      if (filename==null)
+      var modelname = args.shift();
+      if (modelname==null)
       {
-         Sys.println("Usage: Test filename");
+         Sys.println("Usage: Test modelname [imagename]");
          return;
       }
 
-      var model = new numerix.keras.Model(filename);
+      var model = numerix.Model.load(modelname);
 
       var bmpname = args.shift();
       if (bmpname!=null)

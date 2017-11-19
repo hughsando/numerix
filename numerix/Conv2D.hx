@@ -1,5 +1,4 @@
 package numerix;
-using numerix.Hdf5Tools;
 
 class Conv2D extends Layer
 {
@@ -14,7 +13,7 @@ class Conv2D extends Layer
    public var weights(default,null):Tensor;
    public var bias(default,null):Tensor;
 
-   public function new(file:hdf5.Group, config:Dynamic, input:Layer)
+   public function new(config:Dynamic, input:Layer)
    {
       super(config,input);
 
@@ -29,8 +28,10 @@ class Conv2D extends Layer
          activation = Layer.ACT_LINEAR;
       else if (act=="relu")
          activation = Layer.ACT_RELU;
-      else if (act=="sigmoid")
+      else if (act=="sigmoid" || act=="logistic")
          activation = Layer.ACT_SIGMOID;
+      else if (act=="leaky")
+         activation = Layer.ACT_LEAKY;
       else
          throw 'Unknown activation $act';
 
