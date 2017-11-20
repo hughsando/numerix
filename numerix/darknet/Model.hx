@@ -4,20 +4,28 @@ import Sys.println;
 import haxe.io.Bytes;
 import numerix.Tensor;
 import numerix.Nx;
+import cpp.NativeMath.idiv;
 
 class Params
 {
   public var w:Int;
   public var h:Int;
-  public var c:Int;
+  public var channels:Int;
   public var layer:Layer;
 
-  public function new() { }
+  public function new(inW=0, inH=0, inC=0, inLayer=null)
+  {
+     w = inW;
+     h = inH;
+     channels = inC;
+     layer = inLayer;
+  }
 }
 
 class Model extends numerix.Model
 {
    var transpose:Bool;
+   var params:Array<Params>;
 
    public function new(filename:String)
    {
@@ -78,30 +86,29 @@ class Model extends numerix.Model
       }
       transpose = (major > 1000) || (minor > 1000);
 
-      var params = new Params();
-
+      params = [];
+      var current:Params = null;
       for(section in sections)
       {
-         var layer = createLayer(weights, section, params);
-         if (layer!=null)
-         {
-            params.layer = layer;
-            layers.push(layer);
-         }
+         current = createLayer(weights, section, current);
+         params.push(current);
+         if (current.layer!=null)
+            layers.push(current.layer);
       }
 
       weights.close();
    }
 
-   function createLayer(file:haxe.io.Input, config:Dynamic, params:Params) : Layer
+   function createLayer(file:haxe.io.Input, config:Dynamic, params:Params) : Params
    {
       var name = config.class_name;
       switch(name)
       {
          case "net" :
-            width = params.w = config.width;
-            height = params.h = config.height;
-            channels = params.c = config.channels;
+            width = config.width;
+            height = config.height;
+            channels = config.channels;
+            return new Params(width, height, channels);
 
          case "convolutional" :
             var size:Int = config.size;
@@ -117,7 +124,7 @@ class Model extends numerix.Model
             var n:Int = config.filters;
             var w = params.w;
             var h = params.h;
-            var c = params.c;
+            var c = params.channels;
             println('Convolutional $w,$h,$c');
 
             var buffer = Bytes.alloc(n*4);
@@ -141,18 +148,18 @@ class Model extends numerix.Model
             conv2D.setWeights([weights,bias]);
             if (conv2D.padding==Layer.PAD_SAME)
             {
-               params.w = cpp.NativeMath.idiv(params.w + stride-1,stride);
-               params.h = cpp.NativeMath.idiv(params.h + stride-1,stride);
+               return new Params(
+                   idiv(params.w + stride-1,stride),
+                   idiv(params.h + stride-1,stride),
+                   n, conv2D );
             }
             else
             {
-               params.w = cpp.NativeMath.idiv(params.w - size+1,stride);
-               params.h = cpp.NativeMath.idiv(params.h - size+1,stride);
+               return new Params(
+                  idiv(params.w - size+1,stride),
+                  idiv(params.h - size+1,stride),
+                   n, conv2D );
             }
-            params.c = n;
-            //println(' -> ${params.w},${params.h},${params.c}');
-
-            return conv2D;
 
          case "maxpool" :
             var size:Int = config.size;
@@ -160,19 +167,38 @@ class Model extends numerix.Model
             var stride:Int = config.stride;
             config.strides = [ stride,stride ];
             config.padding = 'same';
-            println('Maxpool ${params.w},${params.h},${params.c}');
+            println('Maxpool ${params.w},${params.h},${params.channels}');
             var maxPool = new MaxPool(config, params.layer);
             if (maxPool.padding==Layer.PAD_SAME)
             {
-               params.w = cpp.NativeMath.idiv(params.w + stride-1,stride);
-               params.h = cpp.NativeMath.idiv(params.h + stride-1,stride);
+               return new Params(
+                 idiv(params.w + stride-1,stride),
+                 idiv(params.h + stride-1,stride),
+                 params.channels, maxPool );
             }
             else
             {
-               params.w = cpp.NativeMath.idiv(params.w - size+1 + stride-1,stride);
-               params.h = cpp.NativeMath.idiv(params.h - size+1 + stride-1,stride);
+               return new Params(
+                 idiv(params.w - size+1 + stride-1,stride),
+                 idiv(params.h - size+1 + stride-1,stride),
+                 params.channels, maxPool );
             }
-            //println(' -> ${params.w},${params.h},${params.c}');
+         case "route" :
+            var lays = config.layers.split(",");
+            if (lays.length==1)
+               return params[ params.length + Std.parseInt(lays[0]) ];
+
+            var l0 =  params[ params.length + Std.parseInt(lays[0]) ];
+            var l1 =  params[ params.length + Std.parseInt(lays[1]) ];
+            var cc =  new Concat(config,l0.layer,l1.layer);
+            return new Params(l0.w,l0.h,l0.channels + l1.channels, cc);
+
+         case "reorg" :
+            var stride = Std.parseInt(config.stride);
+            var reshape =  new Pack(config, params.layer);
+            var w = idiv(params.w, stride);
+            var h = idiv(params.h, stride);
+            return new Params(w,h,params.channels*stride*stride, reshape);
 
 
 
