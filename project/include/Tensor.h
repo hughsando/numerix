@@ -107,6 +107,7 @@ class Layer
    std::vector<unsigned char *> buffers;
 
 public:
+   typedef unsigned char u8;
 
    static Layer *createConv2D(int inStrideY, int inStrideX,
                               Activation activation, Padding padding,
@@ -116,16 +117,23 @@ public:
                                int inStrideY, int inStrideX,
                                Padding padding);
 
+   static Layer *createConcat();
+
+   static Layer *createPack(int inStride);
+
 
    virtual ~Layer();
 
-   virtual Tensor *run(Tensor *inSrc0, Tensor *inBuffer) = 0;
+   virtual Tensor *run(Tensor *inSrc0, Tensor *inBuffer) { return 0; }
+   virtual Tensor *run(Tensor *inSrc0, Tensor *inSrc1, Tensor *inBuffer) { return 0; }
 
    virtual void runThread(int inThreadId) { }
 
    int getNextJob();
 
    float *allocFloats(int count,bool inZero=false);
+
+   Tensor *makeOutput(Tensor *inBuffer, int inW, int inH, int inChannels, int inType);
 
    void runThreaded();
 };

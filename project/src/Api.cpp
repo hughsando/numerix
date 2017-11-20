@@ -584,17 +584,56 @@ DEFINE_PRIME3(layCreateMaxPool);
 
 
 
+value layCreateConcat()
+{
+   Layer *layer = Layer::createConcat();
+
+   value result = alloc_abstract(layerKind, layer);
+   val_gc(result, destroyLayer);
+   return result;
+}
+DEFINE_PRIME0(layCreateConcat);
 
 
-value layRun(value inLayer, value inOwner, value inSrc0)
+
+value layCreatePack(int inStride)
+{
+   Layer *layer = Layer::createPack(inStride);
+
+   value result = alloc_abstract(layerKind, layer);
+   val_gc(result, destroyLayer);
+   return result;
+}
+DEFINE_PRIME1(layCreatePack);
+
+
+
+value layRun(value inLayer, value inOwner, value inSrc)
 {
    TO_LAYER
-   TO_TENSOR_NAME(inSrc0, src0)
+   Tensor *src0 = 0;
+   Tensor *src1 = 0;
+
+   if (val_is_array(inSrc))
+   {
+      TO_TENSOR_NAME(val_array_i(inSrc,0), s0);
+      src0 = s0;
+      TO_TENSOR_NAME(val_array_i(inSrc,1), s1);
+      src1 = s1;
+   }
+   else
+   {
+      TO_TENSOR_NAME(inSrc, src);
+      src0 = src;
+   }
 
    value valBuf = val_field(inOwner, _id_resultBuffer);
    TO_TENSOR_NAME(valBuf, buffer);
 
-   Tensor *result = layer->run(src0, buffer);
+   Tensor *result = src1==0 ?
+                       layer->run(src0, buffer) :
+                       layer->run(src0, src1, buffer);
+
    if (result!=buffer)
    {
       if (buffer)

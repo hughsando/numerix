@@ -19,11 +19,16 @@ class Layer
    public var resultBuffer:Tensor;
    var handle:Dynamic;
 
-   public function new(confg:Dynamic, ?input:Layer)
+   public function new(confg:Dynamic, ?input0:Layer,?input1:Layer)
    {
-      inputs = input==null ? [] : [input];
-      if (input!=null)
-         input.outputs.push(this);
+      inputs = input0==null ? [] : [input0];
+      if (input0!=null)
+         input0.outputs.push(this);
+      if (input1!=null)
+      {
+         inputs.push(input1);
+         input1.outputs.push(this);
+      }
       outputs = [];
       name = confg.name;
    }
@@ -42,8 +47,20 @@ class Layer
    {
       if (handle!=null)
       {
-         var src = inputs.length>0 ? inputs[0].getOutput() : null;
-         resultBuffer = Tensor.fromHandle( layRun(handle, this, src) );
+         if (inputs.length==1)
+         {
+            var src = inputs.length>0 ? inputs[0].getOutput() : null;
+            resultBuffer = Tensor.fromHandle( layRun(handle, this, src) );
+         }
+         else if (inputs.length==1)
+         {
+            var src = [ inputs[0].getOutput(), inputs[1].getOutput() ];
+            resultBuffer = Tensor.fromHandle( layRun(handle, this, src) );
+         }
+         else
+         {
+            resultBuffer = Tensor.fromHandle( layRun(handle, this, null) );
+         }
       }
 
       return resultBuffer;

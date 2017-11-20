@@ -25,7 +25,7 @@ class Params
 class Model extends numerix.Model
 {
    var transpose:Bool;
-   var params:Array<Params>;
+   var paramStack:Array<Params>;
 
    public function new(filename:String)
    {
@@ -86,12 +86,12 @@ class Model extends numerix.Model
       }
       transpose = (major > 1000) || (minor > 1000);
 
-      params = [];
+      paramStack = [];
       var current:Params = null;
       for(section in sections)
       {
          current = createLayer(weights, section, current);
-         params.push(current);
+         paramStack.push(current);
          if (current.layer!=null)
             layers.push(current.layer);
       }
@@ -183,70 +183,34 @@ class Model extends numerix.Model
                  idiv(params.h - size+1 + stride-1,stride),
                  params.channels, maxPool );
             }
+
          case "route" :
             var lays = config.layers.split(",");
+            var l = paramStack.length;
             if (lays.length==1)
-               return params[ params.length + Std.parseInt(lays[0]) ];
+            {
+               var old:Params = untyped paramStack[ l + Std.parseInt(lays[0]) ];
+               println('route1 ${old.w},${old.h},${old.channels}');
+               return old;
+            }
 
-            var l0 =  params[ params.length + Std.parseInt(lays[0]) ];
-            var l1 =  params[ params.length + Std.parseInt(lays[1]) ];
+            var l0:Params = untyped  paramStack[ l + Std.parseInt(lays[0]) ];
+            var l1:Params = untyped  paramStack[ l + Std.parseInt(lays[1]) ];
+            println('Concat ${l0.w},${l0.w},${l0.channels+l1.channels}');
             var cc =  new Concat(config,l0.layer,l1.layer);
             return new Params(l0.w,l0.h,l0.channels + l1.channels, cc);
 
          case "reorg" :
             var stride = Std.parseInt(config.stride);
-            var reshape =  new Pack(config, params.layer);
+            var reorg =  new Pack(config, params.layer);
             var w = idiv(params.w, stride);
             var h = idiv(params.h, stride);
-            return new Params(w,h,params.channels*stride*stride, reshape);
-
-
-
-         /*
-         case "Conv2D" :
-            cfg.activation = cfg.activation;
-            cfg.useBias = cfg.use_bias;
-            var data = cfg.name;
-
-            var conv2D = new Conv2D(cfg, prev);
-            var weights = file.read('model_weights/$data/$data/kernel:0');
-            weights = weights.reorder([3,0,1,2],true);
-            var bias = conv2D.useBias ? file.read('model_weights/$data/$data/bias:0') : null;
-            if (bias!=null)
-               bias.setFlat();
-            conv2D.setWeights([weights,bias]);
-            return conv2D;
-
-         case "SeparableConv2D" :
-            var cfg = config.config;
-            cfg.kernelSize = cfg.kernel_size;
-            cfg.dilation = cfg.dilation_rate;
-            cfg.activation = cfg.activation;
-            cfg.useBias = cfg.use_bias;
-            var data = cfg.name;
-
-            var conv2D = new SeparableConv2D(file, cfg, prev);
-            var dweights = file.read('model_weights/$data/$data/depthwise_kernel:0');
-            dweights = dweights.reorder([3,2,0,1],true);
-            var s = dweights.shape;
-            dweights.setShape([s[1],s[2],s[3]]);
-            trace(dweights);
-            var pweights = file.read('model_weights/$data/$data/pointwise_kernel:0');
-            pweights = pweights.reorder([0,1,3,2],true);
-            var s = pweights.shape;
-            pweights.setShape([s[2],s[3]]);
-            trace(pweights);
-            var bias = conv2D.useBias ? file.read('model_weights/$data/$data/bias:0') : null;
-            if (bias!=null)
-               bias.setFlat();
-            conv2D.setWeights([dweights,pweights,bias]);
-            return conv2D;
-
-         */
+            return new Params(w,h,params.channels*stride*stride, reorg);
 
          default:
             throw 'Unknown layer type $name';
       }
+
       return null;
    }
 }

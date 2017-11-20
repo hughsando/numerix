@@ -17,6 +17,8 @@
      <file name="src/MaxPool.cpp" />
      <file name="src/NxThread.cpp" />
      <file name="src/Layer.cpp" />
+     <file name="src/Concat.cpp" />
+     <file name="src/Pack.cpp" />
 
    </files>
 
