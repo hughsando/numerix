@@ -118,14 +118,14 @@ public:
 
 
          float *dest = (float *)destTensor->data + destW*channels*y;
-         int srcY = y;
+         int srcY = y*strideY;
 
          int dyMin = std::max(padOy-srcY,0);
          int dyMax = std::min(srcH+padOy-srcY,filterY);
 
          for(int x=0;x<destW;x++)
          {
-            int srcX = x;
+            int srcX = x*strideX;
 
             int dxMin = std::max(padOx-srcX,0);
             int dxMax = std::min(srcW+padOx-srcX,filterX);

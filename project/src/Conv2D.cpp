@@ -29,10 +29,6 @@ class Conv2D : public Layer
    Tensor     *pweights;
    Tensor     *bias;
 
-   Tensor     *scales;
-   Tensor     *means;
-   Tensor     *vars;
-
    bool       interlacedWeights;
    int        interlacedCount;
    bool       is1x1Aligned;
@@ -52,13 +48,6 @@ public:
           Activation inActivation, Padding inPadding,
           Tensor *inWeights, Tensor *inPWeights, Tensor *inBias)
    {
-
-      inActivation = actLinear;
-      inBias = 0;
-
-      scales = means = vars = 0;
-
-
       strideY = inStrideY;
       strideX = inStrideX;
       activation = inActivation;
@@ -106,8 +95,27 @@ public:
       weights = inWeights->incRef();
       pweights = inPWeights ? inPWeights->incRef() : 0;
       bias = inBias ? inBias->incRef() : 0;
-      alignedBias = bias ? (float *)bias->data : 0;
 
+      is1x1 = filterX*filterY==1;
+      is1x1Aligned = is1x1 && (inputs & 0x3) == 0;
+      interlacedWeights = false;
+      interlacedCount = 0;
+      #ifdef NUMERIX_SIMD
+      interlacedWeights = (outputs & 0x3)==0  && !pweights && (!is1x1 || is1x1Aligned);
+      #endif
+
+      rebuildWeights();
+   }
+
+   void rebuildWeights()
+   {
+      releaseFloats();
+      srcBuffers.resize(0);
+      diBuffers.resize(0);
+      weightBuffers.resize(0);
+
+
+      alignedBias = bias ? (float *)bias->data : 0;
 
       alignedWeightsBuffer = 0;
       alignedWeights = (float *)weights->data;
@@ -124,15 +132,6 @@ public:
          }
          alignedWeights = alignedWeightsBuffer;
       }
-
-
-      is1x1 = filterX*filterY==1;
-      is1x1Aligned = is1x1 && (inputs & 0x3) == 0;
-      interlacedWeights = false;
-      interlacedCount = 0;
-      #ifdef NUMERIX_SIMD
-      interlacedWeights = (outputs & 0x3)==0  && !pweights && (!is1x1 || is1x1Aligned);
-      #endif
 
       if (is1x1)
       {
@@ -169,9 +168,44 @@ public:
 
    void setNormalization(Tensor *inScales, Tensor *inMeans, Tensor *inVars)
    {
-      scales = inScales->incRef();
-      means = inMeans->incRef();
-      vars = inVars->incRef();
+      // a set of output features are first "normalized":
+      //
+      // O'i = (Oi - Mean_i)/(sqrt(Vars_i) +  .000001f)
+      //
+      // Then 'scale_bias'
+      //
+      // O''i = O'i * Scale_i
+      //
+      // Let Ki = Scale_i/(sqrt(Vars_i) +  .000001f)
+      //     Ci = -Mean_i * Ki
+      //
+      // O' = Ki Oi + Ci
+      // This is the same as multiplying the Weights_i by Ki and adding Ci to the biases
+
+      const float *scale = (const float *)inScales->data;
+      const float *mean = (const float *)inMeans->data;
+      const float *var = (const float *)inVars->data;
+
+      if (!bias)
+      {
+         Shape s(1);
+         s[0]=outputs;
+         bias = new Tensor(Float32, s);
+         bias->zero(0,outputs);
+      }
+      float *b = (float *)bias->data;
+      float *w = (float *)weights->data;
+
+      int wCount = weights->strides[0];
+      for(int i=0;i<outputs;i++)
+      {
+         float Ki = scale[i]/(sqrt(var[i])+.000001f);
+         for(int i=0;i<wCount;i++)
+            *w++ *= Ki;
+         b[i] -= mean[i]*Ki;
+      }
+
+      rebuildWeights();
    }
 
 
@@ -253,12 +287,6 @@ public:
          pweights->decRef();
       if (bias)
          bias->decRef();
-      if (scales)
-         scales->decRef();
-      if (means)
-         means->decRef();
-      if (vars)
-         vars->decRef();
    }
 
 

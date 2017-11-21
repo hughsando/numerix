@@ -27,7 +27,9 @@ public:
    {
       CShape sin0 = inSrc0->shape;
       if (sin0.size()!=3)
-         TensorThrow("Concat only supports H*W*C tensors");
+         TensorThrow("Pack - only supports H*W*C tensors");
+      if (inSrc0->elementSize!=4)
+         TensorThrow("Pack - only types of size4 supported");
 
 
       srcH = sin0[0];
@@ -60,7 +62,13 @@ public:
       int typeSize = src0->elementSize;
       const int *src0Stride = &src0->strides[0];
       const int *destStride = &destTensor->strides[0];
-      int ds0x = src0Stride[1] * typeSize;
+
+      int dSdY = src0Stride[0];
+      int sSdX = src0Stride[1];
+      int dDdY = destStride[0];
+      const int *srcP = (int *)src0->data;
+      int *destP = (int *)destTensor->data;
+      int srcChannels = src0->shape[2];
 
       while(true)
       {
@@ -68,19 +76,31 @@ public:
          if (y>=destH)
             break;
 
-         const u8 *s0 = src0->data + src0Stride[0] * (y*stride) * typeSize;
-         u8 *d = destTensor->data + destStride[0] * y * typeSize;
+         int srcY = y * stride;
+
+         const int *sx = srcP + dSdY * srcY;
+         int *dest = destP + dDdY*y;
 
          for(int x=0;x<destW;x++)
          {
-            const u8 *s = s0;
+            for(int ch=0;ch<srcChannels;ch++)
+            {
+                  for(int dx=0;dx<stride;dx++)
+               for(int dy=0;dy<stride;dy++)
+                  {
+                     *dest++ = sx[ dx*sSdX + dy*dSdY ];
+                  }
+               sx++;
+            }
+            /*
             for(int dy=0;dy<stride;dy++)
             {
-               memcpy(d, s, ds0x*stride);
-               d += ds0x*stride;
-               s+=  src0Stride[0]*typeSize;
+               memcpy(dest, sx + dy*dSdY, sSdX*stride);
+               dest += sSdX*stride;
             }
+            */
          }
+         sx += sSdX*stride;
       }
    }
 };

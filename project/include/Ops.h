@@ -16,6 +16,7 @@ typedef __m128 float32x4_t;
 #define Add4f32(a,b) _mm_add_ps(a,b)
 #define Mul4f32(a,b) _mm_mul_ps(a,b)
 #define Zero4f32 _mm_castsi128_ps(_mm_setzero_si128())
+#define Const4f32(c) _mm_set1_ps(c)
 #define Max4f32(a,b) _mm_max_ps(a,b)
 #define Store4f32(ptr, value)  _mm_store_ps(ptr, value)
 
@@ -132,9 +133,12 @@ inline void dot4Interlaced(float *dest, const float *alignedBias, const float *w
 
       float32x4_t bias = Load4f32(alignedBias);
 
+
       sum0 = Add4f32(sum0,bias);
       if (activation==actRelu)
          sum0 = Max4f32(sum0, Zero4f32);
+      else if (activation==actLeaky)
+         sum0 = Max4f32( sum0, Mul4f32(sum0, Const4f32(0.1f)) );
       Store4f32(dest, sum0);
    }
    else
@@ -158,10 +162,27 @@ inline void dot4Interlaced(float *dest, const float *alignedBias, const float *w
          src+=4;
       }
 
-      dest[0] = (activation==actRelu) && sum0 < 0 ? 0 : sum0;
-      dest[1] = (activation==actRelu) && sum1 < 0 ? 0 : sum1;
-      dest[2] = (activation==actRelu) && sum2 < 0 ? 0 : sum2;
-      dest[3] = (activation==actRelu) && sum3 < 0 ? 0 : sum3;
+      if (activation==actRelu)
+      {
+         dest[0] = sum0 < 0 ? 0 : sum0;
+         dest[1] = sum1 < 0 ? 0 : sum1;
+         dest[2] = sum2 < 0 ? 0 : sum2;
+         dest[3] = sum3 < 0 ? 0 : sum3;
+      }
+      else if (activation==actLeaky)
+      {
+         dest[0] = sum0 < 0 ? sum0*0.1f : sum0;
+         dest[1] = sum1 < 0 ? sum1*0.1f : sum1;
+         dest[2] = sum2 < 0 ? sum2*0.1f : sum2;
+         dest[3] = sum3 < 0 ? sum3*0.1f : sum3;
+      }
+      else
+      {
+         dest[0] = sum0;
+         dest[1] = sum1;
+         dest[2] = sum2;
+         dest[3] = sum3;
+      }
    }
 }
 
@@ -264,6 +285,11 @@ inline float dot(float s0,const float *w, const float *s, int n, Activation acti
 
    if (activation==actRelu && sum<0)
       sum = 0;
+   else if (activation==actLeaky)
+   {
+      if (sum<0)
+         sum*= 0.1f;
+   }
    else if (activation==actSigmoid)
       sum = 1.0 / (1.0 + exp(-sum));
 

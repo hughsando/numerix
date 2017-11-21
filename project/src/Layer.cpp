@@ -15,11 +15,16 @@ float *Layer::allocFloats(int count,bool inZero)
 
 Layer::~Layer()
 {
-   for(int i=0;i<buffers.size();i++)
-      Tensor::freeData( buffers[i] );
+   releaseFloats();
 }
 
 
+void Layer::releaseFloats()
+{
+   for(int i=0;i<buffers.size();i++)
+      Tensor::freeData( buffers[i] );
+   buffers.resize(0);
+}
 
 static void SRunThreaded(int inThreadId, void *thiz)
 {

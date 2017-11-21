@@ -85,7 +85,7 @@ class Layer
          valid = true;
       }
 
-      //println( resultBuffer + "=" + resultBuffer[0] );
+      println( resultBuffer + "=" + resultBuffer[0] + "..." + resultBuffer[resultBuffer.channels*resultBuffer.width] );
 
       return resultBuffer;
    }

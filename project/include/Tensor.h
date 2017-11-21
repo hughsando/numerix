@@ -42,6 +42,7 @@ enum Activation
    actLinear,
    actRelu,
    actSigmoid,
+   actLeaky,
 };
 
 enum Padding
@@ -136,6 +137,7 @@ public:
    int getNextJob();
 
    float *allocFloats(int count,bool inZero=false);
+   void   releaseFloats();
 
 
    void runThreaded();
