@@ -2,6 +2,7 @@ package numerix;
 
 class MaxPool extends Layer
 {
+   static var id = 0;
 
    public var kernelSize(default,null):Array<Int>;
    public var strides(default,null):Array<Int>;
@@ -10,6 +11,10 @@ class MaxPool extends Layer
    public function new(config:Dynamic, input:Layer)
    {
       super(config,input);
+
+      if (name==null)
+         name = "maxpool_" + (id++);
+
 
       kernelSize = config.kernelSize;
       strides = config.strides;

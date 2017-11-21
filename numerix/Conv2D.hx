@@ -14,12 +14,16 @@ class Conv2D extends Layer
    public var weights(default,null):Tensor;
    public var bias(default,null):Tensor;
 
+   public var scales(default,null):Tensor;
+   public var means(default,null):Tensor;
+   public var vars(default,null):Tensor;
+
    public function new(config:Dynamic, input:Layer)
    {
       super(config,input);
 
       if (name==null)
-         name = "conv3d_" + (conv2DId++);
+         name = "conv2d_" + (conv2DId++);
 
 
       kernelSize = config.kernelSize;
@@ -50,6 +54,15 @@ class Conv2D extends Layer
          throw 'Unknown padding $pad';
    }
 
+   public function setNormalization(inScales:Tensor, inMeans:Tensor, inVars:Tensor)
+   {
+      scales = inScales;
+      means = inMeans;
+      vars = inVars;
+      if (handle!=null)
+         layConv2DSetNorm(handle, scales, means, vars);
+   }
+
 
    override public function setWeights(inWeights:Array<Tensor>)
    {
@@ -59,6 +72,8 @@ class Conv2D extends Layer
       release();
 
       handle = layCreateConv2D(strides, activation, padding, weights, null, bias);
+      if (scales!=null)
+         layConv2DSetNorm(handle, scales, means, vars);
    }
 
 
@@ -67,6 +82,7 @@ class Conv2D extends Layer
 
 
    static var layCreateConv2D = Loader.load("layCreateConv2D","oiioooo");
+   static var layConv2DSetNorm = Loader.load("layConv2DSetNorm","oooov");
 
 
 }

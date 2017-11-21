@@ -50,6 +50,18 @@ abstract Tensor(Dynamic)
       tdPrint(this, maxElems);
    }
 
+   @:op([])
+   public function at(inIndex:Int):Float
+   {
+      return tdAt(this, inIndex);
+   }
+
+   public function setAt(inIndex:Int,inValue:Float,inCount=1):Void
+   {
+      tdSetAt(this, inIndex,inValue,inCount);
+   }
+
+
    /*
    public function getMin(axis:Int) : Tensor
    {
@@ -82,18 +94,15 @@ abstract Tensor(Dynamic)
 
    function get_height() : Int
    {
-      var s = shape;
-      return s.length==3 ? s[0] : -1;
+      return tdGetDimAt(this,0);
    }
    function get_width() : Int
    {
-      var s = shape;
-      return s.length==3 ? s[1] : -1;
+      return tdGetDimAt(this,1);
    }
    function get_channels() : Int
    {
-      var s = shape;
-      return s.length==3 ? s[2] : -1;
+      return tdGetDimAt(this,2);
    }
 
 
@@ -210,6 +219,8 @@ abstract Tensor(Dynamic)
    static var tdGetMax = Loader.load("tdGetMax","od");
    static var tdSetFlat = Loader.load("tdSetFlat","ov");
    static var tdSetShape = Loader.load("tdSetShape","oov");
+   static var tdAt = Loader.load("tdAt","oid");
+   static var tdSetAt = Loader.load("tdSetAt","oidiv");
    //static var tdGetMinAxis = Loader.load("tdGetMin","ooo");
    //static var tdGetMaxAxis = Loader.load("tdGetMax","oio");
 

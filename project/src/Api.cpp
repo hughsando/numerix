@@ -411,6 +411,8 @@ DEFINE_PRIME1(tdGetDimCount);
 int tdGetDimAt(value inTensor,int inIndex)
 {
    TO_TENSOR
+   if (inIndex>=tensor->shape.size())
+      return -1;
    return tensor->shape[inIndex];
 }
 DEFINE_PRIME2(tdGetDimAt);
@@ -451,6 +453,21 @@ double tdGetMax(value inTensor)
    return tensor->getMax();
 }
 DEFINE_PRIME1(tdGetMax)
+
+double tdAt(value inTensor, int index)
+{
+   TO_TENSOR
+   return tensor->getFloatAt(index);
+}
+DEFINE_PRIME2(tdAt)
+
+void tdSetAt(value inTensor, int index, double inVal,int count)
+{
+   TO_TENSOR
+   tensor->setFloat64(inVal,index,count);
+}
+DEFINE_PRIME4v(tdSetAt)
+
 
 
 void tdSetFlat(value inTensor)
@@ -570,6 +587,22 @@ value layCreateConv2D(value inStrides, int activation, int padding, value inWeig
    return allocLayer(layer);
 }
 DEFINE_PRIME6(layCreateConv2D);
+
+
+
+void layConv2DSetNorm(value inLayer, value inScales, value inMeans, value inVars)
+{
+   TO_LAYER
+   TO_TENSOR_NAME(inScales, scales);
+   TO_TENSOR_NAME(inMeans, means);
+   TO_TENSOR_NAME(inVars, vars);
+
+   if (!scales || !means || !vars)
+      TensorThrow("Conv2D - invalid normalization");
+
+   layer->setNormalization(scales, means, vars);
+}
+DEFINE_PRIME4v(layConv2DSetNorm);
 
 
 

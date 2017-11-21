@@ -29,6 +29,10 @@ class Conv2D : public Layer
    Tensor     *pweights;
    Tensor     *bias;
 
+   Tensor     *scales;
+   Tensor     *means;
+   Tensor     *vars;
+
    bool       interlacedWeights;
    int        interlacedCount;
    bool       is1x1Aligned;
@@ -48,6 +52,13 @@ public:
           Activation inActivation, Padding inPadding,
           Tensor *inWeights, Tensor *inPWeights, Tensor *inBias)
    {
+
+      inActivation = actLinear;
+      inBias = 0;
+
+      scales = means = vars = 0;
+
+
       strideY = inStrideY;
       strideX = inStrideX;
       activation = inActivation;
@@ -155,6 +166,15 @@ public:
       }
    }
 
+
+   void setNormalization(Tensor *inScales, Tensor *inMeans, Tensor *inVars)
+   {
+      scales = inScales->incRef();
+      means = inMeans->incRef();
+      vars = inVars->incRef();
+   }
+
+
    void createInterlacedWeights()
    {
       if (!alignedBias)
@@ -233,6 +253,12 @@ public:
          pweights->decRef();
       if (bias)
          bias->decRef();
+      if (scales)
+         scales->decRef();
+      if (means)
+         means->decRef();
+      if (vars)
+         vars->decRef();
    }
 
 

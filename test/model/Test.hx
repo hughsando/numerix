@@ -1,5 +1,6 @@
 import numerix.*;
 import Sys.println;
+using StringTools;
 
 class Test
 {
@@ -26,10 +27,24 @@ class Test
       var model = numerix.Model.load(modelname);
 
       var bmpname = args.shift();
-      if (bmpname!=null)
+      var val:Tensor = null;
+
+      if (bmpname!=null && bmpname.endsWith(".dat"))
       {
-         var val = NmeTools.loadImageF32( bmpname, NmeTools.TRANS_STD );
-         println( val + ": " + val.min + "..." + val.max );
+         var bytes = sys.io.File.getBytes(bmpname);
+         val = Tensor.fromBytes(bytes,Nx.float32, [3, model.height, model.width] );
+         val = val.reorder([1,2,0],true);
+      }
+      else if (bmpname!=null)
+      {
+         //var scaling = NmeTools.TRANS_STD;
+         var scaling = NmeTools.TRANS_UNIT_SCALE;
+         val = NmeTools.loadImageF32( bmpname, scaling );
+      }
+
+      if (val!=null)
+      {
+         println( val + ": " + val.min + "..." + val.max + "=" + val[0] );
 
          var t0 = haxe.Timer.stamp();
          var result = model.run(val);

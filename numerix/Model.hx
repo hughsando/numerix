@@ -1,15 +1,16 @@
 package numerix;
+import Sys.println;
 
 using StringTools;
 
 class Model
 {
-   var inputLayer:InputLayer;
-   var outputLayer:Layer;
-   var layers:Array<Layer>;
-   var width:Null<Int>;
-   var height:Null<Int>;
-   var channels:Null<Int>;
+   public var inputLayer:InputLayer;
+   public var outputLayer:Layer;
+   public var layers:Array<Layer>;
+   public var width:Null<Int>;
+   public var height:Null<Int>;
+   public var channels:Null<Int>;
    var resizeBuffer:Tensor;
 
    public function new()
@@ -44,9 +45,10 @@ class Model
          {
             resizeBuffer = input.cropAndScale(width,height,resizeBuffer,true);
             input = resizeBuffer;
-            trace(input);
          }
       }
+
+      println("Input " + input + "=" + input[0]);
       inputLayer.set(input);
       return outputLayer.getOutput();
    }

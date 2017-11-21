@@ -126,6 +126,8 @@ public:
 
    virtual ~Layer();
 
+   virtual void setNormalization(Tensor *inScales, Tensor *inMeans, Tensor *inVars) { }
+
    virtual Tensor *run(Tensor *inSrc0, Tensor *inBuffer) { return 0; }
    virtual Tensor *run(Tensor *inSrc0, Tensor *inSrc1, Tensor *inBuffer) { return 0; }
 

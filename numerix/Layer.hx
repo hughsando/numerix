@@ -1,5 +1,6 @@
 package numerix;
 import numerix.*;
+import Sys.println;
 
 class Layer
 {
@@ -83,6 +84,8 @@ class Layer
          }
          valid = true;
       }
+
+      //println( resultBuffer + "=" + resultBuffer[0] );
 
       return resultBuffer;
    }

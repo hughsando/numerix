@@ -140,10 +140,15 @@ class Model extends numerix.Model
 
             if (config.batch_normalize)
             {
-               // scales, mean, variance
+               // output scales, mean, variance
                file.readBytes(buffer,0,n*4);
+               var scales = Tensor.fromBytes(buffer,Nx.float32,[n]);
                file.readBytes(buffer,0,n*4);
+               var means = Tensor.fromBytes(buffer,Nx.float32,[n]);
                file.readBytes(buffer,0,n*4);
+               var vars = Tensor.fromBytes(buffer,Nx.float32,[n]);
+
+               conv2D.setNormalization(scales, means, vars);
             }
             var buffer = Bytes.alloc(n*c*size*size*4);
             file.readBytes(buffer,0,buffer.length);
