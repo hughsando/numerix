@@ -50,6 +50,11 @@ class Model extends numerix.Model
             if (section!=null)
                sections.push(section);
             section = { class_name : iniMatch.matched(1) };
+            if (section.class_name=="region")
+            {
+               section = null;
+               break;
+            }
          }
          else if (eqMatch.match(line) && section!=null)
          {
@@ -97,6 +102,7 @@ class Model extends numerix.Model
       }
 
       weights.close();
+      outputLayer = current.layer;
    }
 
    function createLayer(file:haxe.io.Input, config:Dynamic, params:Params) : Params
@@ -108,7 +114,8 @@ class Model extends numerix.Model
             width = config.width;
             height = config.height;
             channels = config.channels;
-            return new Params(width, height, channels);
+            inputLayer = new InputLayer();
+            return new Params(width, height, channels, inputLayer);
 
          case "convolutional" :
             var size:Int = config.size;

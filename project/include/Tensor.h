@@ -79,6 +79,7 @@ class Tensor
       void setFlat();
       void setShape(CShape inShape);
       Tensor *reorder(const std::vector<int> &order);
+      Tensor *cropAndScale(int inWidth, int inHeight, Tensor *inBuffer = 0);
 
       int    getIntAt(int inIndex);
       double getFloatAt(int inIndex);
@@ -91,6 +92,7 @@ class Tensor
       int addRef();
       int decRef();
 
+      static Tensor *makeBuffer(Tensor *inBuffer, int inW, int inH, int inChannels, int inType);
       static unsigned char *allocData(unsigned int inLength);
       static void freeData(u8 *data);
 
@@ -133,7 +135,6 @@ public:
 
    float *allocFloats(int count,bool inZero=false);
 
-   Tensor *makeOutput(Tensor *inBuffer, int inW, int inH, int inChannels, int inType);
 
    void runThreaded();
 };

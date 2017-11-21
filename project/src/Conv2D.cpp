@@ -292,6 +292,8 @@ public:
          s[2] = outputs;
          result = new Tensor( Float32, s );
       }
+      //printf("Cov2d -> %d %d %d\n", destW, destH, outputs);
+
 
       src0 = inSrc0;
       destTensor = result;

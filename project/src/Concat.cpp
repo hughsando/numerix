@@ -38,8 +38,9 @@ public:
       c0 = sin0[2];
       c1 = sin1[2];
       channels = c0 + c1;
+      //printf("Concat -> %d %d %d\n", srcW, srcH, channels);
 
-      Tensor *result = makeOutput(inBuffer, srcW, srcH, channels, inSrc0->type);
+      Tensor *result = Tensor::makeBuffer(inBuffer, srcW, srcH, channels, inSrc0->type);
 
       src0 = inSrc0;
       src1 = inSrc1;

@@ -2,11 +2,15 @@ package numerix;
 
 class Pack extends Layer
 {
+   static var packId = 0;
+
    public var stride:Int;
 
    public function new(config:Dynamic, input:Layer)
    {
       super(config,input);
+      if (name==null)
+         name = "pack_" + (packId++);
 
       var s:Null<Int> = config.stride;
       if (s==null)

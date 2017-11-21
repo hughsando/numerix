@@ -34,9 +34,9 @@ public:
       srcW = sin0[1];
       destW = srcW/stride;
       destH = srcH/stride;
-      channels = sin0[1];
+      channels = sin0[2];
 
-      Tensor *result = makeOutput(inBuffer, destW, destH, channels*stride*stride, inSrc0->type);
+      Tensor *result = Tensor::makeBuffer(inBuffer, destW, destH, channels*stride*stride, inSrc0->type);
 
       src0 = inSrc0;
       destTensor = result;

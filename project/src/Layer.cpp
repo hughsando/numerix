@@ -19,22 +19,6 @@ Layer::~Layer()
       Tensor::freeData( buffers[i] );
 }
 
-Tensor *Layer::makeOutput(Tensor *inBuffer, int inW, int inH, int inChannels, int inType)
-{
-   bool match = false;
-   if (inBuffer && inBuffer->shape.size()==3 && inBuffer->type==inType)
-   {
-      CShape &s = inBuffer->shape;
-      if (s[0]==inW && s[1]==inH && s[2]==inChannels)
-         return inBuffer;
-   }
-
-   Shape s(3);
-   s[0] = inW;
-   s[1] = inH;
-   s[2] = inChannels;
-   return new Tensor( inType, s );
-}
 
 
 static void SRunThreaded(int inThreadId, void *thiz)

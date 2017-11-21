@@ -16,6 +16,7 @@ class Layer
    public var name:String;
    public var inputs:Array<Layer>;
    public var outputs:Array<Layer>;
+   public var valid:Bool;
    public var resultBuffer:Tensor;
    var handle:Dynamic;
 
@@ -31,6 +32,7 @@ class Layer
       }
       outputs = [];
       name = confg.name;
+      valid = false;
    }
 
    public function release()
@@ -43,24 +45,43 @@ class Layer
    {
    }
 
+   public function invalidateAll()
+   {
+      if (valid)
+      {
+         valid = false;
+         for(output in outputs)
+            output.invalidateAll();
+      }
+   }
+
    public function getOutput() : Tensor
    {
-      if (handle!=null)
+      if (handle!=null && !valid)
       {
          if (inputs.length==1)
          {
-            var src = inputs.length>0 ? inputs[0].getOutput() : null;
+            if (inputs[0]==null)
+               throw "Bad input0 in " + this;
+            var src = inputs[0].getOutput();
+            if (src==null)
+               throw "Bad output :" + this + " " + inputs;
             resultBuffer = Tensor.fromHandle( layRun(handle, this, src) );
          }
-         else if (inputs.length==1)
+         else if (inputs.length==2)
          {
+            if (inputs[0]==null || inputs[1]==null)
+               throw "Bad inputs in " + this + " " + inputs;
             var src = [ inputs[0].getOutput(), inputs[1].getOutput() ];
+            if (src[0]==null || src[1]==null)
+               throw "Bad output: " + this + " " + src;
             resultBuffer = Tensor.fromHandle( layRun(handle, this, src) );
          }
          else
          {
             resultBuffer = Tensor.fromHandle( layRun(handle, this, null) );
          }
+         valid = true;
       }
 
       return resultBuffer;

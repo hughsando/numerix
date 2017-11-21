@@ -110,6 +110,15 @@ void destroyTensor(value inTensor)
 }
 
 
+value allocTensor(Tensor *inTensor)
+{
+   value result = alloc_abstract(tensorKind,inTensor);
+   val_gc(result, destroyTensor);
+   return result;
+}
+
+
+
 void tdRelease(value inTensor)
 {
    TO_TENSOR_NAME(inTensor, tensor);
@@ -354,8 +363,7 @@ value tdFromDynamic(value inFrom, int inType, value inShape)
       val_throw( alloc_string("too much data for provided shape"));
 
    Tensor *tensor = new Tensor(inType,shape);
-   value result = alloc_abstract(tensorKind,tensor);
-   val_gc(result, destroyTensor);
+   value result = allocTensor(tensor);
 
    if (storeType==arrayNull && !bytes.data)
    {
@@ -497,9 +505,22 @@ value tdReorder(value inTensor, value inNewOrder)
    std::vector<int> newOrder;
    fromValue(newOrder, inNewOrder);
    Tensor *result =  tensor->reorder(newOrder);
-   return alloc_abstract(tensorKind,result);
+   return allocTensor(result);
 }
 DEFINE_PRIME2v(tdReorder);
+
+
+value tdCropAndScale(value inTensor, int inWidth, int inHeight, value inBuffer)
+{
+   TO_TENSOR
+   TO_TENSOR_NAME(inBuffer,buffer)
+
+   Tensor *result =  tensor->cropAndScale(inWidth, inHeight, buffer);
+
+   return allocTensor(result);
+}
+DEFINE_PRIME4(tdCropAndScale);
+
 
 // ----------- Layer
 
@@ -516,6 +537,12 @@ void destroyLayer(value inLayer)
       delete layer;
 }
 
+value allocLayer(Layer *inLayer)
+{
+   value result = alloc_abstract(layerKind, inLayer);
+   val_gc(result, destroyLayer);
+   return result;
+}
 
 value layCreateConv2D(value inStrides, int activation, int padding, value inWeights, value inPWeights, value inBias)
 {
@@ -540,9 +567,7 @@ value layCreateConv2D(value inStrides, int activation, int padding, value inWeig
 
    Layer *layer = Layer::createConv2D(sx, sy, (Activation)activation, (Padding)padding, weights, pweights, bias);
 
-   value result = alloc_abstract(layerKind, layer);
-   val_gc(result, destroyLayer);
-   return result;
+   return allocLayer(layer);
 }
 DEFINE_PRIME6(layCreateConv2D);
 
@@ -576,9 +601,7 @@ value layCreateMaxPool(value inSize, value inStrides, int padding)
 
    Layer *layer = Layer::createMaxPool(sx, sy, stepX, stepY, (Padding)padding);
 
-   value result = alloc_abstract(layerKind, layer);
-   val_gc(result, destroyLayer);
-   return result;
+   return allocLayer(layer);
 }
 DEFINE_PRIME3(layCreateMaxPool);
 
@@ -587,10 +610,7 @@ DEFINE_PRIME3(layCreateMaxPool);
 value layCreateConcat()
 {
    Layer *layer = Layer::createConcat();
-
-   value result = alloc_abstract(layerKind, layer);
-   val_gc(result, destroyLayer);
-   return result;
+   return allocLayer(layer);
 }
 DEFINE_PRIME0(layCreateConcat);
 
@@ -600,9 +620,7 @@ value layCreatePack(int inStride)
 {
    Layer *layer = Layer::createPack(inStride);
 
-   value result = alloc_abstract(layerKind, layer);
-   val_gc(result, destroyLayer);
-   return result;
+   return allocLayer(layer);
 }
 DEFINE_PRIME1(layCreatePack);
 
@@ -638,11 +656,9 @@ value layRun(value inLayer, value inOwner, value inSrc)
    {
       if (buffer)
          tdRelease(valBuf);
+
       if (result)
-      {
-         valBuf = alloc_abstract(tensorKind, result);
-         val_gc(valBuf, destroyTensor);
-      }
+         valBuf = allocTensor(result);
       else
          valBuf = alloc_null();
 

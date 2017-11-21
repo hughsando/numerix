@@ -14,6 +14,7 @@ class InputLayer extends Layer
    public function set(tensor:Tensor)
    {
       value = tensor;
+      invalidateAll();
    }
 
    override public function getOutput() : Tensor

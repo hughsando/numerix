@@ -11,6 +11,9 @@ abstract Tensor(Dynamic)
    public var data(get,never):Dynamic;
    public var min(get,never):Float;
    public var max(get,never):Float;
+   public var height(get,never):Int;
+   public var width(get,never):Int;
+   public var channels(get,never):Int;
 
    function new(inHandle:Dynamic)
    {
@@ -61,6 +64,8 @@ abstract Tensor(Dynamic)
       return result;
    }
 
+
+
    /*
    public function getMax(axis:Int) : Tensor
    {
@@ -75,6 +80,22 @@ abstract Tensor(Dynamic)
       return result;
    }
 
+   function get_height() : Int
+   {
+      var s = shape;
+      return s.length==3 ? s[0] : -1;
+   }
+   function get_width() : Int
+   {
+      var s = shape;
+      return s.length==3 ? s[1] : -1;
+   }
+   function get_channels() : Int
+   {
+      var s = shape;
+      return s.length==3 ? s[2] : -1;
+   }
+
 
 
    public function reorder(order:Array<Int>, inRelease = false):Tensor
@@ -82,6 +103,15 @@ abstract Tensor(Dynamic)
       var result = new Tensor(tdReorder(this, order));
       if (inRelease)
          release();
+      return result;
+   }
+
+
+   public function cropAndScale(w:Int,h:Int,?buffer:Tensor, inRelease = false):Tensor
+   {
+      var result = new Tensor(tdCropAndScale(this, w, h, buffer));
+      if (inRelease && buffer!=null)
+         buffer.release();
       return result;
    }
 
@@ -175,6 +205,7 @@ abstract Tensor(Dynamic)
    static var tdRelease = Loader.load("tdRelease","ov");
    static var tdPrint = Loader.load("tdPrint","oiv");
    static var tdReorder = Loader.load("tdReorder","ooo");
+   static var tdCropAndScale = Loader.load("tdCropAndScale","oiioo");
    static var tdGetMin = Loader.load("tdGetMin","od");
    static var tdGetMax = Loader.load("tdGetMax","od");
    static var tdSetFlat = Loader.load("tdSetFlat","ov");

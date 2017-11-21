@@ -10,6 +10,7 @@ class Model
    var width:Null<Int>;
    var height:Null<Int>;
    var channels:Null<Int>;
+   var resizeBuffer:Tensor;
 
    public function new()
    {
@@ -18,8 +19,34 @@ class Model
 
    public function run(input:Tensor) : Tensor
    {
-      if (input==null || outputLayer==null)
+      if (outputLayer==null && layers.length>0)
+         outputLayer = layers[layers.length-1];
+
+      if (inputLayer==null || outputLayer==null)
          trace("Incomplete model specification");
+
+      if (channels!=null)
+      {
+         var shape = input.shape;
+         if (shape.length!=3)
+            throw 'This model only supports images with 3 dimensions';
+         if (shape[2]!=channels)
+            throw 'This model only supports images with $channels channels';
+      }
+      if (width!=null && height!=null)
+      {
+         var shape = input.shape;
+         if (shape.length!=3)
+            throw "This model only supports images with 3 dimensions";
+         var h = shape[0];
+         var w = shape[1];
+         if (width!=w || height!=h)
+         {
+            resizeBuffer = input.cropAndScale(width,height,resizeBuffer,true);
+            input = resizeBuffer;
+            trace(input);
+         }
+      }
       inputLayer.set(input);
       return outputLayer.getOutput();
    }

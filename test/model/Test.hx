@@ -34,10 +34,12 @@ class Test
          var t0 = haxe.Timer.stamp();
          var result = model.run(val);
          println("Time : " + Std.int((haxe.Timer.stamp()-t0)*1000) + "ms");
+         println( result );
          println( result.min + "..." + result.max );
          Io.writeFile("result.nx", result);
 
-         NmeTools.saveImageF32(result, "result.png", NmeTools.TRANS_UNIT_SCALE );
+         if (result.channels==3)
+            NmeTools.saveImageF32(result, "result.png", NmeTools.TRANS_UNIT_SCALE );
       }
    }
 }

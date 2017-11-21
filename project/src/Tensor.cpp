@@ -72,6 +72,24 @@ void Tensor::updateStrides()
    }
 }
 
+Tensor *Tensor::makeBuffer(Tensor *inBuffer, int inW, int inH, int inChannels, int inType)
+{
+   bool match = false;
+   if (inBuffer && inBuffer->shape.size()==3 && inBuffer->type==inType)
+   {
+      CShape &s = inBuffer->shape;
+      if (s[0]==inW && s[1]==inH && s[2]==inChannels)
+         return inBuffer;
+   }
+
+   Shape s(3);
+   s[0] = inW;
+   s[1] = inH;
+   s[2] = inChannels;
+   return new Tensor( inType, s );
+}
+
+
 
 void Tensor::printSub(const std::string &indent, int offset, int dim, int inMaxElems)
 {
@@ -529,3 +547,12 @@ double Tensor::getMax()
    return visitor.result;
 }
 
+
+Tensor *Tensor::cropAndScale(int inWidth, int inHeight, Tensor *inBuffer)
+{
+   Tensor *buffer = makeBuffer(inBuffer, inWidth, inHeight, shape[2], type);
+
+   printf("TODO - cropAndScale %d %d %d\n", inWidth, inHeight, shape[2]);
+
+   return buffer;
+}

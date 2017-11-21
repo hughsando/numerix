@@ -2,6 +2,7 @@ package numerix;
 
 class Conv2D extends Layer
 {
+   static var conv2DId = 0;
 
    public var kernelSize(default,null):Array<Int>;
    public var dilation(default,null):Array<Int>;
@@ -16,6 +17,10 @@ class Conv2D extends Layer
    public function new(config:Dynamic, input:Layer)
    {
       super(config,input);
+
+      if (name==null)
+         name = "conv3d_" + (conv2DId++);
+
 
       kernelSize = config.kernelSize;
       dilation = config.dilation;
