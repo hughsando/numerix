@@ -10,16 +10,19 @@ class Pack : public Layer
 {
    int stride;
 
+   std::vector<int> from;
    int srcW;
    int srcH;
+   int srcChannels;
    int destW;
    int destH;
-   int channels;
+   int destChannels;
 
 public:
    Pack(int inStride)
    {
       stride = inStride;
+      srcW = srcH = srcChannels = -1;
    }
 
 
@@ -32,13 +35,19 @@ public:
          TensorThrow("Pack - only types of size4 supported");
 
 
+      bool changed = srcH!=sin0[0] || srcW!=sin0[1] || srcChannels!=sin0[2];
+
       srcH = sin0[0];
       srcW = sin0[1];
+      srcChannels = sin0[2];
       destW = srcW/stride;
       destH = srcH/stride;
-      channels = sin0[2];
+      destChannels = srcChannels * stride * stride;
 
-      Tensor *result = Tensor::makeBuffer(inBuffer, destW, destH, channels*stride*stride, inSrc0->type);
+      Tensor *result = Tensor::makeBuffer(inBuffer, destW, destH, destChannels, inSrc0->type);
+
+      if (changed)
+         calcTransform();
 
       src0 = inSrc0;
       destTensor = result;
@@ -47,6 +56,57 @@ public:
       destTensor = 0;
 
       return result;
+   }
+
+   void reorg_cpu(int *x, int w, int h, int c, int stride, int *out)
+   {
+      bool forward = false;
+      int b,i,j,k;
+      int out_c = c/(stride*stride);
+
+          for(k = 0; k < c; ++k){
+              for(j = 0; j < h; ++j){
+                  for(i = 0; i < w; ++i){
+                      int in_index  = i + w*(j + h*k);
+                      int c2 = k % out_c;
+                      int offset = k / out_c;
+                      int w2 = i*stride + offset % stride;
+                      int h2 = j*stride + offset / stride;
+                      int out_index = w2 + w*stride*(h2 + h*stride*c2);
+                      // not forwards
+                      out[in_index] = x[out_index];
+                  }
+              }
+          }
+   }
+
+   void calcTransform()
+   {
+      int n = srcW * srcH * srcChannels;
+      std::vector<int> srcIdx(n);
+
+      // Fill srcIdx in darknet order (channel major) with numerix indices to pull from
+      int idx = 0;
+      for(int c=0;c<srcChannels;c++)
+         for(int y=0;y<srcH;y++)
+            for(int x=0;x<srcW;x++)
+               // Write numerix src index...
+               srcIdx[idx++] = y*srcW*srcChannels + x*srcChannels + c;
+
+      // Apply magic reorder code, that seems to be not-quite convolutional, but must match weights
+      std::vector<int> out(n);
+      reorg_cpu(&srcIdx[0], srcW, srcH, srcChannels, stride, &out[0]);
+
+      // Push the channel-major results to numerix order
+      from.resize(n);
+      idx = 0;
+      for(int c=0;c<destChannels;c++)
+         for(int y=0;y<destH;y++)
+            for(int x=0;x<destW;x++)
+            {
+               // Write numerix src index...
+               from[y*destW*destChannels + x*destChannels + c ]  = out[idx++];
+            }
    }
 
    Tensor *destTensor;
@@ -59,16 +119,9 @@ public:
 
    void runThreadMulti(int threadId)
    {
-      int typeSize = src0->elementSize;
-      const int *src0Stride = &src0->strides[0];
-      const int *destStride = &destTensor->strides[0];
-
-      int dSdY = src0Stride[0];
-      int sSdX = src0Stride[1];
-      int dDdY = destStride[0];
-      const int *srcP = (int *)src0->data;
+      const int *srcP = (const int *)src0->data;
       int *destP = (int *)destTensor->data;
-      int srcChannels = src0->shape[2];
+      int rowLen = destW*destChannels;
 
       while(true)
       {
@@ -76,31 +129,11 @@ public:
          if (y>=destH)
             break;
 
-         int srcY = y * stride;
-
-         const int *sx = srcP + dSdY * srcY;
-         int *dest = destP + dDdY*y;
-
-         for(int x=0;x<destW;x++)
-         {
-            for(int ch=0;ch<srcChannels;ch++)
-            {
-                  for(int dx=0;dx<stride;dx++)
-               for(int dy=0;dy<stride;dy++)
-                  {
-                     *dest++ = sx[ dx*sSdX + dy*dSdY ];
-                  }
-               sx++;
-            }
-            /*
-            for(int dy=0;dy<stride;dy++)
-            {
-               memcpy(dest, sx + dy*dSdY, sSdX*stride);
-               dest += sSdX*stride;
-            }
-            */
-         }
-         sx += sSdX*stride;
+         int offset = y*rowLen;
+         const int *f = &from[offset];
+         int *d = destP + offset;
+         for(int i=0;i<rowLen;i++)
+            d[i] = srcP[f[i]];
       }
    }
 };

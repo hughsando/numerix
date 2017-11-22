@@ -50,11 +50,6 @@ class Model extends numerix.Model
             if (section!=null)
                sections.push(section);
             section = { class_name : iniMatch.matched(1) };
-            if (section.class_name=="region")
-            {
-               section = null;
-               break;
-            }
          }
          else if (eqMatch.match(line) && section!=null)
          {
@@ -218,6 +213,12 @@ class Model extends numerix.Model
             var w = idiv(params.w, stride);
             var h = idiv(params.h, stride);
             return new Params(w,h,params.channels*stride*stride, reorg);
+
+         case "region" :
+            var regions = new YoloRegions(config,params.layer);
+            return new Params(1,1,1, regions);
+
+
 
          default:
             throw 'Unknown layer type $name';

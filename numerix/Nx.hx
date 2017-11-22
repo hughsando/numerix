@@ -23,6 +23,14 @@ class Nx
    {
       return Tensor.create(arrayLike, dataType, inShape);
    }
+
+   public static function zeros(inShape:Array<Int>, dataType=DataType.Float32) : Tensor
+   {
+      var result = Tensor.create(null, dataType, inShape);
+      result.setAt(0,0,result.elementCount);
+      return result;
+   }
+
 }
 
 
