@@ -8,8 +8,7 @@ class YoloRegions extends Layer
 
    static var id = 0;
 
-   var dummyResult:Tensor;
-   var classes:Int;
+   var classCount:Int;
 
    public function new(config:Dynamic, input:Layer)
    {
@@ -18,24 +17,19 @@ class YoloRegions extends Layer
       if (name==null)
          name = "yolo_" + (id++);
 
-      classes = config.classes;
+      var anchors:String = config.anchors;
+      var anchors = [for(a in anchors.split(",")) Std.parseFloat(a)];
+      var num = [Std.parseInt(config.num)];
+      classCount = Std.parseInt(config.classes);
 
-      dummyResult = Nx.zeros([1]);
-   }
 
-   override public function getOutput() : Tensor
-   {
-      if (!valid)
-      {
-         valid = true;
-         var src = inputs[0].getOutput();
-      }
-      return dummyResult;
+      //handle = layYoloCreate(anchors,num,classCount);
    }
 
 
+   override public function toString() return 'Yolo($name:$classCount)';
 
-   override public function toString() return 'Yolo($name:$classes)';
+   //static var layYoloCreate = Loader.load("layYoloCreate","oiio");
 }
 
 

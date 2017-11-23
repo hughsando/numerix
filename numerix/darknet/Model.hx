@@ -37,7 +37,7 @@ class Model extends numerix.Model
       var sections = new Array<Dynamic>();
       var section:Dynamic = null;
       var iniMatch = ~/\[(.*)\]/;
-      var eqMatch = ~/(.*)=(.*)/;
+      var eqMatch = ~/(\S+)\s*=\s*(.*)/;
 
       for(line in lines)
       {
