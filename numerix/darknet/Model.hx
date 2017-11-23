@@ -73,7 +73,7 @@ class Model extends numerix.Model
       var major = weights.readInt32();
       var minor = weights.readInt32();
       var revision = weights.readInt32();
-      println('version: $major.$minor.$revision');
+      //println('version: $major.$minor.$revision');
       if (major*10+minor>=2)
       {
          // Skip 64
@@ -127,7 +127,7 @@ class Model extends numerix.Model
             var w = params.w;
             var h = params.h;
             var c = params.channels;
-            println('Convolutional $w,$h,$c');
+            //println('Convolutional $w,$h,$c');
 
             var buffer = Bytes.alloc(n*4);
             file.readBytes(buffer,0,n*4);
@@ -174,7 +174,7 @@ class Model extends numerix.Model
             var stride:Int = config.stride;
             config.strides = [ stride,stride ];
             config.padding = 'same';
-            println('Maxpool ${params.w},${params.h},${params.channels}');
+            //println('Maxpool ${params.w},${params.h},${params.channels}');
             var maxPool = new MaxPool(config, params.layer);
             if (maxPool.padding==Layer.PAD_SAME)
             {
@@ -197,13 +197,13 @@ class Model extends numerix.Model
             if (lays.length==1)
             {
                var old:Params = untyped paramStack[ l + Std.parseInt(lays[0]) ];
-               println('route1 ${old.w},${old.h},${old.channels}');
+               //println('route1 ${old.w},${old.h},${old.channels}');
                return old;
             }
 
             var l0:Params = untyped  paramStack[ l + Std.parseInt(lays[0]) ];
             var l1:Params = untyped  paramStack[ l + Std.parseInt(lays[1]) ];
-            println('Concat ${l0.w},${l0.w},${l0.channels+l1.channels}');
+            //println('Concat ${l0.w},${l0.w},${l0.channels+l1.channels}');
             var cc =  new Concat(config,l0.layer,l1.layer);
             return new Params(l0.w,l0.h,l0.channels + l1.channels, cc);
 

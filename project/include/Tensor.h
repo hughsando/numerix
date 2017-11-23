@@ -2,6 +2,7 @@
 #define TENSOR_H_INCLUDED
 
 #include <vector>
+#include <algorithm>
 #include <string>
 
 #ifdef _WIN32
@@ -55,6 +56,7 @@ enum Padding
 typedef std::vector<int> Shape;
 typedef const std::vector<int> &CShape;
 
+
 void TensorThrow(const char *err);
 
 class Tensor
@@ -104,6 +106,42 @@ class Tensor
       ~Tensor();
 };
 
+
+#undef min
+#undef max
+
+struct BBox
+{
+   float x;
+   float y;
+   float w;
+   float h;
+   float prob;
+   int   classId;
+
+   inline bool operator<(const BBox &inRight) const
+   {
+      return prob > inRight.prob;
+   }
+
+   inline bool overlaps(const BBox &o) const
+   {
+      float intX = std::min(x+w, o.x+o.w) - std::max(x,o.x);
+      if (intX<=0)
+         return false;
+      float intY = std::min(y+h, o.y+o.h) - std::max(y,o.y);
+      if (intY<=0)
+         return false;
+      float intersect = intX*intY;
+      float total = w*h + o.w*o.h - intersect;
+      return (intersect > total * 0.5);
+   }
+};
+
+typedef std::vector<BBox> Boxes;
+
+
+
 class Layer
 {
    volatile int jobId;
@@ -124,6 +162,8 @@ public:
 
    static Layer *createPack(int inStride);
 
+   static Layer *createYolo(const std::vector<float> &inAnchors,int inBoxCount, int inClassCount);
+
 
    virtual ~Layer();
 
@@ -134,6 +174,8 @@ public:
 
    virtual void runThread(int inThreadId) { }
 
+   virtual void getBoxes(Boxes &outBoxes) { }
+
    int getNextJob();
 
    float *allocFloats(int count,bool inZero=false);
@@ -141,6 +183,44 @@ public:
 
 
    void runThreaded();
+};
+
+
+
+
+struct Shape1 : public std::vector<int>
+{
+   inline Shape1(int inS0) : std::vector<int>(1)
+   {
+      (*this)[0] = inS0;
+   }
+};
+struct Shape2 : public std::vector<int>
+{
+   inline Shape2(int inS0,int inS1) : std::vector<int>(2)
+   {
+      (*this)[0] = inS0;
+      (*this)[1] = inS1;
+   }
+};
+struct Shape3 : public std::vector<int>
+{
+   inline Shape3(int inS0,int inS1,int inS2) : std::vector<int>(3)
+   {
+      (*this)[0] = inS0;
+      (*this)[1] = inS1;
+      (*this)[2] = inS2;
+   }
+};
+struct Shape4 : public std::vector<int>
+{
+   inline Shape4(int inS0,int inS1,int inS2, int inS3) : std::vector<int>(4)
+   {
+      (*this)[0] = inS0;
+      (*this)[1] = inS1;
+      (*this)[2] = inS2;
+      (*this)[3] = inS3;
+   }
 };
 
 

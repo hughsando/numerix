@@ -21,6 +21,12 @@ static int _id_hx_elementSize;
 static int _id_hx_pointer;
 static int _id_length;
 static int _id_resultBuffer;
+static int _id_x;
+static int _id_y;
+static int _id_w;
+static int _id_h;
+static int _id_prob;
+static int _id_classId;
 
 extern "C" void InitIDs()
 {
@@ -35,7 +41,12 @@ extern "C" void InitIDs()
    _id_hx_elementSize = val_id("_hx_elementSize");
    _id_hx_pointer = val_id("_hx_pointer");
    _id_resultBuffer = val_id("resultBuffer");
-
+   _id_x = val_id("x");
+   _id_y = val_id("y");
+   _id_w = val_id("w");
+   _id_h = val_id("h");
+   _id_classId = val_id("classId");
+   _id_prob = val_id("prob");
 }
 
 
@@ -656,6 +667,47 @@ value layCreatePack(int inStride)
    return allocLayer(layer);
 }
 DEFINE_PRIME1(layCreatePack);
+
+
+
+value layCreateYolo(value inAnchors, int inNum, int inClassCount)
+{
+   std::vector<float> anchors(val_array_size(inAnchors));
+   for(int i=0;i<anchors.size();i++)
+      anchors[i] = val_number( val_array_i(inAnchors,i) );
+
+   Layer *layer = Layer::createYolo(anchors, inNum, inClassCount);
+
+   return allocLayer(layer);
+}
+DEFINE_PRIME3(layCreateYolo);
+
+
+value layGetBoxes(value inLayer)
+{
+   TO_LAYER;
+
+   Boxes boxes;
+   layer->getBoxes(boxes);
+
+   value result = alloc_array( boxes.size() );
+   for(int i=0;i<boxes.size();i++)
+   {
+      BBox &b = boxes[i];
+      value v = alloc_empty_object();
+      alloc_field(v, _id_x, alloc_float(b.x) );
+      alloc_field(v, _id_y, alloc_float(b.y) );
+      alloc_field(v, _id_w, alloc_float(b.w) );
+      alloc_field(v, _id_h, alloc_float(b.h) );
+      alloc_field(v, _id_prob, alloc_float(b.prob) );
+      alloc_field(v, _id_classId, alloc_int(b.classId) );
+      val_array_set_i(result, i, v);
+   }
+
+   return result;
+}
+DEFINE_PRIME1(layGetBoxes);
+
 
 
 

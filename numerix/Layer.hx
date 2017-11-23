@@ -85,15 +85,21 @@ class Layer
          valid = true;
       }
 
-      println( resultBuffer + "=" + resultBuffer[0] + "..." + resultBuffer[resultBuffer.channels*resultBuffer.width] );
+      //println( resultBuffer + "=" + resultBuffer[0] + "..." + resultBuffer[resultBuffer.channels]);
 
       return resultBuffer;
+   }
+
+   public function getBoxes() : Array< {x:Float, y:Float, w:Float, h:Float, prob:Float, classId:Int} >
+   {
+      return layGetBoxes(handle);
    }
 
    public function toString() return 'Layer($name)';
 
    static var layRun = Loader.load("layRun","oooo");
    static var layRelease = Loader.load("layRelease","ov");
+   static var layGetBoxes = Loader.load("layGetBoxes","oo");
 }
 
 

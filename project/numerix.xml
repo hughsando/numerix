@@ -19,6 +19,7 @@
      <file name="src/Layer.cpp" />
      <file name="src/Concat.cpp" />
      <file name="src/Pack.cpp" />
+     <file name="src/Yolo.cpp" />
 
    </files>
 

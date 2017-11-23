@@ -48,7 +48,7 @@ class Model
          }
       }
 
-      println("Input " + input + "=" + input[0]);
+      //println("Input " + input + "=" + input[0]);
       inputLayer.set(input);
       return outputLayer.getOutput();
    }

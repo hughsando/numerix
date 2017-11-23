@@ -19,17 +19,26 @@ class YoloRegions extends Layer
 
       var anchors:String = config.anchors;
       var anchors = [for(a in anchors.split(",")) Std.parseFloat(a)];
-      var num = [Std.parseInt(config.num)];
+      var num = Std.parseInt(config.num);
       classCount = Std.parseInt(config.classes);
 
 
-      //handle = layYoloCreate(anchors,num,classCount);
+      handle = layCreateYolo(anchors,num,classCount);
+   }
+
+   
+   override public function getBoxes() : Array< {x:Float, y:Float, w:Float, h:Float, prob:Float, classId:Int, className:String } >
+   {
+      var result = super.getBoxes();
+      for(box in result)
+         untyped box.className = coco_classes[ box.classId ];
+      return cast result;
    }
 
 
    override public function toString() return 'Yolo($name:$classCount)';
 
-   //static var layYoloCreate = Loader.load("layYoloCreate","oiio");
+   static var layCreateYolo = Loader.load("layCreateYolo","oiio");
 }
 
 
