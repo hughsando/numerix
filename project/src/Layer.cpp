@@ -1,5 +1,6 @@
 #include <Tensor.h>
 #include <NxThread.h>
+#include <memory.h>
 
 using namespace numerix;
 

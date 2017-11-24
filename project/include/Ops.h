@@ -3,14 +3,65 @@
 
 #include "Tensor.h"
 
- #include <xmmintrin.h>
- #include <emmintrin.h>
-// SSE4 ?
- #include <smmintrin.h>
+#if defined(__arm__)
+   #define NUMERIX_NEON
+#endif
 
+#ifdef NUMERIX_SIMD
+  #ifdef NUMERIX_NEON
+     #include <arm_neon.h>
+  #else
+     #include <xmmintrin.h>
+     #include <emmintrin.h>
+     // SSE4 ?
+     #include <smmintrin.h>
+  #endif
+#endif
 
 namespace numerix
 {
+
+#if defined(NUMERIX_SIMD) && defined(NUMERIX_NEON)
+
+
+#define Load4f32(ptr) vld1q_f32(ptr)
+#define Add4f32(a,b) vaddq_f32(a,b)
+#define Mul4f32(a,b) vmulq_f32(a,b)
+#define Zero4f32 vdupq_n_f32(0.0f)
+#define Const4f32(c) vdupq_n_f32(c)
+#define Max4f32(a,b) vmaxq_f32(a,b)
+#define Store4f32(ptr, value)  vst1q_f32(ptr, value)
+
+inline float Accumulate4f32(float32x4_t v)
+{
+   // v : a0 a1 a2 a3
+   float32x2_t sumA = vpadd_f32(vget_low_f32(v),vget_high_f32(v));
+   //  ->  a0+a1 a2+a3
+   float32x2_t sumB = vpadd_f32(sumA,sumA);
+   return vget_lane_f32(sumB,0);
+}
+
+   // Sum0 : a0 a1 a2 a3
+   // Sum1 : b0 b1 b2 b3
+   //  ->  a0+a1 a2+a3
+   //  ->  b0+b1 b2+b3
+   //  ->  a0+a1+a2+a3  b0+b1+b2+b3
+   //  ->  c0+c1+c2+c3  c0+c1+c2+c3
+#define SumRows4x4f32(sum0, sum1, sum2, sum3) \
+   float32x2_t sumA = vpadd_f32(vget_low_f32(sum0),vget_high_f32(sum0)); \
+   float32x2_t sumB = vpadd_f32(vget_low_f32(sum1),vget_high_f32(sum1)); \
+   float32x2_t sAB = vpadd_f32(sumA,sumB); \
+ \
+   float32x2_t sumC = vpadd_f32(vget_low_f32(sum2),vget_high_f32(sum2)); \
+   float32x2_t sumD = vpadd_f32(vget_low_f32(sum3),vget_high_f32(sum3)); \
+   float32x2_t sCD = vpadd_f32(sumC,sumD); \
+ \
+   sum0 = vcombine_f32(sAB, sCD);
+
+
+
+#elif defined(NUMERIX_SIMD)
+
 typedef __m128 float32x4_t;
 #define Load4f32(ptr) _mm_load_ps(ptr)
 #define Add4f32(a,b) _mm_add_ps(a,b)
@@ -39,6 +90,9 @@ inline float Accumulate4f32(float32x4_t v) {
       sum2 = Add4f32(sum2,sum3); \
       sum0 = Add4f32(sum0,sum2); \
 
+#endif
+
+
 /*
  Here we attempt to re-use the same 4 source channels with 4 consecutive outputs.
  The weights have been pre-arranged to have 4 outputs grouped into blocks of 4, like:
@@ -53,6 +107,7 @@ We want outputA = S0*A0 + S1*A1 + S2*A2 + S3*A3 + S4*A4 + ...
 The inputs have been padded to be multiples of 4, and n is the input count/4
 
 */
+
 inline void dot4Interlaced(float *dest, const float *alignedBias, const float *wABCD, const float *inSrc, int n, Activation activation)
 {
    #ifdef NUMERIX_SIMD

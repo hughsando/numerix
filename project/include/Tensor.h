@@ -4,6 +4,7 @@
 #include <vector>
 #include <algorithm>
 #include <string>
+#include <memory.h>
 
 #ifdef _WIN32
 typedef __int64 TInt64;

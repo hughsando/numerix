@@ -35,7 +35,11 @@ volatile int gTaskId = 0;
 int sWorkerCount = 0;
 volatile int gActiveThreads = 0;
 
-#define MAX_NX_THREADS 8
+#ifdef __arm__
+   #define MAX_NX_THREADS 4
+#else
+   #define MAX_NX_THREADS 8
+#endif
 
 #ifdef NX_PTHREADS
 static NxMutex sThreadPoolLock;
@@ -63,7 +67,7 @@ static THREAD_FUNC_TYPE SThreadLoop( void *inInfo )
       // Wait ....
       #ifdef NX_PTHREADS
       {
-         ThreadPoolAutoLock l(sThreadPoolLock);
+         NxAutoMutex l(sThreadPoolLock);
          while( !sThreadActive[threadId] )
             WaitThreadLocked(sThreadWake[threadId]);
       }
@@ -104,7 +108,7 @@ void initWorkers()
    {
       sThreadActive[t] = false;
       #ifdef NX_PTHREADS
-      pthread_cond_init(&sThreadWake[inId],0);
+      pthread_cond_init(&sThreadWake[t],0);
       pthread_t result = 0;
       int created = pthread_create(&result,0,SThreadLoop, (void *)(size_t)(int)t);
       bool ok = created==0;
@@ -139,7 +143,7 @@ void RunWorkerTask( WorkerFunc inFunc, void *inData )
    for(int t=0;t<sWorkerCount;t++)
    {
       sThreadActive[t] = true;
-      #ifdef NX_PTHREAD
+      #ifdef NX_PTHREADS
       pthread_cond_signal(&sThreadWake[t]);
       #else
       sThreadWake[t].Set();

@@ -1,5 +1,5 @@
 #define IMPLEMENT_API
-#include <hx/CffiPrime.h>
+#include <hx/CFFIPrime.h>
 #include <vector>
 #include <string>
 #include <algorithm>

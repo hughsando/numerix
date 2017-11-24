@@ -6,6 +6,7 @@
    <files id="numerix" >
      <compilerflag value="-Iinclude" />
      <compilerflag value="-DNUMERIX_SIMD" />
+     <compilerflag value="-mfpu=neon" if="HXCPP_ARMV7||HXCPP_ARM64" />
 
      <depend name="include/Tensor.h" />
      <depend name="include/Ops.h" />
@@ -27,6 +28,7 @@
       <files id="numerix" />
       <outdir name="../ndll/${BINDIR}" />
       <ext value=".ndll" />
+      <lib name="-lpthread" if="linux" unless="static_link" />
    </target>
 
 </xml>

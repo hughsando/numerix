@@ -45,10 +45,15 @@ class Test
       if (val!=null)
       {
          println( val + ": " + val.min + "..." + val.max + "=" + val[0] );
+         println("Warmup...");
 
          var t0 = haxe.Timer.stamp();
          var result = model.run(val);
+         println("Warmup Time : " + Std.int((haxe.Timer.stamp()-t0)*1000) + "ms");
+         var t0 = haxe.Timer.stamp();
+         var result = model.run(val);
          println("Time : " + Std.int((haxe.Timer.stamp()-t0)*1000) + "ms");
+
          var boxes = model.outputLayer.getBoxes();
          trace(boxes);
          println( result );
