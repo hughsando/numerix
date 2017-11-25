@@ -37,9 +37,11 @@ int Layer::getNextJob()
    return HxAtomicInc(&jobId);
 }
 
-void Layer::runThreaded()
+void Layer::runThreaded(bool inDebug)
 {
    jobId = 0;
-   //runThread(0);
-   RunWorkerTask( SRunThreaded, this );
+   if (inDebug)
+      runThread(0);
+   else
+      RunWorkerTask( SRunThreaded, this );
 }

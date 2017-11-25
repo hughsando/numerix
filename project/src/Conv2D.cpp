@@ -465,10 +465,14 @@ public:
       int filters = filterX*filterY;
 
       int filterW = filterX*inputs;
+      int filterFours = filterW>>2;
+      int filterSixteens = filterW>>4;
       float *srcPtr = &srcBuffers[threadId][0];
       int filterRow = filterW*sizeof(float);
 
       const float *sIn = (float *)src0->data;
+
+      bool is3x3x16 = filterX==3 && filterY==3 && !(inputs&0x3) && interlacedWeights;
 
       while(true)
       {
@@ -483,10 +487,18 @@ public:
          int dyMin = std::max(padOy-srcY,0);
          int dyMax = std::min(srcH+padOy-srcY,filterY);
 
+         bool copyMethod = !is3x3x16;
+
          if (dyMin>0)
+         {
+            copyMethod = true;
             memset(srcPtr,0,filterRow*dyMin);
+         }
          if (dyMax<filterY)
+         {
+            copyMethod = true;
             memset(srcPtr+dyMax*filterW,0,filterRow*(filterY-dyMax) );
+         }
 
          for(int x=0;x<destW;x++)
          {
@@ -494,64 +506,81 @@ public:
 
             int dxMin = std::max(padOx-srcX,0);
             int dxMax = std::min(srcW+padOx-srcX,filterX);
+            int xRange = dxMax-dxMax;
 
             const float *s = sIn + (srcY+dyMin-padOy)*srcStride[0] + (srcX+dxMin-padOx)*srcStride[1];
-            for(int dy=dyMin;dy<dyMax;dy++)
+
+            if (copyMethod || xRange<filterX)
             {
-               float *sp = srcPtr + filterW*dy;
-
-               if (dxMin>0)
+               for(int dy=dyMin;dy<dyMax;dy++)
                {
-                  memset(sp, 0, dxMin*inputs*sizeof(float));
-                  sp +=dxMin*inputs;
-               }
+                  float *sp = srcPtr + filterW*dy;
 
-               memcpy(sp, s, (dxMax-dxMin)*inputs*sizeof(float));
-               s+= srcStride[0];
-
-               if (dxMax<filterX)
-                  memset(sp + (dxMax-dxMin)*inputs, 0, (filterX-dxMax)*inputs*sizeof(float));
-            }
-
-
-            const float *w = alignedWeights;
-            if (pweights)
-            {
-               for(int d=0;d<diSize;d++)
-               {
-                  int srcOff = d; // todo - depth_multiplier > 1
-                  di[d] = dotSkip(w, srcPtr+srcOff, filters, inputs);
-                  w+=filters;
-               }
-
-               const float *w = (const float *)pweights->data;
-               for(int o=0;o<outputs;o++)
-               {
-                  float sum = dot(b?b[o]:0.0f, w, di, diSize, activation);
-                  *dest++ = sum;
-                  w+=diSize;
-               }
-            }
-            else
-            {
-               if (interlacedWeights)
-               {
-                  int bid = 0;
-                  for(int o=0;o<outputs;o+=4)
+                  if (dxMin>0)
                   {
-                     dot4Interlaced(dest, alignedBias+bid*4, weightBuffers[bid], srcPtr, interlacedCount, activation);
-                     bid++;
-                     dest+=4;
+                     memset(sp, 0, dxMin*inputs*sizeof(float));
+                     sp +=dxMin*inputs;
+                  }
+
+                  memcpy(sp, s, xRange*inputs*sizeof(float));
+                  s+= srcStride[0];
+
+                  if (dxMax<filterX)
+                     memset(sp + (dxMax-dxMin)*inputs, 0, (filterX-dxMax)*inputs*sizeof(float));
+               }
+
+
+               const float *w = alignedWeights;
+               if (pweights)
+               {
+                  for(int d=0;d<diSize;d++)
+                  {
+                     int srcOff = d; // todo - depth_multiplier > 1
+                     di[d] = dotSkip(w, srcPtr+srcOff, filters, inputs);
+                     w+=filters;
+                  }
+
+                  const float *w = (const float *)pweights->data;
+                  for(int o=0;o<outputs;o++)
+                  {
+                     float sum = dot(b?b[o]:0.0f, w, di, diSize, activation);
+                     *dest++ = sum;
+                     w+=diSize;
                   }
                }
                else
                {
-                  for(int o=0;o<outputs;o++)
+                  if (interlacedWeights)
                   {
-                     float sum = dot(b?b[o]:0.0f, w, srcPtr, featureSize, activation);
-                     *dest++ = sum;
-                     w+=alignedWeightSize;
+                     int bid = 0;
+                     for(int o=0;o<outputs;o+=4)
+                     {
+                        dot4Interlaced(dest, alignedBias+bid*4, weightBuffers[bid], srcPtr, interlacedCount, activation);
+                        bid++;
+                        dest+=4;
+                     }
                   }
+                  else
+                  {
+                     for(int o=0;o<outputs;o++)
+                     {
+                        float sum = dot(b?b[o]:0.0f, w, srcPtr, featureSize, activation);
+                        *dest++ = sum;
+                        w+=alignedWeightSize;
+                     }
+                  }
+               }
+            }
+            // Non-copy method - interlacedWeights 3x3x16
+            else
+            {
+               int ds = srcStride[0] - filterW;
+               int bid = 0;
+               for(int o=0;o<outputs;o+=4)
+               {
+                  dot4Interlacedx3(dest, alignedBias+bid*4, weightBuffers[bid], s, ds, filterSixteens, activation);
+                  bid++;
+                  dest+=4;
                }
             }
          }
