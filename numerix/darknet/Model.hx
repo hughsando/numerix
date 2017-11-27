@@ -209,7 +209,7 @@ class Model extends numerix.Model
 
          case "reorg" :
             var stride = Std.parseInt(config.stride);
-            var reorg =  new Pack(config, params.layer);
+            var reorg =  new Reorg(config, params.layer);
             var w = idiv(params.w, stride);
             var h = idiv(params.h, stride);
             return new Params(w,h,params.channels*stride*stride, reorg);

@@ -1,8 +1,8 @@
 package numerix;
 
-class Pack extends Layer
+class Reorg extends Layer
 {
-   static var packId = 0;
+   static var id = 0;
 
    public var stride:Int;
 
@@ -10,7 +10,7 @@ class Pack extends Layer
    {
       super(config,input);
       if (name==null)
-         name = "pack_" + (packId++);
+         name = "reorg_" + (id++);
 
       var s:Null<Int> = config.stride;
       if (s==null)
@@ -18,13 +18,13 @@ class Pack extends Layer
       else
          stride = s;
 
-      handle = layCreatePack(stride);
+      handle = layCreateReorg(stride);
    }
 
 
-   override public function toString() return 'Pack($name:$stride)';
+   override public function toString() return 'Reorg($name:$stride)';
 
-   static var layCreatePack = Loader.load("layCreatePack","io");
+   static var layCreateReorg = Loader.load("layCreateReorg","io");
 
 
 }

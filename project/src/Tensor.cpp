@@ -5,6 +5,9 @@
 #define LOW_SENTINEL  67
 #define HIGH_SENTINEL 68
 
+namespace numerix
+{
+
 unsigned char *Tensor::allocData(unsigned int inLength)
 {
    // Allocate 6 bytes at beginning, plus up to and extra 12 to ensure 16-byte alignment, and
@@ -556,3 +559,7 @@ Tensor *Tensor::cropAndScale(int inWidth, int inHeight, Tensor *inBuffer)
 
    return buffer;
 }
+
+
+} // end namespace numerix
+

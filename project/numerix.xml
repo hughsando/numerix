@@ -14,13 +14,13 @@
 
      <file name="src/Api.cpp" />
      <file name="src/Tensor.cpp" />
-     <file name="src/Conv2D.cpp" />
-     <file name="src/MaxPool.cpp" />
      <file name="src/NxThread.cpp" />
-     <file name="src/Layer.cpp" />
-     <file name="src/Concat.cpp" />
-     <file name="src/Pack.cpp" />
-     <file name="src/Yolo.cpp" />
+     <file name="src/layers/Conv2D.cpp" />
+     <file name="src/layers/MaxPool.cpp" />
+     <file name="src/layers/Layer.cpp" />
+     <file name="src/layers/Concat.cpp" />
+     <file name="src/layers/Reorg.cpp" />
+     <file name="src/layers/Yolo.cpp" />
 
    </files>
 

@@ -4,14 +4,17 @@
 #include <string>
 #include <algorithm>
 #include <Tensor.h>
+#include <Layer.h>
 
 #undef max
 #undef min
 
+namespace numerix
+{
+
 vkind dataKind;
 vkind tensorKind;
 vkind layerKind;
-
 
 
 static int _id_name;
@@ -660,13 +663,13 @@ DEFINE_PRIME0(layCreateConcat);
 
 
 
-value layCreatePack(int inStride)
+value layCreateReorg(int inStride)
 {
-   Layer *layer = Layer::createPack(inStride);
+   Layer *layer = Layer::createReorg(inStride);
 
    return allocLayer(layer);
 }
-DEFINE_PRIME1(layCreatePack);
+DEFINE_PRIME1(layCreateReorg);
 
 
 
@@ -768,3 +771,4 @@ DEFINE_PRIME1v(layRelease);
 
 
 
+} // end namespace numerix

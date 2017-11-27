@@ -1,9 +1,11 @@
 #include <Tensor.h>
+#include <Layer.h>
 #include <NxThread.h>
 #include <memory.h>
 
-using namespace numerix;
 
+namespace numerix
+{
 
 float *Layer::allocFloats(int count,bool inZero)
 {
@@ -45,3 +47,5 @@ void Layer::runThreaded(bool inDebug)
    else
       RunWorkerTask( SRunThreaded, this );
 }
+
+} // namespace numerix
