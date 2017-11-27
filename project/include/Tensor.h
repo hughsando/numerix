@@ -43,20 +43,6 @@ enum DataType
    Int64          = SignedInteger | 64,
 };
 
-enum Activation
-{
-   actLinear,
-   actRelu,
-   actSigmoid,
-   actLeaky,
-};
-
-enum Padding
-{
-   padSame,
-   padValid,
-};
-
 
 typedef std::vector<int> Shape;
 typedef const std::vector<int> &CShape;
@@ -64,12 +50,45 @@ typedef const std::vector<int> &CShape;
 
 void TensorThrow(const char *err);
 
+typedef unsigned char u8;
+
+class TensorData
+{
+   u8  *cpu;
+   int size;
+
+ public:
+   inline TensorData(int inSize, bool inAllocCpu=true) :
+       size(inSize), cpu(0), refCount(1)
+   {
+      if (inAllocCpu)
+         cpu = allocCpuAligned(size);
+   }
+
+   inline u8 *getCpu()
+   {
+      if (!cpu)
+         cpu = allocCpuAligned(size);
+      return cpu;
+   }
+
+   static u8 *allocCpuAligned(int inSize);
+   static void freeCpuAligned(void *inPtr);
+
+   void decRef();
+   TensorData *incRef();
+   void check();
+
+ protected:
+   volatile int refCount;
+   ~TensorData();
+   TensorData(const TensorData &);
+   void operator =(const TensorData &);
+};
+
 class Tensor
 {
    public:
-      typedef unsigned char u8;
-
-      u8    *data;
       Shape shape;
       Shape strides;
       int   type;
@@ -77,6 +96,8 @@ class Tensor
       unsigned int elementCount;
 
       Tensor(int inType, const Shape &inShape);
+
+      inline u8 *getCpu() { return data->getCpu(); }
 
       void print(int inMaxElems);
       void fill(int inType, const u8 *inData, int inOffsetElem,  unsigned int inCount);
@@ -95,23 +116,21 @@ class Tensor
       double getMin();
       double getMax();
 
-      void checkData();
       Tensor *incRef();
       int addRef();
       int decRef();
 
       static Tensor *makeBuffer(Tensor *inBuffer, int inW, int inH, int inChannels, int inType);
-      static unsigned char *allocData(unsigned int inLength);
-      static void freeData(u8 *data);
 
    protected:
+      TensorData  *data;
       void printSub(const std::string &indent, int offset, int dim, int inMaxElems);
       void updateStrides();
-      int refCount;
+      volatile int refCount;
       ~Tensor();
 };
 
-
+   
 
 struct Shape1 : public std::vector<int>
 {

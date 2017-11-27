@@ -117,10 +117,10 @@ public:
       weightBuffers.resize(0);
 
 
-      alignedBias = bias ? (float *)bias->data : 0;
+      alignedBias = bias ? (float *)bias->getCpu() : 0;
 
       alignedWeightsBuffer = 0;
-      alignedWeights = (float *)weights->data;
+      alignedWeights = (float *)weights->getCpu();
       alignedWeightSize = filterX*filterY*inputs;
 
       if ( !pweights && (alignedWeightSize & 0x3) && outputs>1 )
@@ -144,7 +144,7 @@ public:
             for(int i=1;i<4;i++)
             {
                float *buffer = allocFloats( weights->elementCount - i);
-               memcpy(buffer, weights->data + sizeof(float)*i, wBytes - sizeof(float)*i);
+               memcpy(buffer, weights->getCpu() + sizeof(float)*i, wBytes - sizeof(float)*i);
                srcBuffers.push_back(buffer);
             }
          }
@@ -184,9 +184,9 @@ public:
       // O' = Ki Oi + Ci
       // This is the same as multiplying the Weights_i by Ki and adding Ci to the biases
 
-      const float *scale = (const float *)inScales->data;
-      const float *mean = (const float *)inMeans->data;
-      const float *var = (const float *)inVars->data;
+      const float *scale = (const float *)inScales->getCpu();
+      const float *mean = (const float *)inMeans->getCpu();
+      const float *var = (const float *)inVars->getCpu();
 
       if (!bias)
       {
@@ -195,8 +195,8 @@ public:
          bias = new Tensor(Float32, s);
          bias->zero(0,outputs);
       }
-      float *b = (float *)bias->data;
-      float *w = (float *)weights->data;
+      float *b = (float *)bias->getCpu();
+      float *w = (float *)weights->getCpu();
 
       int wCount = weights->strides[0];
       for(int i=0;i<outputs;i++)
@@ -222,7 +222,7 @@ public:
       int paddedSize = (count + 3) & ~0x3;
       int odd = count & 0x3;
       interlacedCount = paddedSize>>2;
-      float *wSrc = (float *)weights->data;
+      float *wSrc = (float *)weights->getCpu();
       for(int o=0; o<outputs; o+=4)
       {
          float *interlacedBuf = allocFloats( paddedSize * 4, true );
@@ -387,8 +387,8 @@ public:
          if (y>=destH)
             break;
 
-         const float *src = (const float *)src0->data + srcW*inputs*y;
-         float *dest = (float *)destTensor->data + destW*outputs*y;
+         const float *src = (const float *)src0->getCpu() + srcW*inputs*y;
+         float *dest = (float *)destTensor->getCpu() + destW*outputs*y;
          for(int x=0;x<destW;x++)
          {
             if (interlacedWeights)
@@ -458,7 +458,7 @@ public:
 
    void runThreadMulti(int threadId)
    {
-      const float *b = bias ? (const float *)bias->data : 0;
+      const float *b = bias ? (const float *)bias->getCpu() : 0;
       const int *srcStride = &src0->strides[0];
       const int *destStride = &destTensor->strides[0];
       float *di = pweights ? &diBuffers[threadId][0] : 0;
@@ -472,7 +472,7 @@ public:
       float *srcPtr = &srcBuffers[threadId][0];
       int filterRow = filterW*sizeof(float);
 
-      const float *sIn = (float *)src0->data;
+      const float *sIn = (float *)src0->getCpu();
 
       while(true)
       {
@@ -481,7 +481,7 @@ public:
             break;
 
 
-         float *dest = (float *)destTensor->data + destW*outputs*y;
+         float *dest = (float *)destTensor->getCpu() + destW*outputs*y;
          int srcY = y;
 
          int dyMin = std::max(padOy-srcY,0);
@@ -531,7 +531,7 @@ public:
                   w+=filters;
                }
 
-               const float *w = (const float *)pweights->data;
+               const float *w = (const float *)pweights->getCpu();
                for(int o=0;o<outputs;o++)
                {
                   float sum = dot(b?b[o]:0.0f, w, di, diSize, activation);

@@ -110,7 +110,7 @@ public:
    {
       const int *srcStride = &src0->strides[0];
       const int *destStride = &destTensor->strides[0];
-      const float *sIn = (float *)src0->data;
+      const float *sIn = (float *)src0->getCpu();
 
       while(true)
       {
@@ -119,7 +119,7 @@ public:
             break;
 
 
-         float *dest = (float *)destTensor->data + destW*channels*y;
+         float *dest = (float *)destTensor->getCpu() + destW*channels*y;
          int srcY = y*strideY;
 
          int dyMin = std::max(padOy-srcY,0);

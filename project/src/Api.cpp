@@ -449,7 +449,7 @@ DEFINE_PRIME1(tdGetType)
 value tdGetData(value inTensor)
 {
    TO_TENSOR
-   return alloc_abstract(dataKind,tensor->data);
+   return alloc_abstract(dataKind,tensor->getCpu());
 }
 DEFINE_PRIME1(tdGetData)
 
@@ -516,7 +516,7 @@ void tdFillData(value inTensor, value outBuffer)
    int len = tensor->elementCount * tensor->elementSize;
    if (len<bytes.length)
       len = bytes.length;
-   memcpy(bytes.data, tensor->data, len);
+   memcpy(bytes.data, tensor->getCpu(), len);
 }
 DEFINE_PRIME2v(tdFillData)
 

@@ -121,8 +121,8 @@ public:
 
    void runThreadMulti(int threadId)
    {
-      const int *srcP = (const int *)src0->data;
-      int *destP = (int *)destTensor->data;
+      const int *srcP = (const int *)src0->getCpu();
+      int *destP = (int *)destTensor->getCpu();
       int rowLen = destW*destChannels;
 
       while(true)

@@ -1,4 +1,5 @@
 #include <Tensor.h>
+#include <hx/Thread.h>
 
 #include <stdexcept>
 
@@ -7,35 +8,6 @@
 
 namespace numerix
 {
-
-unsigned char *Tensor::allocData(unsigned int inLength)
-{
-   // Allocate 6 bytes at beginning, plus up to and extra 12 to ensure 16-byte alignment, and
-   //  1 at the end
-   // Add 3 and trunc to ensure multiple of 4
-   u8 *alloc = new u8[ (inLength+6+12+1+3) & ~3];
-   int offset16 = 16 - (((int)(size_t)alloc) & 0xf);
-   if (offset16<6)
-      offset16 += 16;
-
-   u8 *result = alloc + offset16;
-   result[-1] = LOW_SENTINEL;
-   result[inLength] = HIGH_SENTINEL;
-
-   result[-2] = offset16;
-   *(unsigned int *)(result-6) = inLength;
-   return result;
-}
-
-void Tensor::freeData(unsigned char *data)
-{
-   if (data)
-   {
-      int align16 = data[-2];
-      u8 *ptr = data - align16;
-      delete [] ptr;
-   }
-}
 
 
 Tensor::Tensor( int inType, const Shape &inShape )
@@ -58,7 +30,7 @@ Tensor::Tensor( int inType, const Shape &inShape )
    {
       elementSize = (inType & BitsMask)>>3;
 
-      data = allocData( elementCount * elementSize );
+      data = new TensorData( elementCount * elementSize );
    }
    else
       throw std::logic_error("bad tensor type");
@@ -161,36 +133,38 @@ void Tensor::print(int inMaxElems)
 
 int Tensor::getIntAt(int inIndex)
 {
+   void *d = getCpu();
    switch(type)
    {
-      case Float32: return ((float *)data)[inIndex];
-      case Float64: return ((double *)data)[inIndex];
-      case UInt8: return ((unsigned char *)data)[inIndex];
-      case UInt16: return ((unsigned short *)data)[inIndex];
-      case UInt32: return ((unsigned int *)data)[inIndex];
-      case UInt64: return ((TUInt64 *)data)[inIndex];
-      case Int8: return ((signed char *)data)[inIndex];
-      case Int16: return ((short *)data)[inIndex];
-      case Int32: return ((int *)data)[inIndex];
-      case Int64: return ((TInt64 *)data)[inIndex];
+      case Float32: return ((float *)d)[inIndex];
+      case Float64: return ((double *)d)[inIndex];
+      case UInt8: return ((unsigned char *)d)[inIndex];
+      case UInt16: return ((unsigned short *)d)[inIndex];
+      case UInt32: return ((unsigned int *)d)[inIndex];
+      case UInt64: return ((TUInt64 *)d)[inIndex];
+      case Int8: return ((signed char *)d)[inIndex];
+      case Int16: return ((short *)d)[inIndex];
+      case Int32: return ((int *)d)[inIndex];
+      case Int64: return ((TInt64 *)d)[inIndex];
    }
    return 0;
 }
 
 double Tensor::getFloatAt(int inIndex)
 {
+   void *d = getCpu();
    switch(type)
    {
-      case Float32: return ((float *)data)[inIndex];
-      case Float64: return ((double *)data)[inIndex];
-      case UInt8: return ((unsigned char *)data)[inIndex];
-      case UInt16: return ((unsigned short *)data)[inIndex];
-      case UInt32: return ((unsigned int *)data)[inIndex];
-      case UInt64: return ((TUInt64 *)data)[inIndex];
-      case Int8: return ((signed char *)data)[inIndex];
-      case Int16: return ((short *)data)[inIndex];
-      case Int32: return ((int *)data)[inIndex];
-      case Int64: return ((TInt64 *)data)[inIndex];
+      case Float32: return ((float *)d)[inIndex];
+      case Float64: return ((double *)d)[inIndex];
+      case UInt8: return ((unsigned char *)d)[inIndex];
+      case UInt16: return ((unsigned short *)d)[inIndex];
+      case UInt32: return ((unsigned int *)d)[inIndex];
+      case UInt64: return ((TUInt64 *)d)[inIndex];
+      case Int8: return ((signed char *)d)[inIndex];
+      case Int16: return ((short *)d)[inIndex];
+      case Int32: return ((int *)d)[inIndex];
+      case Int64: return ((TInt64 *)d)[inIndex];
    }
    return 0;
 }
@@ -198,31 +172,17 @@ double Tensor::getFloatAt(int inIndex)
 
 
 
-void Tensor::checkData()
-{
-   if (!data)
-      throw std::logic_error("tensor missing data");
-
-   if (data[-1]!=LOW_SENTINEL)
-      throw std::logic_error("tensor underwrite");
-
-   unsigned int length = *(int *)(data-6);
-   if (data[length] != HIGH_SENTINEL)
-      throw std::logic_error("tensor overwrite");
-}
-
 Tensor::~Tensor()
 {
    if (data)
-      checkData();
-   freeData(data);
+      data->decRef();
 }
+
 
 int Tensor::addRef()
 {
-   // TODO - atomic
-   refCount++;
-   return refCount;
+   int now = HxAtomicInc(&refCount) + 1;
+   return now;
 }
 
 Tensor *Tensor::incRef()
@@ -234,14 +194,15 @@ Tensor *Tensor::incRef()
 int Tensor::decRef()
 {
    // TODO - atomic
-   refCount--;
-   if (refCount<=0)
+   int now = HxAtomicDec(&refCount) - 1;
+   if (now<=0)
    {
       delete this;
       return 0;
    }
-   return refCount;
+   return now;
 }
+
 
 void Tensor::setFlat()
 {
@@ -300,24 +261,26 @@ void TFill(T *outData, int inType, const unsigned char *inData, unsigned int inC
 
 void Tensor::fill(int inType, const unsigned char *inData, int inOffsetElem,  unsigned int inCount)
 {
+   u8 *d = getCpu();
+
    if (inType==type)
    {
-      memcpy(data + inOffsetElem*elementSize, inData, inCount*elementSize);
+      memcpy(d + inOffsetElem*elementSize, inData, inCount*elementSize);
    }
    else
    {
       switch(type)
       {
-         case Float32: TFill( ((float *)data) + inOffsetElem, inType, inData, inCount); break;
-         case Float64: TFill( ((double *)data) + inOffsetElem, inType, inData, inCount); break;
-         case UInt8:   TFill( ((unsigned char *)data) + inOffsetElem, inType, inData, inCount); break;
-         case UInt16:  TFill( ((unsigned short *)data) + inOffsetElem, inType, inData, inCount); break;
-         case UInt32:  TFill( ((unsigned int *)data) + inOffsetElem, inType, inData, inCount); break;
-         case UInt64:  TFill( ((TUInt64 *)data) + inOffsetElem, inType, inData, inCount); break;
-         case Int8:    TFill( ((signed char *)data) + inOffsetElem, inType, inData, inCount); break;
-         case Int16:   TFill( ((short *)data) + inOffsetElem, inType, inData, inCount); break;
-         case Int32:   TFill( ((int *)data) + inOffsetElem, inType, inData, inCount); break;
-         case Int64:   TFill( ((TInt64 *)data) + inOffsetElem, inType, inData, inCount); break;
+         case Float32: TFill( ((float *)d) + inOffsetElem, inType, inData, inCount); break;
+         case Float64: TFill( ((double *)d) + inOffsetElem, inType, inData, inCount); break;
+         case UInt8:   TFill( ((unsigned char *)d) + inOffsetElem, inType, inData, inCount); break;
+         case UInt16:  TFill( ((unsigned short *)d) + inOffsetElem, inType, inData, inCount); break;
+         case UInt32:  TFill( ((unsigned int *)d) + inOffsetElem, inType, inData, inCount); break;
+         case UInt64:  TFill( ((TUInt64 *)d) + inOffsetElem, inType, inData, inCount); break;
+         case Int8:    TFill( ((signed char *)d) + inOffsetElem, inType, inData, inCount); break;
+         case Int16:   TFill( ((short *)d) + inOffsetElem, inType, inData, inCount); break;
+         case Int32:   TFill( ((int *)d) + inOffsetElem, inType, inData, inCount); break;
+         case Int64:   TFill( ((TInt64 *)d) + inOffsetElem, inType, inData, inCount); break;
       }
 
    }
@@ -325,7 +288,7 @@ void Tensor::fill(int inType, const unsigned char *inData, int inOffsetElem,  un
 
 void Tensor::zero(int inOffsetElem, unsigned int inCount)
 {
-   memset( data + inOffsetElem*elementSize, 0, inCount*elementSize );
+   memset( getCpu() + inOffsetElem*elementSize, 0, inCount*elementSize );
 }
 
 
@@ -343,18 +306,19 @@ void Tensor::setInt32(int inValue, int inOffsetElem, unsigned int inCount)
       zero(inOffsetElem,inCount);
    else
    {
+      void *d = getCpu();
       switch(type)
       {
-         case Float32: TSet(inValue, ((float *)data) + inOffsetElem, inCount); break;
-         case Float64: TSet(inValue, ((double *)data) + inOffsetElem, inCount); break;
-         case UInt8:   TSet(inValue, ((unsigned char *)data) + inOffsetElem, inCount); break;
-         case UInt16:  TSet(inValue, ((unsigned short *)data) + inOffsetElem, inCount); break;
-         case UInt32:  TSet(inValue, ((unsigned int *)data) + inOffsetElem, inCount); break;
-         case UInt64:  TSet(inValue, ((TUInt64 *)data) + inOffsetElem, inCount); break;
-         case Int8:    TSet(inValue, ((signed char *)data) + inOffsetElem, inCount); break;
-         case Int16:   TSet(inValue, ((short *)data) + inOffsetElem, inCount); break;
-         case Int32:   TSet(inValue, ((int *)data) + inOffsetElem, inCount); break;
-         case Int64:   TSet(inValue, ((TInt64 *)data) + inOffsetElem, inCount); break;
+         case Float32: TSet(inValue, ((float *)d) + inOffsetElem, inCount); break;
+         case Float64: TSet(inValue, ((double *)d) + inOffsetElem, inCount); break;
+         case UInt8:   TSet(inValue, ((unsigned char *)d) + inOffsetElem, inCount); break;
+         case UInt16:  TSet(inValue, ((unsigned short *)d) + inOffsetElem, inCount); break;
+         case UInt32:  TSet(inValue, ((unsigned int *)d) + inOffsetElem, inCount); break;
+         case UInt64:  TSet(inValue, ((TUInt64 *)d) + inOffsetElem, inCount); break;
+         case Int8:    TSet(inValue, ((signed char *)d) + inOffsetElem, inCount); break;
+         case Int16:   TSet(inValue, ((short *)d) + inOffsetElem, inCount); break;
+         case Int32:   TSet(inValue, ((int *)d) + inOffsetElem, inCount); break;
+         case Int64:   TSet(inValue, ((TInt64 *)d) + inOffsetElem, inCount); break;
       }
    }
 }
@@ -367,18 +331,19 @@ void Tensor::setFloat64(double inValue, int inOffsetElem, unsigned int inCount)
       zero(inOffsetElem,inCount);
    else
    {
+      void *d = getCpu();
       switch(type)
       {
-         case Float32: TSet(inValue, ((float *)data) + inOffsetElem, inCount); break;
-         case Float64: TSet(inValue, ((double *)data) + inOffsetElem, inCount); break;
-         case UInt8:   TSet(inValue, ((unsigned char *)data) + inOffsetElem, inCount); break;
-         case UInt16:  TSet(inValue, ((unsigned short *)data) + inOffsetElem, inCount); break;
-         case UInt32:  TSet(inValue, ((unsigned int *)data) + inOffsetElem, inCount); break;
-         case UInt64:  TSet(inValue, ((TUInt64 *)data) + inOffsetElem, inCount); break;
-         case Int8:    TSet(inValue, ((signed char *)data) + inOffsetElem, inCount); break;
-         case Int16:   TSet(inValue, ((short *)data) + inOffsetElem, inCount); break;
-         case Int32:   TSet(inValue, ((int *)data) + inOffsetElem, inCount); break;
-         case Int64:   TSet(inValue, ((TInt64 *)data) + inOffsetElem, inCount); break;
+         case Float32: TSet(inValue, ((float *)d) + inOffsetElem, inCount); break;
+         case Float64: TSet(inValue, ((double *)d) + inOffsetElem, inCount); break;
+         case UInt8:   TSet(inValue, ((unsigned char *)d) + inOffsetElem, inCount); break;
+         case UInt16:  TSet(inValue, ((unsigned short *)d) + inOffsetElem, inCount); break;
+         case UInt32:  TSet(inValue, ((unsigned int *)d) + inOffsetElem, inCount); break;
+         case UInt64:  TSet(inValue, ((TUInt64 *)d) + inOffsetElem, inCount); break;
+         case Int8:    TSet(inValue, ((signed char *)d) + inOffsetElem, inCount); break;
+         case Int16:   TSet(inValue, ((short *)d) + inOffsetElem, inCount); break;
+         case Int32:   TSet(inValue, ((int *)d) + inOffsetElem, inCount); break;
+         case Int64:   TSet(inValue, ((TInt64 *)d) + inOffsetElem, inCount); break;
       }
    }
 }
@@ -459,19 +424,20 @@ Tensor *Tensor::reorder(const std::vector<int> &order)
    for(int i=0;i<order.size();i++)
       targetShape[i] = shape[ order[i] ];
    Tensor *t = new Tensor(type, targetShape);
-   void *d = t->data;
+   void *d = t->getCpu();
+   void *src = getCpu();
    switch(type)
    {
-      case Float32: TReorder(((float *)data)         , d, shape, strides, order ); break;
-      case Float64: TReorder(((double *)data)        , d, shape, strides, order ); break;
-      case UInt8:   TReorder(((unsigned char *)data) , d, shape, strides, order ); break;
-      case UInt16:  TReorder(((unsigned short *)data), d, shape, strides, order ); break;
-      case UInt32:  TReorder(((unsigned int *)data)  , d, shape, strides, order ); break;
-      case UInt64:  TReorder(((TUInt64 *)data)       , d, shape, strides, order ); break;
-      case Int8:    TReorder(((signed char *)data)   , d, shape, strides, order ); break;
-      case Int16:   TReorder(((short *)data)         , d, shape, strides, order ); break;
-      case Int32:   TReorder(((int *)data)           , d, shape, strides, order ); break;
-      case Int64:   TReorder(((TInt64 *)data)        , d, shape, strides, order ); break;
+      case Float32: TReorder(((float *)src)         , d, shape, strides, order ); break;
+      case Float64: TReorder(((double *)src)        , d, shape, strides, order ); break;
+      case UInt8:   TReorder(((unsigned char *)src) , d, shape, strides, order ); break;
+      case UInt16:  TReorder(((unsigned short *)src), d, shape, strides, order ); break;
+      case UInt32:  TReorder(((unsigned int *)src)  , d, shape, strides, order ); break;
+      case UInt64:  TReorder(((TUInt64 *)src)       , d, shape, strides, order ); break;
+      case Int8:    TReorder(((signed char *)src)   , d, shape, strides, order ); break;
+      case Int16:   TReorder(((short *)src)         , d, shape, strides, order ); break;
+      case Int32:   TReorder(((int *)src)           , d, shape, strides, order ); break;
+      case Int64:   TReorder(((TInt64 *)src)        , d, shape, strides, order ); break;
    }
 
    return t;
@@ -481,17 +447,17 @@ Tensor *Tensor::reorder(const std::vector<int> &order)
 
 
 template<typename SRC, typename T>
-void TTVisitTensor(const SRC *data,int n, T &visitor)
+void TTVisitTensor(const SRC *inSrc,int n, T &visitor)
 {
    for(int i=0;i<n;i++)
-      visitor.visit(data[i]);
+      visitor.visit(inSrc[i]);
 }
 
 template<typename T>
 void TVisitTensor(Tensor *tensor, T &visitor)
 {
    int n = tensor->elementCount;
-   void *d = tensor->data;
+   void *d = tensor->getCpu();
 
    switch(tensor->type)
    {

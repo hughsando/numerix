@@ -9,7 +9,7 @@ namespace numerix
 
 float *Layer::allocFloats(int count,bool inZero)
 {
-   unsigned char *buffer = Tensor::allocData( count*sizeof(float) );
+   unsigned char *buffer = TensorData::allocCpuAligned( count*sizeof(float) );
    if (inZero)
       memset(buffer, 0, count*sizeof(float));
    buffers.push_back(buffer);
@@ -25,7 +25,7 @@ Layer::~Layer()
 void Layer::releaseFloats()
 {
    for(int i=0;i<buffers.size();i++)
-      Tensor::freeData( buffers[i] );
+      TensorData::freeCpuAligned( buffers[i] );
    buffers.resize(0);
 }
 

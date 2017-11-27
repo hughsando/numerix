@@ -11,9 +11,11 @@
      <depend name="include/Tensor.h" />
      <depend name="include/Ops.h" />
      <depend name="include/NxThread.h" />
+     <depend name="include/Layer.h" />
 
      <file name="src/Api.cpp" />
      <file name="src/Tensor.cpp" />
+     <file name="src/TensorData.cpp" />
      <file name="src/NxThread.cpp" />
      <file name="src/layers/Conv2D.cpp" />
      <file name="src/layers/MaxPool.cpp" />

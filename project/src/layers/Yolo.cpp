@@ -61,7 +61,7 @@ public:
       int h = inSrc0->shape[0];
       int w = inSrc0->shape[1];
       int channels = inSrc0->shape[2];
-      const float *src = (const float *)inSrc0->data;
+      const float *src = (const float *)inSrc0->getCpu();
       std::vector<float> softmaxBuf(classCount);
 
       int boxSize = 4 + 1 + classCount;
