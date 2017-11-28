@@ -245,8 +245,6 @@ public:
       #endif
 
       #ifdef NEW_CUDNN
-      cudnnCreateOpTensorDescriptor( &activationOp );
-
       cudnnCheck( cudnnCreateActivationDescriptor(&activationDesc) );
       if (activation == actSigmoid || activation==actRelu || activation==actLeaky)
       {
