@@ -188,7 +188,6 @@ class CudaConv2D : public Layer
    cudnnFilterDescriptor_t weightDesc;
    cudnnTensorDescriptor_t biasDesc;
    #ifdef NEW_CUDNN
-   cudnnOpTensorDescriptor_t activationOp;
    cudnnActivationDescriptor_t activationDesc;
    #endif
 
@@ -247,15 +246,9 @@ public:
 
       #ifdef NEW_CUDNN
       cudnnCreateOpTensorDescriptor( &activationOp );
-      if (activation == actLeaky)
-         cudnnSetOpTensorDescriptor( activationOp,
-                                CUDNN_OP_TENSOR_MAX,
-                                CUDNN_DATA_FLOAT,
-                                CUDNN_PROPAGATE_NAN );
-
 
       cudnnCheck( cudnnCreateActivationDescriptor(&activationDesc) );
-      if (activation == actSigmoid || activation==actRelu)
+      if (activation == actSigmoid || activation==actRelu || activation==actLeaky)
       {
           cudnnCheck( cudnnSetActivationDescriptor(activationDesc,
                                 activation==actSigmoid ? CUDNN_ACTIVATION_SIGMOID : CUDNN_ACTIVATION_RELU,
@@ -275,7 +268,6 @@ public:
       cudnnDestroyConvolutionDescriptor(convDesc);
 
       #ifdef NEW_CUDNN
-      cudnnDestroyOpTensorDescriptor(activationOp);
       cudnnDestroyActivationDescriptor(activationDesc);
       #endif
 
@@ -431,34 +423,18 @@ public:
                         result->gpuWrite(preferNchw) );
       }
 
-      if (activation==actLeaky)
-      {
-         #ifdef NEW_CUDNN
-         // Tensor operation : C = op( alpha1 * A, alpha2 * B ) + beta * C
-         //                      = max( A, 0.1 * A )
-         float alpha1 = 1.0;
-         float alpha2 = 0.1;
-         float beta = 0;
-         cudnnCheck( cudnnOpTensor( cudnnHandle,
-                         activationOp,
-                         &alpha1,
-                         destDesc,
-                         result->gpuRead(preferNchw),
-                         &alpha2,
-                         destDesc,
-                         result->gpuRead(preferNchw),
-                         &beta,
-                         destDesc,
-                         result->gpuWrite(preferNchw) ) );
-         #endif
-      }
-      else if (activation==actRelu || activation==actSigmoid)
+      if (activation==actRelu || activation==actSigmoid || activation==actLeaky)
       {
          float alpha = 1.0;
          float beta =  0.0;
+         if (activation==actLeaky)
+         {
+            alpha = 0.9;
+            beta = 0.1;
+         }
          cudnnCheck( cudnnActivationForward( cudnnHandle,
                        #ifdef OLD_CUDNN
-                       activation==actRelu ? CUDNN_ACTIVATION_RELU : CUDNN_ACTIVATION_SIGMOID,
+                       activation==actSigmoid ? CUDNN_ACTIVATION_SIGMOID : CUDNN_ACTIVATION_RELU,
                        #else
                        activationDesc,
                        #endif
