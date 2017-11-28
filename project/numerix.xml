@@ -5,7 +5,10 @@
 
    <files id="numerix" >
      <compilerflag value="-Iinclude" />
+     <compilerflag value="-DNX_GPU" />
      <compilerflag value="-DNUMERIX_SIMD" />
+     <compilerflag value="-I${CUDA_PATH}/include" />
+     <compilerflag value="-I${CUDA_PATH}/cudnn/cuda/include" />
      <compilerflag value="-mfpu=neon" if="HXCPP_ARMV7||HXCPP_ARM64" />
 
      <depend name="include/Tensor.h" />
@@ -24,12 +27,23 @@
      <file name="src/layers/Reorg.cpp" />
      <file name="src/layers/Yolo.cpp" />
 
+     <file name="src/Cuda.cpp" />
+
    </files>
 
    <target id="default" tool="linker" toolid="dll" output="numerix" >
       <files id="numerix" />
       <outdir name="../ndll/${BINDIR}" />
       <ext value=".ndll" />
+
+      <libpath name="${CUDA_PATH}/lib/x64/" />
+      <libpath name="${CUDA_PATH}/cudnn/cuda/lib/x64" />
+      <lib base="cuda" />
+      <lib base="cudart" />
+      <lib base="curand" />
+      <lib base="cublas" />
+      <lib base="cudnn" />
+
       <lib name="-lpthread" if="linux" unless="static_link" />
    </target>
 

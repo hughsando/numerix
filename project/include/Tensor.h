@@ -7,6 +7,32 @@
 #include <memory.h>
 
 
+
+namespace numerix
+{
+
+enum Activation
+{
+   actLinear,
+   actRelu,
+   actSigmoid,
+   actLeaky,
+};
+
+enum Padding
+{
+   padSame,
+   padValid,
+};
+
+}// end namespace numerix
+
+
+#ifdef NX_GPU
+#include "NxGpu.h"
+#endif
+
+
 namespace numerix
 {
 
@@ -55,22 +81,56 @@ typedef unsigned char u8;
 class TensorData
 {
    u8  *cpu;
+   #ifdef NX_GPU
+   GpuData *gpu;
+   bool cpuValid;
+   bool gpuValid;
+   #endif
    int size;
 
  public:
-   inline TensorData(int inSize, bool inAllocCpu=true) :
+   inline TensorData(int inSize) :
        size(inSize), cpu(0), refCount(1)
    {
-      if (inAllocCpu)
-         cpu = allocCpuAligned(size);
+      #ifdef NX_GPU
+      gpu = 0;
+      cpuValid = true;
+      gpuValid = false;
+      #else
+      cpu = allocCpuAligned(size);
+      #endif
    }
 
-   inline u8 *getCpu()
+   #ifdef NX_GPU
+   inline u8 *getCpu(bool updateCpu, bool invalidateGpu)
    {
       if (!cpu)
          cpu = allocCpuAligned(size);
+      if (updateCpu && !cpuValid && gpuValid && gpu)
+         gpuDownload(cpu, gpu, size);
+      cpuValid = true;
+      if (invalidateGpu)
+         gpuValid = false;
       return cpu;
    }
+   inline u8 *getGpu(bool updateGpu,bool invalidateCpu)
+   {
+      if (!gpu)
+         gpu = gpuAlloc(size);
+      if (updateGpu && !gpuValid && cpu && cpuValid)
+         gpuUpload(gpu, cpu, size);
+      gpuValid = true;
+      if (invalidateCpu)
+         cpuValid = false;
+      return (u8 *)gpu;
+   }
+
+   #else
+   inline u8 *getCpu()
+   {
+      return cpu;
+   }
+   #endif
 
    static u8 *allocCpuAligned(int inSize);
    static void freeCpuAligned(void *inPtr);
@@ -97,7 +157,21 @@ class Tensor
 
       Tensor(int inType, const Shape &inShape);
 
-      inline u8 *getCpu() { return data->getCpu(); }
+      #ifdef NX_GPU
+      const inline u8 *cpuRead() { return data->getCpu(true,false); }
+      inline       u8 *cpuWrite() { return data->getCpu(false,true); }
+      inline       u8 *cpuWritePart() { return data->getCpu(true,true); }
+
+      const inline u8 *gpuRead() { return data->getGpu(true,false); }
+      inline       u8 *gpuWrite() { return data->getGpu(false,true); }
+      #else
+      const inline u8 *cpuRead() { return data->getCpu(); }
+      inline       u8 *cpuWrite() { return data->getCpu(); }
+      inline       u8 *cpuWritePart() { return data->getCpu(); }
+
+      const inline u8 *gpuRead() { return 0; }
+      inline       u8 *gpuWrite() { return 0; }
+      #endif
 
       void print(int inMaxElems);
       void fill(int inType, const u8 *inData, int inOffsetElem,  unsigned int inCount);

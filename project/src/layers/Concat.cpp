@@ -47,6 +47,10 @@ public:
       src0 = inSrc0;
       src1 = inSrc1;
       destTensor = result;
+      src0->cpuRead();
+      src1->cpuRead();
+      destTensor->cpuWrite();
+
       runThreaded();
       src0 = 0;
       destTensor = 0;
@@ -79,9 +83,9 @@ public:
          if (y>=srcH)
             break;
 
-         const u8 *s0 = src0->getCpu() + src0Stride[0] * y * typeSize;
-         const u8 *s1 = src1->getCpu() + src1Stride[0] * y * typeSize;
-         u8 *d = destTensor->getCpu() + destStride[0] * y * typeSize;
+         const u8 *s0 = src0->cpuRead() + src0Stride[0] * y * typeSize;
+         const u8 *s1 = src1->cpuRead() + src1Stride[0] * y * typeSize;
+         u8 *d = destTensor->cpuWrite() + destStride[0] * y * typeSize;
 
          for(int x=0;x<srcW;x++)
          {

@@ -6,20 +6,6 @@
 namespace numerix
 {
 
-enum Activation
-{
-   actLinear,
-   actRelu,
-   actSigmoid,
-   actLeaky,
-};
-
-enum Padding
-{
-   padSame,
-   padValid,
-};
-
 
 
 

@@ -133,7 +133,7 @@ void Tensor::print(int inMaxElems)
 
 int Tensor::getIntAt(int inIndex)
 {
-   void *d = getCpu();
+   const void *d = cpuRead();
    switch(type)
    {
       case Float32: return ((float *)d)[inIndex];
@@ -152,7 +152,7 @@ int Tensor::getIntAt(int inIndex)
 
 double Tensor::getFloatAt(int inIndex)
 {
-   void *d = getCpu();
+   const void *d = cpuRead();
    switch(type)
    {
       case Float32: return ((float *)d)[inIndex];
@@ -261,7 +261,8 @@ void TFill(T *outData, int inType, const unsigned char *inData, unsigned int inC
 
 void Tensor::fill(int inType, const unsigned char *inData, int inOffsetElem,  unsigned int inCount)
 {
-   u8 *d = getCpu();
+   bool all = inCount == elementCount;
+   u8 *d = all ? cpuWrite() : cpuWritePart();
 
    if (inType==type)
    {
@@ -288,7 +289,7 @@ void Tensor::fill(int inType, const unsigned char *inData, int inOffsetElem,  un
 
 void Tensor::zero(int inOffsetElem, unsigned int inCount)
 {
-   memset( getCpu() + inOffsetElem*elementSize, 0, inCount*elementSize );
+   memset( cpuWrite() + inOffsetElem*elementSize, 0, inCount*elementSize );
 }
 
 
@@ -306,7 +307,7 @@ void Tensor::setInt32(int inValue, int inOffsetElem, unsigned int inCount)
       zero(inOffsetElem,inCount);
    else
    {
-      void *d = getCpu();
+      void *d = cpuWritePart();
       switch(type)
       {
          case Float32: TSet(inValue, ((float *)d) + inOffsetElem, inCount); break;
@@ -331,7 +332,7 @@ void Tensor::setFloat64(double inValue, int inOffsetElem, unsigned int inCount)
       zero(inOffsetElem,inCount);
    else
    {
-      void *d = getCpu();
+      void *d = cpuWritePart();
       switch(type)
       {
          case Float32: TSet(inValue, ((float *)d) + inOffsetElem, inCount); break;
@@ -424,8 +425,8 @@ Tensor *Tensor::reorder(const std::vector<int> &order)
    for(int i=0;i<order.size();i++)
       targetShape[i] = shape[ order[i] ];
    Tensor *t = new Tensor(type, targetShape);
-   void *d = t->getCpu();
-   void *src = getCpu();
+   void *d = t->cpuWrite();
+   const void *src = cpuRead();
    switch(type)
    {
       case Float32: TReorder(((float *)src)         , d, shape, strides, order ); break;
@@ -457,7 +458,7 @@ template<typename T>
 void TVisitTensor(Tensor *tensor, T &visitor)
 {
    int n = tensor->elementCount;
-   void *d = tensor->getCpu();
+   const void *d = tensor->cpuRead();
 
    switch(tensor->type)
    {

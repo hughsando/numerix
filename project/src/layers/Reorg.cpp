@@ -53,6 +53,8 @@ public:
 
       src0 = inSrc0;
       destTensor = result;
+      src0->cpuRead();
+      destTensor->cpuWrite();
       runThreaded();
       src0 = 0;
       destTensor = 0;
@@ -121,8 +123,8 @@ public:
 
    void runThreadMulti(int threadId)
    {
-      const int *srcP = (const int *)src0->getCpu();
-      int *destP = (int *)destTensor->getCpu();
+      const int *srcP = (const int *)src0->cpuRead();
+      int *destP = (int *)destTensor->cpuWrite();
       int rowLen = destW*destChannels;
 
       while(true)

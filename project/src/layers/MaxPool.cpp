@@ -90,6 +90,9 @@ public:
 
       src0 = inSrc0;
       destTensor = result;
+      src0->cpuRead();
+      destTensor->cpuWrite();
+
       runThreaded();
       src0 = 0;
       destTensor = 0;
@@ -110,7 +113,7 @@ public:
    {
       const int *srcStride = &src0->strides[0];
       const int *destStride = &destTensor->strides[0];
-      const float *sIn = (float *)src0->getCpu();
+      const float *sIn = (const float *)src0->cpuRead();
 
       while(true)
       {
@@ -119,7 +122,7 @@ public:
             break;
 
 
-         float *dest = (float *)destTensor->getCpu() + destW*channels*y;
+         float *dest = (float *)destTensor->cpuWrite() + destW*channels*y;
          int srcY = y*strideY;
 
          int dyMin = std::max(padOy-srcY,0);

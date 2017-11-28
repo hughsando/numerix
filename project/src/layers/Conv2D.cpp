@@ -117,10 +117,10 @@ public:
       weightBuffers.resize(0);
 
 
-      alignedBias = bias ? (float *)bias->getCpu() : 0;
+      alignedBias = bias ? (float *)bias->cpuRead() : 0;
 
       alignedWeightsBuffer = 0;
-      alignedWeights = (float *)weights->getCpu();
+      alignedWeights = (float *)weights->cpuRead();
       alignedWeightSize = filterX*filterY*inputs;
 
       if ( !pweights && (alignedWeightSize & 0x3) && outputs>1 )
@@ -144,7 +144,7 @@ public:
             for(int i=1;i<4;i++)
             {
                float *buffer = allocFloats( weights->elementCount - i);
-               memcpy(buffer, weights->getCpu() + sizeof(float)*i, wBytes - sizeof(float)*i);
+               memcpy(buffer, weights->cpuRead() + sizeof(float)*i, wBytes - sizeof(float)*i);
                srcBuffers.push_back(buffer);
             }
          }
@@ -184,9 +184,9 @@ public:
       // O' = Ki Oi + Ci
       // This is the same as multiplying the Weights_i by Ki and adding Ci to the biases
 
-      const float *scale = (const float *)inScales->getCpu();
-      const float *mean = (const float *)inMeans->getCpu();
-      const float *var = (const float *)inVars->getCpu();
+      const float *scale = (const float *)inScales->cpuRead();
+      const float *mean = (const float *)inMeans->cpuRead();
+      const float *var = (const float *)inVars->cpuRead();
 
       if (!bias)
       {
@@ -195,8 +195,8 @@ public:
          bias = new Tensor(Float32, s);
          bias->zero(0,outputs);
       }
-      float *b = (float *)bias->getCpu();
-      float *w = (float *)weights->getCpu();
+      float *b = (float *)bias->cpuWritePart();
+      float *w = (float *)weights->cpuWritePart();
 
       int wCount = weights->strides[0];
       for(int i=0;i<outputs;i++)
@@ -222,15 +222,15 @@ public:
       int paddedSize = (count + 3) & ~0x3;
       int odd = count & 0x3;
       interlacedCount = paddedSize>>2;
-      float *wSrc = (float *)weights->getCpu();
+      const float *wSrc = (float *)weights->cpuRead();
       for(int o=0; o<outputs; o+=4)
       {
          float *interlacedBuf = allocFloats( paddedSize * 4, true );
          float *b = interlacedBuf;
-         float *w0 = wSrc; wSrc+=count;
-         float *w1 = wSrc; wSrc+=count;
-         float *w2 = wSrc; wSrc+=count;
-         float *w3 = wSrc; wSrc+=count;
+         const float *w0 = wSrc; wSrc+=count;
+         const float *w1 = wSrc; wSrc+=count;
+         const float *w2 = wSrc; wSrc+=count;
+         const float *w3 = wSrc; wSrc+=count;
          int fours = count>>2;
          for(int i=0;i<fours;i++)
          {
@@ -353,6 +353,9 @@ public:
 
       src0 = inSrc0;
       destTensor = result;
+      src0->cpuRead();
+      destTensor->cpuWrite();
+
       runThreaded();
       src0 = 0;
       destTensor = 0;
@@ -387,8 +390,8 @@ public:
          if (y>=destH)
             break;
 
-         const float *src = (const float *)src0->getCpu() + srcW*inputs*y;
-         float *dest = (float *)destTensor->getCpu() + destW*outputs*y;
+         const float *src = (const float *)src0->cpuRead() + srcW*inputs*y;
+         float *dest = (float *)destTensor->cpuWrite() + destW*outputs*y;
          for(int x=0;x<destW;x++)
          {
             if (interlacedWeights)
@@ -458,7 +461,7 @@ public:
 
    void runThreadMulti(int threadId)
    {
-      const float *b = bias ? (const float *)bias->getCpu() : 0;
+      const float *b = bias ? (const float *)bias->cpuRead() : 0;
       const int *srcStride = &src0->strides[0];
       const int *destStride = &destTensor->strides[0];
       float *di = pweights ? &diBuffers[threadId][0] : 0;
@@ -472,7 +475,7 @@ public:
       float *srcPtr = &srcBuffers[threadId][0];
       int filterRow = filterW*sizeof(float);
 
-      const float *sIn = (float *)src0->getCpu();
+      const float *sIn = (float *)src0->cpuRead();
 
       while(true)
       {
@@ -481,7 +484,7 @@ public:
             break;
 
 
-         float *dest = (float *)destTensor->getCpu() + destW*outputs*y;
+         float *dest = (float *)destTensor->cpuWrite() + destW*outputs*y;
          int srcY = y;
 
          int dyMin = std::max(padOy-srcY,0);
@@ -531,7 +534,7 @@ public:
                   w+=filters;
                }
 
-               const float *w = (const float *)pweights->getCpu();
+               const float *w = (const float *)pweights->cpuRead();
                for(int o=0;o<outputs;o++)
                {
                   float sum = dot(b?b[o]:0.0f, w, di, diSize, activation);

@@ -449,7 +449,8 @@ DEFINE_PRIME1(tdGetType)
 value tdGetData(value inTensor)
 {
    TO_TENSOR
-   return alloc_abstract(dataKind,tensor->getCpu());
+   // TODO - usage read/write
+   return alloc_abstract(dataKind,tensor->cpuWritePart());
 }
 DEFINE_PRIME1(tdGetData)
 
@@ -515,8 +516,14 @@ void tdFillData(value inTensor, value outBuffer)
       TensorThrow("tdFillData - bad buffer");
    int len = tensor->elementCount * tensor->elementSize;
    if (len<bytes.length)
+   {
       len = bytes.length;
-   memcpy(bytes.data, tensor->getCpu(), len);
+      memcpy(bytes.data, tensor->cpuWritePart(), bytes.length);
+   }
+   else
+   {
+      memcpy(bytes.data, tensor->cpuWrite(), len);
+   }
 }
 DEFINE_PRIME2v(tdFillData)
 
@@ -575,7 +582,7 @@ value allocLayer(Layer *inLayer)
    return result;
 }
 
-value layCreateConv2D(value inStrides, int activation, int padding, value inWeights, value inPWeights, value inBias)
+value layCreateConv2D(value inStrides, int inActivation, int inPadding, value inWeights, value inPWeights, value inBias)
 {
    TO_TENSOR_NAME(inWeights, weights);
    if (!weights)
@@ -596,7 +603,15 @@ value layCreateConv2D(value inStrides, int activation, int padding, value inWeig
       sx = strides.size() > 1 ? strides[1] : sy;
    }
 
-   Layer *layer = Layer::createConv2D(sx, sy, (Activation)activation, (Padding)padding, weights, pweights, bias);
+   Layer *layer = 0;
+   Activation activation = (Activation)inActivation;
+   Padding padding = (Padding)inPadding;
+   #ifdef NX_GPU
+   if (!pweights && gpuInit())
+      layer = gpuCreateConv2D(sx,sy, activation, padding, weights, bias);
+   else
+   #endif
+   layer = Layer::createConv2D(sx, sy, activation, padding, weights, pweights, bias);
 
    return allocLayer(layer);
 }
@@ -620,7 +635,7 @@ DEFINE_PRIME4v(layConv2DSetNorm);
 
 
 
-value layCreateMaxPool(value inSize, value inStrides, int padding)
+value layCreateMaxPool(value inSize, value inStrides, int inPadding)
 {
    int sx = 1;
    int sy = 1;
@@ -646,7 +661,14 @@ value layCreateMaxPool(value inSize, value inStrides, int padding)
       stepX = strides.size() > 1 ? strides[1] : sy;
    }
 
-   Layer *layer = Layer::createMaxPool(sx, sy, stepX, stepY, (Padding)padding);
+   Layer *layer = 0;
+   Padding padding = (Padding)inPadding;
+   #ifdef NX_GPU
+   if (gpuInit())
+      layer = gpuCreateMaxPool(sx, sy, stepX, stepY, padding);
+   else
+   #endif
+       layer = Layer::createMaxPool(sx, sy, stepX, stepY, padding);
 
    return allocLayer(layer);
 }
