@@ -5,6 +5,12 @@
 #include <cublas_v2.h>
 #include <cudnn.h>
 
+#if CUDNN_VERSION < 3000
+  #define OLD_CUDNN
+#else
+  #define NEW_CUDNN
+#endif
+
 namespace numerix
 {
 
@@ -153,11 +159,13 @@ class CudaConv2D : public Layer
    cudnnTensorDescriptor_t destDesc;
    cudnnFilterDescriptor_t weightDesc;
    cudnnTensorDescriptor_t biasDesc;
+   #ifdef NEW_CUDNN
    cudnnOpTensorDescriptor_t activationOp;
+   cudnnActivationDescriptor_t activationDesc;
+   #endif
 
    cudnnConvolutionDescriptor_t convDesc;
 
-   cudnnActivationDescriptor_t activationDesc;
 
 public:
    CudaConv2D(int inStrideY, int inStrideX,
@@ -210,6 +218,7 @@ public:
                                     CUDNN_CROSS_CORRELATION) );
       #endif
 
+      #ifdef NEW_CUDNN
       cudnnCreateOpTensorDescriptor( &activationOp );
       if (activation == actLeaky)
          cudnnSetOpTensorDescriptor( activationOp,
@@ -226,6 +235,7 @@ public:
                                 CUDNN_NOT_PROPAGATE_NAN,
                                 1.0 ) );
       }
+      #endif
    }
 
    ~CudaConv2D()
@@ -237,9 +247,11 @@ public:
 
       cudnnDestroyConvolutionDescriptor(convDesc);
 
+      #ifdef NEW_CUDNN
       cudnnDestroyOpTensorDescriptor(activationOp);
-
       cudnnDestroyActivationDescriptor(activationDesc);
+      #endif
+
 
       weights->decRef();
       if (bias)
@@ -324,7 +336,11 @@ public:
 
       cudnnCheck( cudnnSetTensor4dDescriptor(srcDesc, CUDNN_TENSOR_NHWC, CUDNN_DATA_FLOAT, 1, sin[2], sin[0], sin[1]) );
       cudnnCheck( cudnnSetTensor4dDescriptor(destDesc, CUDNN_TENSOR_NHWC, CUDNN_DATA_FLOAT, 1, outputs, destH, destW) );
+      #ifdef NEW_CUDNN
       cudnnCheck( cudnnSetFilter4dDescriptor(weightDesc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NHWC, outputs, inputs, filterY, filterX) );
+      #else
+      cudnnCheck( cudnnSetFilter4dDescriptor(weightDesc, CUDNN_DATA_FLOAT, outputs, inputs, filterY, filterX) );
+      #endif
 
       cudnnConvolutionFwdAlgo_t algo;
       cudnnCheck( cudnnGetConvolutionForwardAlgorithm(cudnnHandle,
@@ -371,6 +387,9 @@ public:
 
          beta = 1;
          cudnnAddTensor( cudnnHandle,
+                        #ifdef OLD_CUDNN
+                        CUDNN_ADD_SAME_C,
+                        #endif
                         &alpha,
                         biasDesc,
                         bias->gpuRead(),
@@ -381,6 +400,7 @@ public:
 
       if (activation==actLeaky)
       {
+         #ifdef NEW_CUDNN
          // Tensor operation : C = op( alpha1 * A, alpha2 * B ) + beta * C
          //                      = max( A, 0.1 * A )
          float alpha1 = 1.0;
@@ -397,13 +417,18 @@ public:
                          &beta,
                          destDesc,
                          result->gpuWrite() ) );
+         #endif
       }
       else if (activation==actRelu || activation==actSigmoid)
       {
          float alpha = 1.0;
          float beta =  0.0;
          cudnnCheck( cudnnActivationForward( cudnnHandle,
+                       #ifdef OLD_CUDNN
+                       activation==actRelu ? CUDNN_ACTIVATION_RELU : CUDNN_ACTIVATION_SIGMOID,
+                       #else
                        activationDesc,
+                       #endif
                        &alpha,
                        destDesc,
                        result->gpuRead(),
@@ -468,7 +493,9 @@ public:
 
       cudnnCheck( cudnnSetPooling2dDescriptor( poolingDesc,
                  CUDNN_POOLING_MAX,
+                 #ifdef NEW_CUDNN
                  CUDNN_NOT_PROPAGATE_NAN,
+                 #endif
                  filterY,
                  filterX,
                  padY,

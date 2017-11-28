@@ -1,6 +1,7 @@
 <xml>
    <!-- <set name="static_link" value="1" /> -->
    <include name="${HXCPP}/toolchain/haxe-target.xml" />
+   <set name="CUDA_PATH" value="${CUDA_SDK}" if="CUDA_SDK" unless="CUDA_PATH" />
 
 
    <files id="numerix" >
@@ -38,11 +39,20 @@
 
       <libpath name="${CUDA_PATH}/lib/x64/" />
       <libpath name="${CUDA_PATH}/cudnn/cuda/lib/x64" />
-      <lib base="cuda" />
-      <lib base="cudart" />
-      <lib base="curand" />
-      <lib base="cublas" />
-      <lib base="cudnn" />
+      <libpath name="${CUDA_PATH}/lib/stubs" />
+      <libpath name="${CUDA_PATH}/lib" />
+      <section if="linux" >
+         <lib name="-lcuda" />
+         <lib name="-lcudart" />
+         <lib name="-lcudnn" />
+      </section>
+      <section unless="linux" >
+         <lib base="cuda" />
+         <lib base="cudart" />
+         <lib base="cudnn" />
+      </section>
+
+
 
       <lib name="-lpthread" if="linux" unless="static_link" />
    </target>
