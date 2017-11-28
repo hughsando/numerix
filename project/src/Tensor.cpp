@@ -446,6 +446,70 @@ Tensor *Tensor::reorder(const std::vector<int> &order)
 
 
 
+void Tensor::convertToNchw(u8 *d, const u8 *src)
+{
+   int s = shape.size();
+   if (s<3)
+      return;
+   Shape srcShape = shape;
+   Shape order;
+   for(int i=0;i<s;i++)
+      order.push_back(i);
+   std::swap( order[s-3], order[s-1] );
+
+   switch(type)
+   {
+      case Float32: TReorder(((float *)src)         , d, srcShape, strides, order ); break;
+      case Float64: TReorder(((double *)src)        , d, srcShape, strides, order ); break;
+      case UInt8:   TReorder(((unsigned char *)src) , d, srcShape, strides, order ); break;
+      case UInt16:  TReorder(((unsigned short *)src), d, srcShape, strides, order ); break;
+      case UInt32:  TReorder(((unsigned int *)src)  , d, srcShape, strides, order ); break;
+      case UInt64:  TReorder(((TUInt64 *)src)       , d, srcShape, strides, order ); break;
+      case Int8:    TReorder(((signed char *)src)   , d, srcShape, strides, order ); break;
+      case Int16:   TReorder(((short *)src)         , d, srcShape, strides, order ); break;
+      case Int32:   TReorder(((int *)src)           , d, srcShape, strides, order ); break;
+      case Int64:   TReorder(((TInt64 *)src)        , d, srcShape, strides, order ); break;
+   }
+}
+
+void Tensor::convertToNhwc(u8 *d, const u8 *src)
+{
+   int s = shape.size();
+   if (s<3)
+      return;
+   Shape srcShape = shape;
+   std::swap( srcShape[s-3], srcShape[s-1] );
+   Shape srcStrides = strides;
+   int stride = 1;
+   for(int i=s-1;i>=0;i--)
+   {
+      strides[i] = stride;
+      stride *= srcShape[i];
+   }
+
+   Shape order;
+   for(int i=0;i<s;i++)
+      order.push_back(i);
+   std::swap( order[s-3], order[s-1] );
+
+   switch(type)
+   {
+      case Float32: TReorder(((float *)src)         , d, srcShape, srcStrides, order ); break;
+      case Float64: TReorder(((double *)src)        , d, srcShape, srcStrides, order ); break;
+      case UInt8:   TReorder(((unsigned char *)src) , d, srcShape, srcStrides, order ); break;
+      case UInt16:  TReorder(((unsigned short *)src), d, srcShape, srcStrides, order ); break;
+      case UInt32:  TReorder(((unsigned int *)src)  , d, srcShape, srcStrides, order ); break;
+      case UInt64:  TReorder(((TUInt64 *)src)       , d, srcShape, srcStrides, order ); break;
+      case Int8:    TReorder(((signed char *)src)   , d, srcShape, srcStrides, order ); break;
+      case Int16:   TReorder(((short *)src)         , d, srcShape, srcStrides, order ); break;
+      case Int32:   TReorder(((int *)src)           , d, srcShape, srcStrides, order ); break;
+      case Int64:   TReorder(((TInt64 *)src)        , d, srcShape, srcStrides, order ); break;
+   }
+
+}
+
+
+
 
 template<typename SRC, typename T>
 void TTVisitTensor(const SRC *inSrc,int n, T &visitor)

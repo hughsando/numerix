@@ -14,12 +14,13 @@ GpuData *gpuAlloc(int size);
 void gpuFree(GpuData *inBuffer);
 
 void gpuUpload(GpuData *buffer, const unsigned char *inData, int n);
+void gpuUploadConvert(GpuData *buffer, const unsigned char *inData, int n, bool inNchw, Tensor *ten);
 
 void gpuDownload(unsigned char *buffer, const GpuData *inData, int n);
+void gpuDownloadConvert(unsigned char *buffer, const GpuData *inData, int n, bool inNchw, Tensor *ten);
 
 
 class Layer;
-class Tensor;
 
 Layer *gpuCreateConv2D(int inStrideY, int inStrideX,
                        Activation activation, Padding padding,

@@ -117,6 +117,7 @@ void gpuDownload(unsigned char *buffer, const GpuData *inData, int n)
 
 
 
+
 static void *gpuWorkspace = 0;
 size_t gpuWorkspaceSize = 0;
 void *gpuGetWorkspace(size_t inSize)
@@ -134,6 +135,29 @@ void *gpuGetWorkspace(size_t inSize)
       cudaCheck( cudaMalloc(&gpuWorkspace, gpuWorkspaceSize) );
    }
    return gpuWorkspace;
+}
+
+
+static std::vector<u8> cpuWorkspace;
+
+void gpuUploadConvert(GpuData *buffer, const unsigned char *inData, int n, bool inNchw, Tensor *ten)
+{
+   cpuWorkspace.resize(n);
+   if (inNchw)
+      ten->convertToNchw(&cpuWorkspace[0], inData);
+   else
+      ten->convertToNhwc(&cpuWorkspace[0], inData);
+   cudaCheck( cudaMemcpy( buffer, &cpuWorkspace[0], n, cudaMemcpyHostToDevice) );
+}
+
+void gpuDownloadConvert(unsigned char *buffer, const GpuData *inData, int n, bool inNchw, Tensor *ten)
+{
+   cpuWorkspace.resize(n);
+   cudaCheck( cudaMemcpy( &cpuWorkspace[0], inData, n, cudaMemcpyDeviceToHost) );
+   if (inNchw)
+      ten->convertToNchw(buffer, &cpuWorkspace[0]);
+   else
+      ten->convertToNhwc(buffer, &cpuWorkspace[0]);
 }
 
 

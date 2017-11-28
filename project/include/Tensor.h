@@ -11,6 +11,8 @@
 namespace numerix
 {
 
+class Tensor;
+
 enum Activation
 {
    actLinear,
@@ -80,15 +82,17 @@ typedef unsigned char u8;
 
 class TensorData
 {
+ public:
    u8  *cpu;
    #ifdef NX_GPU
    GpuData *gpu;
    bool cpuValid;
    bool gpuValid;
+   bool cpuNchw;
+   bool gpuNchw;
    #endif
    int size;
 
- public:
    inline TensorData(int inSize) :
        size(inSize), cpu(0), refCount(1)
    {
@@ -96,32 +100,49 @@ class TensorData
       gpu = 0;
       cpuValid = true;
       gpuValid = false;
+      cpuNchw = false;
+      gpuNchw = false;
       #else
       cpu = allocCpuAligned(size);
       #endif
    }
 
    #ifdef NX_GPU
-   inline u8 *getCpu(bool updateCpu, bool invalidateGpu)
+   inline u8 *getCpu(bool updateCpu, bool invalidateGpu, bool inNchw, Tensor *inTensor)
    {
       if (!cpu)
          cpu = allocCpuAligned(size);
+
       if (updateCpu && !cpuValid && gpuValid && gpu)
-         gpuDownload(cpu, gpu, size);
+      {
+         if (inNchw!=gpuNchw)
+            gpuDownloadConvert(cpu, gpu, size, inNchw, inTensor);
+         else
+            gpuDownload(cpu, gpu, size);
+         cpuNchw = inNchw;
+      }
       cpuValid = true;
       if (invalidateGpu)
          gpuValid = false;
+
       return cpu;
    }
-   inline u8 *getGpu(bool updateGpu,bool invalidateCpu)
+
+   inline u8 *getGpu(bool updateGpu,bool invalidateCpu, bool inNchw, Tensor *inTensor)
    {
       if (!gpu)
          gpu = gpuAlloc(size);
       if (updateGpu && !gpuValid && cpu && cpuValid)
-         gpuUpload(gpu, cpu, size);
+      {
+         if (inNchw!=cpuNchw)
+            gpuUploadConvert(gpu, cpu, size, inNchw, inTensor);
+         else
+            gpuUpload(gpu, cpu, size);
+      }
       gpuValid = true;
       if (invalidateCpu)
          cpuValid = false;
+      gpuNchw = inNchw;
       return (u8 *)gpu;
    }
 
@@ -158,13 +179,15 @@ class Tensor
       Tensor(int inType, const Shape &inShape);
 
       #ifdef NX_GPU
-      const inline u8 *cpuRead() { return data->getCpu(true,false); }
-      inline       u8 *cpuWrite() { return data->getCpu(false,true); }
-      inline       u8 *cpuWritePart() { return data->getCpu(true,true); }
+      const inline bool isGpuNchw() { return data->gpuNchw; }
+      const inline u8 *cpuRead(bool inNchw=false) { return data->getCpu(true,false,inNchw,this); }
+      inline       u8 *cpuWrite(bool inNchw=false) { return data->getCpu(false,true,inNchw,this); }
+      inline       u8 *cpuWritePart(bool inNchw=false) { return data->getCpu(true,true,inNchw,this); }
 
-      const inline u8 *gpuRead() { return data->getGpu(true,false); }
-      inline       u8 *gpuWrite() { return data->getGpu(false,true); }
+      const inline u8 *gpuRead(bool inNchw=false) { return data->getGpu(true,false,inNchw,this); }
+      inline       u8 *gpuWrite(bool inNchw=false) { return data->getGpu(false,true,inNchw,this); }
       #else
+      const inline bool isGpuNchw() { return false; }
       const inline u8 *cpuRead() { return data->getCpu(); }
       inline       u8 *cpuWrite() { return data->getCpu(); }
       inline       u8 *cpuWritePart() { return data->getCpu(); }
@@ -195,6 +218,9 @@ class Tensor
       int decRef();
 
       static Tensor *makeBuffer(Tensor *inBuffer, int inW, int inH, int inChannels, int inType);
+
+      void convertToNchw(u8 *outData, const u8 *inData);
+      void convertToNhwc(u8 *outData, const u8 *inData);
 
    protected:
       TensorData  *data;
