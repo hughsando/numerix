@@ -82,7 +82,6 @@ typedef unsigned char u8;
 
 class TensorData
 {
- public:
    u8  *cpu;
    #ifdef NX_GPU
    GpuData *gpu;
@@ -93,6 +92,7 @@ class TensorData
    #endif
    int size;
 
+ public:
    inline TensorData(int inSize) :
        size(inSize), cpu(0), refCount(1)
    {
@@ -108,6 +108,13 @@ class TensorData
    }
 
    #ifdef NX_GPU
+   bool isGpuNchw()
+   {
+      if (gpuValid)
+         return gpuNchw;
+      return cpuNchw;
+   }
+
    inline u8 *getCpu(bool updateCpu, bool invalidateGpu, bool inNchw, Tensor *inTensor)
    {
       if (!cpu)
@@ -119,8 +126,9 @@ class TensorData
             gpuDownloadConvert(cpu, gpu, size, inNchw, inTensor);
          else
             gpuDownload(cpu, gpu, size);
-         cpuNchw = inNchw;
       }
+      cpuNchw = inNchw;
+
       cpuValid = true;
       if (invalidateGpu)
          gpuValid = false;
@@ -179,7 +187,7 @@ class Tensor
       Tensor(int inType, const Shape &inShape);
 
       #ifdef NX_GPU
-      const inline bool isGpuNchw() { return data->gpuNchw; }
+      const inline bool isGpuNchw() { return data->isGpuNchw(); }
       const inline u8 *cpuRead(bool inNchw=false) { return data->getCpu(true,false,inNchw,this); }
       inline       u8 *cpuWrite(bool inNchw=false) { return data->getCpu(false,true,inNchw,this); }
       inline       u8 *cpuWritePart(bool inNchw=false) { return data->getCpu(true,true,inNchw,this); }
@@ -188,12 +196,12 @@ class Tensor
       inline       u8 *gpuWrite(bool inNchw=false) { return data->getGpu(false,true,inNchw,this); }
       #else
       const inline bool isGpuNchw() { return false; }
-      const inline u8 *cpuRead() { return data->getCpu(); }
-      inline       u8 *cpuWrite() { return data->getCpu(); }
-      inline       u8 *cpuWritePart() { return data->getCpu(); }
+      const inline u8 *cpuRead(bool x=false) { return data->getCpu(); }
+      inline       u8 *cpuWrite(bool x=false) { return data->getCpu(); }
+      inline       u8 *cpuWritePart(bool x=false) { return data->getCpu(); }
 
-      const inline u8 *gpuRead() { return 0; }
-      inline       u8 *gpuWrite() { return 0; }
+      const inline u8 *gpuRead(bool x=false) { return 0; }
+      inline       u8 *gpuWrite(bool x=false) { return 0; }
       #endif
 
       void print(int inMaxElems);
@@ -207,6 +215,8 @@ class Tensor
       Tensor *reorder(const std::vector<int> &order);
       Tensor *cropAndScale(int inWidth, int inHeight, Tensor *inBuffer = 0);
 
+      int   getByteCount() const { return elementCount * elementSize; }
+
       int    getIntAt(int inIndex);
       double getFloatAt(int inIndex);
 
@@ -219,8 +229,8 @@ class Tensor
 
       static Tensor *makeBuffer(Tensor *inBuffer, int inW, int inH, int inChannels, int inType);
 
-      void convertToNchw(u8 *outData, const u8 *inData);
-      void convertToNhwc(u8 *outData, const u8 *inData);
+      void convertToNchw(u8 *outData, const u8 *inData) const;
+      void convertToNhwc(u8 *outData, const u8 *inData) const;
 
    protected:
       TensorData  *data;

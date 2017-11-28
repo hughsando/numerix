@@ -14,6 +14,9 @@
 namespace numerix
 {
 
+bool preferNchw = true;
+cudnnTensorFormat_t preferredFormat  = CUDNN_TENSOR_NCHW;
+
 enum Init
 {
    initNone,
@@ -52,6 +55,8 @@ void cudaCheck(cudaError_t status)
 
 void cudnnCheck(cudnnStatus_t  status)
 {
+   if (status!=CUDNN_STATUS_SUCCESS)
+      TensorThrow( cudnnGetErrorString(status) );
 }
 
 
@@ -177,7 +182,6 @@ class CudaConv2D : public Layer
    Padding    padding;
    Tensor     *weights;
    Tensor     *bias;
-   bool       weightsDirty;
 
    cudnnTensorDescriptor_t srcDesc;
    cudnnTensorDescriptor_t destDesc;
@@ -220,7 +224,6 @@ public:
 
       weights = inWeights->incRef();
       bias = inBias ? inBias->incRef() : 0;
-      weightsDirty = true;
 
       cudnnCheck( cudnnCreateTensorDescriptor(&srcDesc) );
       cudnnCheck( cudnnCreateTensorDescriptor(&destDesc) );
@@ -321,7 +324,6 @@ public:
          b[i] -= mean[i]*Ki;
       }
 
-      weightsDirty = true;
    }
 
    virtual Tensor *run(Tensor *inSrc0, Tensor *inBuffer)
@@ -358,10 +360,16 @@ public:
 
 
 
-      cudnnCheck( cudnnSetTensor4dDescriptor(srcDesc, CUDNN_TENSOR_NHWC, CUDNN_DATA_FLOAT, 1, sin[2], sin[0], sin[1]) );
-      cudnnCheck( cudnnSetTensor4dDescriptor(destDesc, CUDNN_TENSOR_NHWC, CUDNN_DATA_FLOAT, 1, outputs, destH, destW) );
+      // Load source according to what it is ...
+      bool srcNchw = preferNchw; //inSrc0->isGpuNchw();
+      cudnnCheck( cudnnSetTensor4dDescriptor(srcDesc, srcNchw ? CUDNN_TENSOR_NCHW : CUDNN_TENSOR_NHWC, CUDNN_DATA_FLOAT, 1, sin[2], sin[0], sin[1]) );
+
+      // Dest according to preference...
+      cudnnCheck( cudnnSetTensor4dDescriptor(destDesc, preferredFormat, CUDNN_DATA_FLOAT, 1, outputs, destH, destW) );
+
+      // Weight according to preference...
       #ifdef NEW_CUDNN
-      cudnnCheck( cudnnSetFilter4dDescriptor(weightDesc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NHWC, outputs, inputs, filterY, filterX) );
+      cudnnCheck( cudnnSetFilter4dDescriptor(weightDesc, CUDNN_DATA_FLOAT, preferredFormat, outputs, inputs, filterY, filterX) );
       #else
       cudnnCheck( cudnnSetFilter4dDescriptor(weightDesc, CUDNN_DATA_FLOAT, outputs, inputs, filterY, filterX) );
       #endif
@@ -392,22 +400,23 @@ public:
       cudnnConvolutionForward(cudnnHandle,
                 &alpha,
                 srcDesc,
-                inSrc0->gpuRead(),
+                inSrc0->gpuRead(srcNchw),
                 weightDesc,
-                weights->gpuRead(),
+                weights->gpuRead(preferNchw),
                 convDesc,
                 algo,
                 workspace,
                 workSize,
                 &beta,
                 destDesc,
-                result->gpuWrite() );
+                result->gpuWrite(preferNchw) );
 
       // TODO - cudnnConvolutionBiasActivationForward, but what is z for?
 
       if (bias)
       {
-         cudnnCheck( cudnnSetTensor4dDescriptor(biasDesc, CUDNN_TENSOR_NHWC, CUDNN_DATA_FLOAT, 1, outputs, 1, 1) );
+         // Bias according to preference - no need to re-order
+         cudnnCheck( cudnnSetTensor4dDescriptor(biasDesc, preferredFormat, CUDNN_DATA_FLOAT, 1, outputs, 1, 1) );
 
          beta = 1;
          cudnnAddTensor( cudnnHandle,
@@ -419,7 +428,7 @@ public:
                         bias->gpuRead(),
                         &beta,
                         destDesc,
-                        result->gpuWrite() );
+                        result->gpuWrite(preferNchw) );
       }
 
       if (activation==actLeaky)
@@ -434,13 +443,13 @@ public:
                          activationOp,
                          &alpha1,
                          destDesc,
-                         result->gpuRead(),
+                         result->gpuRead(preferNchw),
                          &alpha2,
                          destDesc,
-                         result->gpuRead(),
+                         result->gpuRead(preferNchw),
                          &beta,
                          destDesc,
-                         result->gpuWrite() ) );
+                         result->gpuWrite(preferNchw) ) );
          #endif
       }
       else if (activation==actRelu || activation==actSigmoid)
@@ -455,10 +464,10 @@ public:
                        #endif
                        &alpha,
                        destDesc,
-                       result->gpuRead(),
+                       result->gpuRead(preferNchw),
                        &beta,
                        destDesc,
-                       result->gpuWrite() ) );
+                       result->gpuWrite(preferNchw) ) );
       }
 
       return result;
@@ -562,8 +571,8 @@ public:
       if (!match)
          result = new Tensor( Float32, Shape3(destH, destW, channels ) );
 
-      cudnnCheck( cudnnSetTensor4dDescriptor(srcDesc, CUDNN_TENSOR_NHWC, CUDNN_DATA_FLOAT, 1, channels, srcH, srcW) );
-      cudnnCheck( cudnnSetTensor4dDescriptor(destDesc, CUDNN_TENSOR_NHWC, CUDNN_DATA_FLOAT, 1, channels, destH, destW) );
+      cudnnCheck( cudnnSetTensor4dDescriptor(srcDesc, preferredFormat, CUDNN_DATA_FLOAT, 1, channels, srcH, srcW) );
+      cudnnCheck( cudnnSetTensor4dDescriptor(destDesc, preferredFormat, CUDNN_DATA_FLOAT, 1, channels, destH, destW) );
 
 
       float alpha = 1;
@@ -572,10 +581,10 @@ public:
                     poolingDesc,
                     &alpha,
                     srcDesc,
-                    inSrc0->gpuRead(),
+                    inSrc0->gpuRead(preferNchw),
                     &beta,
                     destDesc,
-                    result->gpuWrite() ) );
+                    result->gpuWrite(preferNchw) ) );
 
       return result;
    }

@@ -44,16 +44,29 @@ public:
 
       Tensor *result = Tensor::makeBuffer(inBuffer, srcW, srcH, channels, inSrc0->type);
 
-      src0 = inSrc0;
-      src1 = inSrc1;
-      destTensor = result;
-      src0->cpuRead();
-      src1->cpuRead();
-      destTensor->cpuWrite();
+      bool nchw = inSrc0->isGpuNchw();
+      if (nchw)
+      {
+         u8 *d = result->cpuWrite(nchw);
+         memcpy(d, inSrc0->cpuRead(nchw), inSrc0->getByteCount() );
+         d += inSrc0->getByteCount();
+         memcpy(d, inSrc1->cpuRead(nchw), inSrc1->getByteCount() );
+      }
+      else
+      {
+         src0 = inSrc0;
+         src1 = inSrc1;
+         destTensor = result;
 
-      runThreaded();
-      src0 = 0;
-      destTensor = 0;
+         // Prep in single-thread mode
+         src0->cpuRead(nchw);
+         src1->cpuRead(nchw);
+         destTensor->cpuWrite(nchw);
+
+         runThreaded();
+         src0 = 0;
+         destTensor = 0;
+      }
 
       return result;
    }

@@ -446,7 +446,7 @@ Tensor *Tensor::reorder(const std::vector<int> &order)
 
 
 
-void Tensor::convertToNchw(u8 *d, const u8 *src)
+void Tensor::convertToNchw(u8 *d, const u8 *src) const
 {
    int s = shape.size();
    if (s<3)
@@ -456,6 +456,8 @@ void Tensor::convertToNchw(u8 *d, const u8 *src)
    for(int i=0;i<s;i++)
       order.push_back(i);
    std::swap( order[s-3], order[s-1] );
+
+   //printf("convertToNchw %dx%dx%dx%d\n", s==4 ? shape[0] : 0, shape[s-3], shape[s-2], shape[s-1] );
 
    switch(type)
    {
@@ -472,18 +474,20 @@ void Tensor::convertToNchw(u8 *d, const u8 *src)
    }
 }
 
-void Tensor::convertToNhwc(u8 *d, const u8 *src)
+void Tensor::convertToNhwc(u8 *d, const u8 *src) const
 {
    int s = shape.size();
    if (s<3)
       return;
+
+   //printf("convertToNhwc %dx%dx%dx%d\n", s==4 ? shape[0] : 0, shape[s-3], shape[s-2], shape[s-1] );
    Shape srcShape = shape;
    std::swap( srcShape[s-3], srcShape[s-1] );
    Shape srcStrides = strides;
    int stride = 1;
    for(int i=s-1;i>=0;i--)
    {
-      strides[i] = stride;
+      srcStrides[i] = stride;
       stride *= srcShape[i];
    }
 

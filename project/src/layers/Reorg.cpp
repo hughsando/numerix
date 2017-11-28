@@ -12,7 +12,9 @@ class Reorg : public Layer
 {
    int stride;
 
-   std::vector<int> from;
+   std::vector<int> fromNhwc;
+   std::vector<int> fromNchw;
+
    int srcW;
    int srcH;
    int srcChannels;
@@ -53,8 +55,12 @@ public:
 
       src0 = inSrc0;
       destTensor = result;
-      src0->cpuRead();
-      destTensor->cpuWrite();
+
+      bool nchw = src0->isGpuNchw();
+
+      // Perform conversion while single-threaded
+      src0->cpuRead(nchw);
+      destTensor->cpuWrite(nchw);
       runThreaded();
       src0 = 0;
       destTensor = 0;
@@ -102,15 +108,22 @@ public:
       reorg_cpu(&srcIdx[0], srcW, srcH, srcChannels, stride, &out[0]);
 
       // Push the channel-major results to numerix order
-      from.resize(n);
+      fromNhwc.resize(n);
       idx = 0;
       for(int c=0;c<destChannels;c++)
          for(int y=0;y<destH;y++)
             for(int x=0;x<destW;x++)
             {
                // Write numerix src index...
-               from[y*destW*destChannels + x*destChannels + c ]  = out[idx++];
+               fromNhwc[y*destW*destChannels + x*destChannels + c ]  = out[idx++];
             }
+
+      #ifdef NX_GPU
+      for(int i=0;i<n;i++)
+         srcIdx[i] = i;
+      fromNchw.resize(n);
+      reorg_cpu(&srcIdx[0], srcW, srcH, srcChannels, stride, &fromNchw[0]);
+      #endif
    }
 
    Tensor *destTensor;
@@ -123,8 +136,10 @@ public:
 
    void runThreadMulti(int threadId)
    {
-      const int *srcP = (const int *)src0->cpuRead();
-      int *destP = (int *)destTensor->cpuWrite();
+      bool nchw = src0->isGpuNchw();
+
+      const int *srcP = (const int *)src0->cpuRead(nchw);
+      int *destP = (int *)destTensor->cpuWrite(nchw);
       int rowLen = destW*destChannels;
 
       while(true)
@@ -134,7 +149,7 @@ public:
             break;
 
          int offset = y*rowLen;
-         const int *f = &from[offset];
+         const int *f = nchw ? &fromNchw[offset] : &fromNhwc[offset];
          int *d = destP + offset;
          for(int i=0;i<rowLen;i++)
             d[i] = srcP[f[i]];
