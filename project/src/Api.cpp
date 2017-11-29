@@ -678,7 +678,14 @@ DEFINE_PRIME3(layCreateMaxPool);
 
 value layCreateConcat()
 {
-   Layer *layer = Layer::createConcat();
+   Layer *layer = 0;
+   #ifdef NX_GPU
+   if (gpuInit())
+      layer = gpuCreateConcat();
+   else
+   #endif
+      layer = Layer::createConcat();
+
    return allocLayer(layer);
 }
 DEFINE_PRIME0(layCreateConcat);

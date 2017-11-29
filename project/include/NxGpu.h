@@ -30,6 +30,8 @@ Layer *gpuCreateMaxPool(int inSizeX, int inSizeY,
                        int inStrideY, int inStrideX,
                        Padding padding);
 
+Layer *gpuCreateConcat();
+
 } // end namespace numerix
 
 

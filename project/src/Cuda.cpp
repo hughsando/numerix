@@ -575,6 +575,55 @@ Layer *gpuCreateMaxPool(int sizeX, int sizeY,
 
 
 
+class CudaConcat : public Layer
+{
+public:
+   CudaConcat( ) { }
+
+
+   Tensor *run(Tensor *inSrc0, Tensor *inSrc1, Tensor *inBuffer)
+   {
+      if (inSrc0->type != inSrc1->type)
+         TensorThrow("Concat - input types must match");
+
+      CShape sin0 = inSrc0->shape;
+      CShape sin1 = inSrc1->shape;
+      if (sin0.size()!=3 || sin1.size()!=3)
+         TensorThrow("Concat only supports H*W*C tensors");
+
+      if (sin0[0]!=sin1[0] || sin0[0]!=sin1[0])
+         TensorThrow("Concat - mismatch image sizes");
+
+      int srcH = sin0[0];
+      int srcW = sin0[1];
+      int c0 = sin0[2];
+      int c1 = sin1[2];
+      int channels = c0 + c1;
+      //printf("Concat -> %d %d %d\n", srcW, srcH, channels);
+
+      Tensor *result = Tensor::makeBuffer(inBuffer, srcW, srcH, channels, inSrc0->type);
+
+      const u8 *s0 = inSrc0->gpuRead(true);
+      const u8 *s1 = inSrc1->gpuRead(true);
+
+      u8 *d = result->gpuWrite(true);
+
+      cudaMemcpy(d, s0, inSrc0->getByteCount(), cudaMemcpyDeviceToDevice );
+
+      d += inSrc0->getByteCount();
+      cudaMemcpy(d, s1, inSrc1->getByteCount(), cudaMemcpyDeviceToDevice );
+
+      return result;
+   }
+};
+
+Layer *gpuCreateConcat()
+{
+   return new CudaConcat();
+}
+
+
+
 
 
 
