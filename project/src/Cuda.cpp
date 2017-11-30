@@ -5,6 +5,8 @@
 #include <cublas_v2.h>
 #include <cudnn.h>
 
+#include <NxThread.h>
+
 #if CUDNN_VERSION < 3000
   #define OLD_CUDNN
 #else
@@ -670,6 +672,7 @@ class CudaYoloLayer : public Layer
    int classCount;
    float thresh;
    Boxes boxes;
+   std::vector<Boxes> boxbuffers;
    cudnnTensorDescriptor_t softDesc;
 
 
@@ -727,16 +730,48 @@ public:
          input += classBytes;
       }
 
-      // Read channel-monir format ..
-      const float *src = (const float *)softMaxxed->cpuRead(false);
+      // Read channel-minor format ..
+      src = (const float *)softMaxxed->cpuRead(false);
+      srcW = w;
+      srcH = h;
+      boxbuffers.resize( GetWorkerCount() );
+      runThreaded();
+      src = 0;
 
+      boxes = boxbuffers[0];
+      for(int i=1;i<boxbuffers.size();i++)
+      {
+         Boxes &b = boxbuffers[i];
+         for(int j=0;j<b.size();j++)
+            boxes.push_back(b[j]);
+      }
+      SortBoxes(boxes);
+
+      return softMaxxed;
+
+   }
+
+   const float *src;
+   int srcW;
+   int srcH;
+
+   void runThread(int threadId)
+   {
+      Boxes &boxen = boxbuffers[threadId];
+      boxen.resize(0);
 
       int boxSize = 4 + 1 + classCount;
-      for(int y=0;y<h;y++)
+
+      while(true)
       {
-         for(int x=0;x<w;x++)
+         int y = getNextJob();
+         if (y>=srcH)
+            break;
+
+         for(int x=0;x<srcW;x++)
          {
-            const float *predictions = src + (y*w + x) * channels;
+            const float *predictions = src + (y*srcW + x) * boxSize*boxCount;
+
             for(int b=0;b<boxCount;b++)
             {
                const float *box = predictions;
@@ -760,21 +795,18 @@ public:
                   BBox bbox;
                   bbox.classId = foundClass;
                   bbox.prob = prob;
-                  bbox.x = (x + logistic_activate(box[0]))/w;
-                  bbox.y = (y + logistic_activate(box[1]))/h;
-                  bbox.w = exp(box[2]) * anchors[2*b] / w;
-                  bbox.h = exp(box[3]) * anchors[2*b+1] / h;
-                  boxes.push_back(bbox);
+                  bbox.x = (x + logistic_activate(box[0]))/srcW;
+                  bbox.y = (y + logistic_activate(box[1]))/srcH;
+                  bbox.w = exp(box[2]) * anchors[2*b] / srcW;
+                  bbox.h = exp(box[3]) * anchors[2*b+1] / srcH;
+
+                  boxen.push_back(bbox);
                }
 
                predictions += boxSize;
             }
          }
       }
-
-      SortBoxes(boxes);
-
-      return softMaxxed;
    }
 
    void getBoxes(Boxes &outBoxes) { outBoxes = boxes; }
