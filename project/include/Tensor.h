@@ -213,6 +213,7 @@ class Tensor
       void print(int inMaxElems);
       void fill(int inType, const u8 *inData, int inOffsetElem,  unsigned int inCount);
       void zero(int inOffsetElem, unsigned int inCount);
+      void zero();
       void setInt32(int inValue, int inOffsetElem, unsigned int inCount);
       void setFloat64(double inValue, int inOffsetElem, unsigned int inCount);
 
@@ -220,6 +221,7 @@ class Tensor
       void setShape(CShape inShape);
       Tensor *reorder(const std::vector<int> &order);
       Tensor *cropAndScale(int inWidth, int inHeight, Tensor *inBuffer = 0);
+      Tensor *resizeAxis(int inAxis, int inNewSize,int inDataPos=0);
 
       int   getByteCount() const { return elementCount * elementSize; }
 

@@ -57,7 +57,11 @@ public:
       destTensor = result;
 
       bool nchw = src0->isGpuNchw();
-      if (nchw && false)
+      if (true)
+      {
+         result->zero();
+      }
+      else if (nchw && false)
       {
          reorg_cpu((int *)src0->cpuRead(nchw),  srcW, srcH, srcChannels, stride, (int *)destTensor->cpuWrite(nchw) );
       }

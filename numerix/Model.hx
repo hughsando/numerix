@@ -64,7 +64,7 @@ class Model
       #end
 
       if (modelname.endsWith(".cfg"))
-         return new numerix.darknet.Model(modelname);
+         return new numerix.darknet.Model(modelname,true);
 
       throw "Could not deduce model type from filename";
       return null;

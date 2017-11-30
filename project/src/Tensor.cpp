@@ -3,6 +3,9 @@
 
 #include <stdexcept>
 
+#undef min
+#undef max
+
 #define LOW_SENTINEL  67
 #define HIGH_SENTINEL 68
 
@@ -230,6 +233,80 @@ void Tensor::setShape(CShape inShape)
 }
 
 
+Tensor *Tensor::resizeAxis(int inAxis, int inNewSize, int inDataPos)
+{
+   Shape s = shape;
+   if (inAxis<0 || s.size()<inAxis)
+      TensorThrow("resizeAxis - axis out of bounds");
+
+   int srcSize = shape[inAxis];
+   s[inAxis] = inNewSize;
+
+   Tensor *result = new Tensor( type, s );
+
+   int chunkCount = 1;
+   for(int i=0;i<inAxis;i++)
+      chunkCount *= s[i];
+
+   int srcChunkSize = elementSize;
+   int destChunkSize = elementSize;
+   for(int i=inAxis;i<s.size();i++)
+   {
+      srcChunkSize *= shape[i];
+      destChunkSize *= s[i];
+   }
+
+   const u8 *src = cpuRead();
+
+   int chunkSize = std::min(srcChunkSize, destChunkSize);
+   int leadingZeros = 0;
+   int trailingZeros = 0;
+
+   // ...leading zero...
+   // data
+   // ...trailing zero...
+
+   if (srcSize<inNewSize)
+   {
+      int s0 = inDataPos;
+      if (s0<0)
+         s0 = 0;
+      else if (s0 > inNewSize-srcSize)
+         s0 = inNewSize-srcSize;
+
+      leadingZeros = s0 * strides[inAxis] * elementSize;
+      trailingZeros = (inNewSize-srcSize-s0) * strides[inAxis] * elementSize;
+   }
+   else if (inNewSize<srcSize)
+   {
+      int s0 = inDataPos;
+      if (s0<0)
+         s0 = 0;
+      else if (s0+inNewSize>srcSize)
+         s0 = srcSize-inNewSize;
+
+      src += s0 * strides[inAxis] * elementSize;
+   }
+
+   u8 *dest = result->cpuWrite();
+
+   for(int c=0; c<chunkCount;c++)
+   {
+      if (leadingZeros)
+         memset(dest, 0, leadingZeros);
+
+      memcpy(dest+leadingZeros, src, chunkSize);
+
+      if (trailingZeros)
+         memset(dest+leadingZeros+chunkSize, 0, trailingZeros);
+
+      src += srcChunkSize;
+      dest += destChunkSize;
+   }
+
+   return result;
+}
+
 
 
 template<typename DEST,typename SRC>
@@ -291,6 +368,12 @@ void Tensor::zero(int inOffsetElem, unsigned int inCount)
 {
    memset( cpuWrite() + inOffsetElem*elementSize, 0, inCount*elementSize );
 }
+
+void Tensor::zero()
+{
+   zero(0,elementCount);
+}
+
 
 
 

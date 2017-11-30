@@ -25,6 +25,10 @@ class Test
       var trans = t.reorder([0,2,1]);
       Sys.println("After");
       trans.print();
+
+      var reduced = trans.resizeAxis(0,4,1);
+      Sys.println("Reduced");
+      reduced.print();
    }
 }
 

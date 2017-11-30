@@ -182,6 +182,8 @@ class CudaConv2D : public Layer
 
    Activation activation;
    Padding    padding;
+   bool       padInputsWithZero;
+   Tensor     *weightsOriginal;
    Tensor     *weights;
    Tensor     *bias;
 
@@ -205,6 +207,8 @@ public:
       strideX = inStrideX;
       activation = inActivation;
       padding = inPadding;
+      padInputsWithZero = false;
+      weightsOriginal = 0;
 
       // Output x Height x Width x Input
       CShape s = inWeights->shape;
@@ -272,6 +276,8 @@ public:
       #endif
 
 
+      if (weightsOriginal)
+         weightsOriginal->decRef();
       weights->decRef();
       if (bias)
          bias->decRef();
@@ -318,6 +324,26 @@ public:
 
    }
 
+   void reduceInputs(int inCount)
+   {
+      if (!weightsOriginal)
+         weightsOriginal = weights;
+      else
+         weights->decRef();
+
+      // take last ones ...
+      int skip = weightsOriginal->shape[3] - inCount;
+      weights = weightsOriginal->resizeAxis(3,inCount,skip);
+      inputs = inCount;
+   }
+
+   void setPadInput()
+   {
+      padInputsWithZero = true;
+   }
+
+
+
    virtual Tensor *run(Tensor *inSrc0, Tensor *inBuffer)
    {
       if (inSrc0->type != Float32)
@@ -326,6 +352,15 @@ public:
       CShape &sin = inSrc0->shape;
       if (sin.size()!=3)
          TensorThrow("Conv2D only supports H*W*C tensors");
+
+      if (sin[2]!=inputs && padInputsWithZero)
+      {
+         int maxIn = weightsOriginal ? weightsOriginal->shape[3] : inputs;
+         if (sin[2]>maxIn)
+            TensorThrow("Conv2D - too many inputs for the number of weights");
+         reduceInputs(sin[2]);
+      }
+
 
       if (sin[2]!=inputs)
       {

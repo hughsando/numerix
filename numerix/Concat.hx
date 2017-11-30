@@ -13,6 +13,20 @@ class Concat extends Layer
       handle = layCreateConcat();
    }
 
+   public function bypass(layer:Layer)
+   {
+      var slot = inputs.indexOf(layer);
+      if (!inputs.remove(layer))
+         throw "Concat bypass - layer not found " + layer;
+
+      if (!layer.outputs.remove(this))
+         throw "Concat bypass - bad outputs reference ";
+
+      var output = outputs[0];
+      unlink();
+      return output;
+   }
+
 
    override public function toString() return 'Concat($name)';
 

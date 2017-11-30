@@ -78,6 +78,8 @@ public:
 
    virtual void getBoxes(Boxes &outBoxes) { }
 
+   virtual void setPadInput() { }
+
    int getNextJob();
 
    float *allocFloats(int count,bool inZero=false);

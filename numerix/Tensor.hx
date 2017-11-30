@@ -134,6 +134,11 @@ abstract Tensor(Dynamic)
       tdSetShape(this,inShape);
    }
 
+   public function resizeAxis(inAxis:Int, inNewSize:Int, inDataPos = 0)
+   {
+      return new Tensor(tdResizeAxis(this, inAxis, inNewSize, inDataPos));
+   }
+
 
    public function getBytes():haxe.io.Bytes
    {
@@ -221,6 +226,7 @@ abstract Tensor(Dynamic)
    static var tdSetShape = Loader.load("tdSetShape","oov");
    static var tdAt = Loader.load("tdAt","oid");
    static var tdSetAt = Loader.load("tdSetAt","oidiv");
+   static var tdResizeAxis = Loader.load("tdResizeAxis","oiiio");
    //static var tdGetMinAxis = Loader.load("tdGetMin","ooo");
    //static var tdGetMaxAxis = Loader.load("tdGetMax","oio");
 

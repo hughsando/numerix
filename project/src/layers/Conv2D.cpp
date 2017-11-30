@@ -17,6 +17,7 @@ class Conv2D : public Layer
    int        inputs;
    int        outputs;
    int        diSize;
+   bool       padInputsWithZero;
 
    int        srcW;
    int        srcH;
@@ -27,6 +28,7 @@ class Conv2D : public Layer
 
    Activation activation;
    Padding    padding;
+   Tensor     *weightsOriginal;
    Tensor     *weights;
    Tensor     *pweights;
    Tensor     *bias;
@@ -55,6 +57,8 @@ public:
       activation = inActivation;
       padding = inPadding;
       diSize = 0;
+      padInputsWithZero = false;
+      weightsOriginal = 0;
 
       // Output x Height x Width x Input
       CShape s = inWeights->shape;
@@ -108,6 +112,13 @@ public:
 
       rebuildWeights();
    }
+
+
+   void setPadInput()
+   {
+      padInputsWithZero = true;
+   }
+
 
    void rebuildWeights()
    {
@@ -284,6 +295,8 @@ public:
 
    ~Conv2D()
    {
+      if (weightsOriginal)
+         weightsOriginal->decRef();
       weights->decRef();
       if (pweights)
          pweights->decRef();
@@ -291,8 +304,21 @@ public:
          bias->decRef();
    }
 
+   void reduceInputs(int inCount)
+   {
+      if (!weightsOriginal)
+         weightsOriginal = weights;
+      else
+         weights->decRef();
 
-   
+      // take last ones ...
+      int skip = weightsOriginal->shape[3] - inCount;
+      weights = weightsOriginal->resizeAxis(3,inCount,skip);
+      inputs = inCount;
+      rebuildWeights();
+   }
+
+
    virtual Tensor *run(Tensor *inSrc0, Tensor *inBuffer)
    {
       if (inSrc0->type != Float32)
@@ -301,6 +327,14 @@ public:
       CShape &sin = inSrc0->shape;
       if (sin.size()!=3)
          TensorThrow("Conv2D only supports H*W*C tensors");
+
+      if (sin[2]!=inputs && padInputsWithZero)
+      {
+         int maxIn = weightsOriginal ? weightsOriginal->shape[3] : inputs;
+         if (sin[2]>maxIn)
+            TensorThrow("Conv2D - too many inputs for the number of weights");
+         reduceInputs(sin[2]);
+      }
 
       if (sin[2]!=inputs)
       {

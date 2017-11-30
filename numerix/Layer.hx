@@ -42,6 +42,26 @@ class Layer
       handle = null;
    }
 
+   public function unlink()
+   {
+      if (inputs.length==1 && outputs.length==1)
+      {
+         var slot = inputs[0].outputs.indexOf(this);
+         if (slot<0)
+            throw "Bad unlink inputs slot";
+         inputs[0].outputs[slot] = outputs[0];
+
+         var slot = outputs[0].inputs.indexOf(this);
+         if (slot<0)
+            throw "Bad unlink outputs slot";
+         outputs[0].inputs[slot] = inputs[0];
+         inputs = [];
+         outputs = [];
+      }
+      else
+         throw "Complex unlink not implemented";
+   }
+
    public function setWeights(inWeights:Array<Tensor>)
    {
    }
@@ -96,9 +116,15 @@ class Layer
       return layGetBoxes(handle);
    }
 
+   public function padInputsWithZero()
+   {
+      laySetPadInput(handle);
+   }
+
    public function toString() return 'Layer($name)';
 
    static var layRun = Loader.load("layRun","oooo");
+   static var laySetPadInput = Loader.load("laySetPadInput","ov");
    static var layRelease = Loader.load("layRelease","ov");
    static var layGetBoxes = Loader.load("layGetBoxes","oo");
 }

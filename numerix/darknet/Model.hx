@@ -26,8 +26,9 @@ class Model extends numerix.Model
 {
    var transpose:Bool;
    var paramStack:Array<Params>;
+   var reorgLayer:Reorg = null;
 
-   public function new(filename:String)
+   public function new(filename:String, removeReorg = false)
    {
       super();
 
@@ -97,6 +98,18 @@ class Model extends numerix.Model
       }
 
       weights.close();
+
+      if (removeReorg && reorgLayer!=null )
+      {
+         var output = reorgLayer.outputs[0];
+         var concat:Concat = cast output;
+         if (concat!=null)
+         {
+            var output = concat.bypass(reorgLayer);
+            if (output!=null)
+               output.padInputsWithZero();
+         }
+      }
       outputLayer = current.layer;
    }
 
@@ -212,6 +225,7 @@ class Model extends numerix.Model
             var reorg =  new Reorg(config, params.layer);
             var w = idiv(params.w, stride);
             var h = idiv(params.h, stride);
+            reorgLayer = reorg;
             return new Params(w,h,params.channels*stride*stride, reorg);
 
          case "region" :

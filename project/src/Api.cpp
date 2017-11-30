@@ -506,6 +506,15 @@ void tdSetShape(value inTensor,value inShape)
 DEFINE_PRIME2v(tdSetShape)
 
 
+value tdResizeAxis(value inTensor,int inAxis, int inSize, int inDataPos)
+{
+   TO_TENSOR
+
+   return allocTensor( tensor->resizeAxis(inAxis, inSize, inDataPos) );
+}
+DEFINE_PRIME4(tdResizeAxis)
+
+
 
 
 void tdFillData(value inTensor, value outBuffer)
@@ -742,6 +751,12 @@ value layGetBoxes(value inLayer)
 }
 DEFINE_PRIME1(layGetBoxes);
 
+void laySetPadInput(value inLayer)
+{
+   TO_LAYER
+   layer->setPadInput();
+}
+DEFINE_PRIME1v(laySetPadInput);
 
 
 
