@@ -719,7 +719,13 @@ value layCreateYolo(value inAnchors, int inNum, int inClassCount)
    for(int i=0;i<anchors.size();i++)
       anchors[i] = val_number( val_array_i(inAnchors,i) );
 
-   Layer *layer = Layer::createYolo(anchors, inNum, inClassCount);
+   Layer *layer = 0;
+   #ifdef NX_GPU
+   if ( enableGpu && gpuInit())
+      layer = gpuCreateYolo(anchors, inNum, inClassCount,0.25);
+   else
+   #endif
+      layer = Layer::createYolo(anchors, inNum, inClassCount,0.25);
 
    return allocLayer(layer);
 }

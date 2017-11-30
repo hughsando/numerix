@@ -663,6 +663,128 @@ Layer *gpuCreateConcat()
 
 
 
+class CudaYoloLayer : public Layer
+{
+   std::vector<float> anchors;
+   int boxCount;
+   int classCount;
+   float thresh;
+   Boxes boxes;
+   cudnnTensorDescriptor_t softDesc;
+
+
+   inline float logistic_activate(float f) { return 1.0 / (1.0 + exp(-f)); }
+
+
+public:
+   CudaYoloLayer(const std::vector<float> &inAnchors,int inBoxCount, int inClassCount, float inThresh) :
+      anchors(inAnchors), boxCount(inBoxCount), classCount(inClassCount)
+   {
+      thresh = inThresh;
+
+      cudnnCheck( cudnnCreateTensorDescriptor(&softDesc) );
+   }
+   ~CudaYoloLayer()
+   {
+      cudnnDestroyTensorDescriptor(softDesc);
+   }
+
+   Tensor *run(Tensor *inSrc0, Tensor *inBuffer)
+   {
+      boxes.resize(0);
+      int h = inSrc0->shape[0];
+      int w = inSrc0->shape[1];
+      int channels = inSrc0->shape[2];
+      std::vector<float> softmaxBuf(classCount);
+
+      Tensor *softMaxxed = Tensor::makeBuffer(inBuffer, w, h, boxCount*(5+classCount), Float32);
+
+
+      // Gpu format will be channel-major arrays of:
+      //
+      //  [scale, bx, by, bw, bh,  c0, c1, ..... cN-1] * boxCount
+      const u8 *input = inSrc0->gpuRead(true);
+      u8 *dest  = softMaxxed->gpuWrite(true);
+
+      // We want to copy the box channels, and softmax the class channels
+      int boxBytes = 5*w*h*sizeof(float);
+      int classBytes = w*h*classCount*sizeof(float);
+
+      cudnnCheck( cudnnSetTensor4dDescriptor(softDesc, preferredFormat, CUDNN_DATA_FLOAT, 1, classCount, w, h) );
+
+      for(int b=0;b<boxCount;b++)
+      {
+         cudaMemcpy( dest, input, boxBytes, cudaMemcpyDeviceToDevice);
+         dest += boxBytes;
+         input += boxBytes;
+
+         float one = 1;
+         float zero = 0;
+         cudnnSoftmaxForward(cudnnHandle, CUDNN_SOFTMAX_ACCURATE, CUDNN_SOFTMAX_MODE_CHANNEL,
+            &one, softDesc, input, &zero, softDesc, dest);
+
+         dest += classBytes;
+         input += classBytes;
+      }
+
+      // Read channel-monir format ..
+      const float *src = (const float *)softMaxxed->cpuRead(false);
+
+
+      int boxSize = 4 + 1 + classCount;
+      for(int y=0;y<h;y++)
+      {
+         for(int x=0;x<w;x++)
+         {
+            const float *predictions = src + (y*w + x) * channels;
+            for(int b=0;b<boxCount;b++)
+            {
+               const float *box = predictions;
+               float scale = logistic_activate( predictions[4] );
+               const float *classes = predictions + 5;
+
+               int foundClass = -1;
+               float foundBest = 0;
+               for(int j=0;j<classCount;j++)
+               {
+                  if (classes[j]>foundBest)
+                  {
+                     foundClass = j;
+                     foundBest = classes[j];
+                  }
+               }
+               float prob = scale * foundBest;
+
+               if (prob>thresh)
+               {
+                  BBox bbox;
+                  bbox.classId = foundClass;
+                  bbox.prob = prob;
+                  bbox.x = (x + logistic_activate(box[0]))/w;
+                  bbox.y = (y + logistic_activate(box[1]))/h;
+                  bbox.w = exp(box[2]) * anchors[2*b] / w;
+                  bbox.h = exp(box[3]) * anchors[2*b+1] / h;
+                  boxes.push_back(bbox);
+               }
+
+               predictions += boxSize;
+            }
+         }
+      }
+
+      SortBoxes(boxes);
+
+      return softMaxxed;
+   }
+
+   void getBoxes(Boxes &outBoxes) { outBoxes = boxes; }
+};
+
+Layer *gpuCreateYolo(const std::vector<float> &inAnchors,int inBoxCount, int inClassCount, float inThresh)
+{
+   return new CudaYoloLayer(inAnchors, inBoxCount, inClassCount, inThresh);
+}
+
 
 
 

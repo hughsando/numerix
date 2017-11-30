@@ -43,12 +43,12 @@ class YoloLayer : public Layer
    }
 
 public:
-   YoloLayer(const std::vector<float> &inAnchors,int inBoxCount, int inClassCount) :
+   YoloLayer(const std::vector<float> &inAnchors,int inBoxCount, int inClassCount, float inThresh) :
       anchors(inAnchors), boxCount(inBoxCount), classCount(inClassCount)
    {
       dummy = new Tensor(Float32,Shape1(1));
       dummy->zero(0,1);
-      thresh = 0.24;
+      thresh = inThresh;
    }
    ~YoloLayer()
    {
@@ -106,24 +106,7 @@ public:
          }
       }
 
-      if (boxes.size()>1)
-      {
-         std::sort( boxes.begin(), boxes.end() );
-         for(int i=1;i<boxes.size(); /* */ )
-         {
-            bool overlap = false;
-            for(int j=0;j<i;j++)
-               if (boxes[i].overlaps(boxes[j]))
-               {
-                  overlap = true;
-                  break;
-               }
-            if (overlap)
-               boxes.erase( boxes.begin() + i );
-            else
-               i++;
-         }
-      }
+      SortBoxes(boxes);
 
       return dummy;
    }
@@ -139,9 +122,9 @@ public:
 
 
 
-Layer *Layer::createYolo(const std::vector<float> &inAnchors,int inBoxCount, int inClassCount)
+Layer *Layer::createYolo(const std::vector<float> &inAnchors,int inBoxCount, int inClassCount, float inThresh)
 {
-   return new YoloLayer(inAnchors, inBoxCount, inClassCount);
+   return new YoloLayer(inAnchors, inBoxCount, inClassCount, inThresh);
 }
 
 } // end namespace numerix

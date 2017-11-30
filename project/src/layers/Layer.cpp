@@ -48,4 +48,29 @@ void Layer::runThreaded(bool inDebug)
       RunWorkerTask( SRunThreaded, this );
 }
 
+
+void SortBoxes(Boxes &ioBoxes)
+{
+   if (ioBoxes.size()>1)
+   {
+      std::sort( ioBoxes.begin(), ioBoxes.end() );
+      for(int i=1;i<ioBoxes.size(); /* */ )
+      {
+         bool overlap = false;
+         for(int j=0;j<i;j++)
+            if (ioBoxes[i].overlaps(ioBoxes[j]))
+            {
+               overlap = true;
+               break;
+            }
+         if (overlap)
+            ioBoxes.erase( ioBoxes.begin() + i );
+         else
+            i++;
+      }
+   }
+}
+
+
+
 } // namespace numerix

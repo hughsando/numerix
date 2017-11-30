@@ -32,6 +32,8 @@ Layer *gpuCreateMaxPool(int inSizeX, int inSizeY,
 
 Layer *gpuCreateConcat();
 
+Layer *gpuCreateYolo(const std::vector<float> &inAnchors,int inBoxCount, int inClassCount, float inThresh);
+
 } // end namespace numerix
 
 

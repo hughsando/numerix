@@ -42,6 +42,8 @@ struct BBox
 
 typedef std::vector<BBox> Boxes;
 
+void SortBoxes(Boxes &ioBoxes);
+
 
 
 class Layer
@@ -64,7 +66,7 @@ public:
 
    static Layer *createReorg(int inStride);
 
-   static Layer *createYolo(const std::vector<float> &inAnchors,int inBoxCount, int inClassCount);
+   static Layer *createYolo(const std::vector<float> &inAnchors,int inBoxCount, int inClassCount, float inThresh);
 
 
    virtual ~Layer();
