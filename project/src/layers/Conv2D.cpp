@@ -326,7 +326,14 @@ public:
 
       CShape &sin = inSrc0->shape;
       if (sin.size()!=3)
+      {
+         printf("Conv2D %dx%dx%dx%d\n", outputs, filterY, filterX, inputs);
+         printf("Src dimension %d :", (int)sin.size());
+         for(int i=0;i<sin.size();i++)
+            printf(" %d", sin[i]);
+         printf("\n");
          TensorThrow("Conv2D only supports H*W*C tensors");
+      }
 
       if (sin[2]!=inputs && padInputsWithZero)
       {

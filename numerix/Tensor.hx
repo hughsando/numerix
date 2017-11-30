@@ -119,7 +119,7 @@ abstract Tensor(Dynamic)
    public function cropAndScale(w:Int,h:Int,?buffer:Tensor, inRelease = false):Tensor
    {
       var result = new Tensor(tdCropAndScale(this, w, h, buffer));
-      if (inRelease && buffer!=null)
+      if (inRelease && buffer!=null && buffer!=result)
          buffer.release();
       return result;
    }

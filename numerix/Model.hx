@@ -60,7 +60,7 @@ class Model
          return new numerix.keras.Model(modelname);
       #else
       if (modelname.endsWith(".h5"))
-         throw ".h5 files require hxhdf5 lib"
+         throw ".h5 files require hxhdf5 lib";
       #end
 
       if (modelname.endsWith(".cfg"))

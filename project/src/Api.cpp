@@ -566,6 +566,9 @@ value tdCropAndScale(value inTensor, int inWidth, int inHeight, value inBuffer)
 
    Tensor *result =  tensor->cropAndScale(inWidth, inHeight, buffer);
 
+   if (result==buffer)
+      return inBuffer;
+
    return allocTensor(result);
 }
 DEFINE_PRIME4(tdCropAndScale);

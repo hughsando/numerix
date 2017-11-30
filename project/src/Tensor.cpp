@@ -679,9 +679,35 @@ double Tensor::getMax()
 
 Tensor *Tensor::cropAndScale(int inWidth, int inHeight, Tensor *inBuffer)
 {
+   if (shape.size()!=3)
+      TensorThrow("cropAndScale - only images of dim 3 are supported");
+
    Tensor *buffer = makeBuffer(inBuffer, inWidth, inHeight, shape[2], type);
 
-   printf("TODO - cropAndScale %d %d %d\n", inWidth, inHeight, shape[2]);
+   if (type!=Float32)
+      TensorThrow("cropAndScale - only Float32 supported");
+
+   const float *srcImage = (const float *)cpuRead();
+   float *destImage = (float *)buffer->cpuWrite();
+   int sh = shape[0];
+   int sw = shape[1];
+   int channels = shape[2];
+
+   for(int y=0;y<inHeight;y++)
+   {
+      int sy = y*sh/inHeight;
+      const float *srcRow = srcImage + sy*strides[0];
+      float *dest = destImage + y*buffer->strides[0];
+
+      for(int x=0;x<inWidth;x++)
+      {
+         int sx = x*sw/inWidth;
+         const float *s = srcRow + sx*channels;
+         for(int c=0;c<channels;c++)
+            *dest++ = s[c];
+      }
+   }
+
 
    return buffer;
 }

@@ -111,7 +111,7 @@ class Layer
       return resultBuffer;
    }
 
-   public function getBoxes() : Array< {x:Float, y:Float, w:Float, h:Float, prob:Float, classId:Int} >
+   public function getBoxes() : Array< Box >
    {
       return layGetBoxes(handle);
    }
