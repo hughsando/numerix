@@ -112,11 +112,13 @@ void gpuFree(GpuData *inData)
 
 void gpuUpload(GpuData *buffer, const unsigned char *inData, int n)
 {
+   //printf("cpuDownload\n");
    cudaCheck( cudaMemcpy(buffer, inData, n, cudaMemcpyHostToDevice) );
 }
 
 void gpuDownload(unsigned char *buffer, const GpuData *inData, int n)
 {
+   //printf("gpuDownload\n");
    cudaCheck( cudaMemcpy(buffer, inData, n, cudaMemcpyDeviceToHost) );
 }
 
@@ -599,7 +601,7 @@ public:
       int c0 = sin0[2];
       int c1 = sin1[2];
       int channels = c0 + c1;
-      //printf("Concat -> %d %d %d\n", srcW, srcH, channels);
+      //printf("################### Concat -> %d %d %d\n", srcW, srcH, channels);
 
       Tensor *result = Tensor::makeBuffer(inBuffer, srcW, srcH, channels, inSrc0->type);
 
@@ -608,10 +610,11 @@ public:
 
       u8 *d = result->gpuWrite(true);
 
-      cudaMemcpy(d, s0, inSrc0->getByteCount(), cudaMemcpyDeviceToDevice );
+
+      cudaCheck( cudaMemcpy(d, s0, inSrc0->getByteCount(), cudaMemcpyDeviceToDevice ) );
 
       d += inSrc0->getByteCount();
-      cudaMemcpy(d, s1, inSrc1->getByteCount(), cudaMemcpyDeviceToDevice );
+      cudaCheck( cudaMemcpy(d, s1, inSrc1->getByteCount(), cudaMemcpyDeviceToDevice ) );
 
       return result;
    }

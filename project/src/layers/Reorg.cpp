@@ -57,32 +57,46 @@ public:
       destTensor = result;
 
       bool nchw = src0->isGpuNchw();
-
-      // Perform conversion while single-threaded
-      src0->cpuRead(nchw);
-      destTensor->cpuWrite(nchw);
-      runThreaded();
-      src0 = 0;
-      destTensor = 0;
+      if (nchw && false)
+      {
+         reorg_cpu((int *)src0->cpuRead(nchw),  srcW, srcH, srcChannels, stride, (int *)destTensor->cpuWrite(nchw) );
+      }
+      else
+      {
+         // Perform conversion while single-threaded
+         src0->cpuRead(nchw);
+         destTensor->cpuWrite(nchw);
+         runThreaded(true);
+         src0 = 0;
+         destTensor = 0;
+      }
 
       return result;
    }
 
-   void reorg_cpu(int *x, int w, int h, int c, int stride, int *out)
+   void reorg_cpu(const int *x, int smallW, int smallH, int smallChannels, int stride, int *out)
    {
       bool forward = false;
-      int b,i,j,k;
-      int out_c = c/(stride*stride);
 
-          for(k = 0; k < c; ++k){
-              for(j = 0; j < h; ++j){
-                  for(i = 0; i < w; ++i){
-                      int in_index  = i + w*(j + h*k);
-                      int c2 = k % out_c;
-                      int offset = k / out_c;
-                      int w2 = i*stride + offset % stride;
-                      int h2 = j*stride + offset / stride;
-                      int out_index = w2 + w*stride*(h2 + h*stride*c2);
+      int bigW = smallW * stride;
+      int bigH = smallH * stride;
+      int bigChannels = smallChannels/(stride*stride);
+
+          for(int ch = 0; ch < smallChannels; ++ch){
+              for(int sy = 0; sy < smallH; ++sy){
+                  for(int sx = 0; sx < smallW; ++sx){
+                      int in_index  = sx + smallW*(sy + smallH*ch);
+
+                      // Pull consecutive channels ...
+                      int bigChannel = ch % bigChannels;
+                      int offset = ch / bigChannels;
+                      // from a pattern like:  0 1
+                      //                       2 3
+                      int bigX = sx*stride + offset % stride;
+                      int bigY = sy*stride + offset / stride;
+
+                      int out_index = bigX + bigW*(bigY + bigH*bigChannel);
+
                       // not forwards
                       out[in_index] = x[out_index];
                   }
@@ -139,6 +153,7 @@ public:
       bool nchw = src0->isGpuNchw();
 
       const int *srcP = (const int *)src0->cpuRead(nchw);
+      int srcRow = src0->strides[0];
       int *destP = (int *)destTensor->cpuWrite(nchw);
       int rowLen = destW*destChannels;
 
@@ -149,10 +164,35 @@ public:
             break;
 
          int offset = y*rowLen;
-         const int *f = nchw ? &fromNchw[offset] : &fromNhwc[offset];
          int *d = destP + offset;
-         for(int i=0;i<rowLen;i++)
-            d[i] = srcP[f[i]];
+
+         if (false && !nchw)
+         {
+            // - this is not valid because the srcW/srcH is passed to reorg, not destW/destH
+            //
+            // The dest image size is smaller than src size, but has more channels
+            //  It concats 4 'stacks' of channels into 1 channel, pulled according to the high-res XY:
+            //  0 1
+            //  2 3
+            //
+            const int *src0 = srcP + srcRow*y*stride;
+            for(int x=0;x<destW;x++)
+            {
+               for(int dy=0;dy<stride;dy++)
+               {
+                  const int *sy = src0 + srcRow*dy;
+                  memcpy(d, sy, stride*srcChannels*sizeof(int));
+                  d+= srcChannels*stride;
+               }
+               src0 += stride*srcChannels;
+            }
+         }
+         else
+         {
+            const int *f = nchw ? &fromNchw[offset] : &fromNhwc[offset];
+            for(int i=0;i<rowLen;i++)
+               d[i] = srcP[f[i]];
+         }
       }
    }
 };

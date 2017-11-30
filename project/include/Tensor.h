@@ -120,7 +120,7 @@ class TensorData
       if (!cpu)
          cpu = allocCpuAligned(size);
 
-      if (updateCpu && !cpuValid && gpuValid && gpu)
+      if (updateCpu && (!cpuValid || cpuNchw!=inNchw) && gpuValid && gpu)
       {
          if (inNchw!=gpuNchw)
             gpuDownloadConvert(cpu, gpu, size, inNchw, inTensor);
@@ -147,12 +147,16 @@ class TensorData
          else
             gpuUpload(gpu, cpu, size);
       }
+
+      if (gpuValid && inNchw!=gpuNchw)
+         TensorThrow("GPU format mismatch");
       gpuValid = true;
       if (invalidateCpu)
          cpuValid = false;
       gpuNchw = inNchw;
       return (u8 *)gpu;
    }
+   u8 *getGpuRaw() { return (u8*)gpu; }
 
    #else
    inline u8 *getCpu()
@@ -194,6 +198,7 @@ class Tensor
 
       const inline u8 *gpuRead(bool inNchw=false) { return data->getGpu(true,false,inNchw,this); }
       inline       u8 *gpuWrite(bool inNchw=false) { return data->getGpu(false,true,inNchw,this); }
+      inline       u8 *gpuGetRaw() { return data->getGpuRaw(); }
       #else
       const inline bool isGpuNchw() { return false; }
       const inline u8 *cpuRead(bool x=false) { return data->getCpu(); }
@@ -202,6 +207,7 @@ class Tensor
 
       const inline u8 *gpuRead(bool x=false) { return 0; }
       inline       u8 *gpuWrite(bool x=false) { return 0; }
+      inline       u8 *gpuGetRaw() { return 0; }
       #endif
 
       void print(int inMaxElems);

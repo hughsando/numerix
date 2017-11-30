@@ -16,6 +16,8 @@ vkind dataKind;
 vkind tensorKind;
 vkind layerKind;
 
+bool enableGpu = true;
+
 
 static int _id_name;
 static int _id_type;
@@ -607,7 +609,7 @@ value layCreateConv2D(value inStrides, int inActivation, int inPadding, value in
    Activation activation = (Activation)inActivation;
    Padding padding = (Padding)inPadding;
    #ifdef NX_GPU
-   if (!pweights && gpuInit())
+   if (enableGpu && !pweights && gpuInit())
       layer = gpuCreateConv2D(sx,sy, activation, padding, weights, bias);
    else
    #endif
@@ -664,7 +666,7 @@ value layCreateMaxPool(value inSize, value inStrides, int inPadding)
    Layer *layer = 0;
    Padding padding = (Padding)inPadding;
    #ifdef NX_GPU
-   if (gpuInit())
+   if (enableGpu && gpuInit())
       layer = gpuCreateMaxPool(sx, sy, stepX, stepY, padding);
    else
    #endif
@@ -680,7 +682,7 @@ value layCreateConcat()
 {
    Layer *layer = 0;
    #ifdef NX_GPU
-   if (gpuInit())
+   if ( enableGpu && gpuInit())
       layer = gpuCreateConcat();
    else
    #endif

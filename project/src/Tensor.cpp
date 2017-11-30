@@ -449,13 +449,15 @@ Tensor *Tensor::reorder(const std::vector<int> &order)
 void Tensor::convertToNchw(u8 *d, const u8 *src) const
 {
    int s = shape.size();
-   if (s<3)
-      return;
-   Shape srcShape = shape;
    Shape order;
-   for(int i=0;i<s;i++)
-      order.push_back(i);
-   std::swap( order[s-3], order[s-1] );
+   Shape srcShape = shape;
+
+   if (s==3)
+      order = Shape3(2,0,1);
+   else if (s==4)
+      order = Shape4(0,3,1,2);
+   else
+      TensorThrow("NCHW conversion - bad size");
 
    //printf("convertToNchw %dx%dx%dx%d\n", s==4 ? shape[0] : 0, shape[s-3], shape[s-2], shape[s-1] );
 
@@ -477,12 +479,23 @@ void Tensor::convertToNchw(u8 *d, const u8 *src) const
 void Tensor::convertToNhwc(u8 *d, const u8 *src) const
 {
    int s = shape.size();
-   if (s<3)
-      return;
+   Shape srcShape;
+   Shape order;
+   if (s==3)
+   {
+      srcShape = Shape3( shape[2], shape[0], shape[1] );
+      order  = Shape3( 1, 2, 0 );
+   }
+   else if (s==4)
+   {
+      srcShape = Shape4( shape[0], shape[3], shape[1], shape[2] );
+      order  = Shape4( 0, 2, 3, 1 );
+   }
+   else
+      TensorThrow("NHWC conversion - bad size");
 
-   //printf("convertToNhwc %dx%dx%dx%d\n", s==4 ? shape[0] : 0, shape[s-3], shape[s-2], shape[s-1] );
-   Shape srcShape = shape;
-   std::swap( srcShape[s-3], srcShape[s-1] );
+
+   //printf("convertToNhwc %dx%dx%dx%d\n", s==4 ? srcShape[0] : 0, srcShape[s-3], srcShape[s-2], srcShape[s-1] );
    Shape srcStrides = strides;
    int stride = 1;
    for(int i=s-1;i>=0;i--)
@@ -490,11 +503,6 @@ void Tensor::convertToNhwc(u8 *d, const u8 *src) const
       srcStrides[i] = stride;
       stride *= srcShape[i];
    }
-
-   Shape order;
-   for(int i=0;i<s;i++)
-      order.push_back(i);
-   std::swap( order[s-3], order[s-1] );
 
    switch(type)
    {

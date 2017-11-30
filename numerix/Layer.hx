@@ -86,7 +86,7 @@ class Layer
       }
 
       //if ( resultBuffer.channels>0)
-      //   println( resultBuffer + "=" + resultBuffer[0] + "..." + resultBuffer[resultBuffer.channels]);
+      //   println( resultBuffer + "=" + resultBuffer[0] + "..." + resultBuffer[resultBuffer.channels] + " " + resultBuffer[1]);
 
       return resultBuffer;
    }
