@@ -19,12 +19,14 @@ class Main extends Sprite
    var timeField:TextField;
    var labelFormat:TextFormat;
    var colours:Array<Int>;
+   var mirror:Bool;
 
    public function new()
    {
       var modelName = "";
 
       var args = Sys.args();
+      mirror = args.remove("-mirror") || args.remove("-m");
       if (args.length>0)
          modelName = args[0];
       else if (Sys.getEnv("MODEL")!=null)
@@ -49,11 +51,14 @@ class Main extends Sprite
 
       labelFormat = new TextFormat();
       labelFormat.color = 0xff00ff;
-      labelFormat.size = 12;
+      labelFormat.size = 14;
+      labelFormat.bold = true;
+      labelFormat.font = "_sans";
 
       detector = new Detector(this,modelName);
 
-      colours = [for(i in 0...80) Std.int(Math.random()*0x1000000) ];
+      var r = 91131;
+      colours = [for(i in 0...80) { r = r*78123 + 123; r & 0xffffff; }  ];
 
       detectorBusy = true;
       detector.run( function() detectorBusy = false );
@@ -97,6 +102,11 @@ class Main extends Sprite
          }
          overlay.x = bitmap.x;
          overlay.y = bitmap.y;
+         if (mirror)
+         {
+            bitmap.x += bitmap.width;
+            bitmap.width = -bitmap.width;
+         }
       }
    }
 
@@ -121,10 +131,13 @@ class Main extends Sprite
 
          var gfx = overlay.graphics;
          gfx.clear();
-         var sx = bitmap.width;
+         var sx = Math.abs(bitmap.width);
          var sy = bitmap.height;
          for(box in boxes)
          {
+            if (mirror)
+               box.x = 1 - box.x;
+
             var col =  colours[ box.classId ];
             if (box.className!=null)
             {

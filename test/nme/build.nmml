@@ -26,5 +26,5 @@
 
   <source path="src" />
   <haxelib name="nme" />
-  <haxelib name="numerix" ndll="numerix" />
+  <ndll name="numerix" haxelib="numerix" />
 </project>

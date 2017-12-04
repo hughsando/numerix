@@ -51,8 +51,9 @@ class Test
          var result = model.run(val);
          println("Warmup Time : " + Std.int((haxe.Timer.stamp()-t0)*1000) + "ms");
          var t0 = haxe.Timer.stamp();
-         var result = model.run(val);
-         println("Time : " + Std.int((haxe.Timer.stamp()-t0)*1000) + "ms");
+         for(go in 0...100)
+            result = model.run(val);
+         println("Time 100: " + Std.int((haxe.Timer.stamp()-t0)*10) + "ms");
 
          var boxes = model.outputLayer.getBoxes();
          trace(boxes);
