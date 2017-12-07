@@ -213,7 +213,7 @@ public:
       for(int i=0;i<outputs;i++)
       {
          float Ki = scale[i]/(sqrt(var[i])+.000001f);
-         for(int i=0;i<wCount;i++)
+         for(int j=0;j<wCount;j++)
             *w++ *= Ki;
          b[i] -= mean[i]*Ki;
       }
@@ -324,7 +324,7 @@ public:
       if (inSrc0->type != Float32)
          TensorThrow("Conv2D only supports Float32 tensors");
 
-      CShape &sin = inSrc0->shape;
+      CShape sin = inSrc0->shape;
       if (sin.size()!=3)
       {
          printf("Conv2D %dx%dx%dx%d\n", outputs, filterY, filterX, inputs);
@@ -377,7 +377,7 @@ public:
       bool match = false;
       if (inBuffer && inBuffer->shape.size()==3 && inBuffer->type==Float32)
       {
-         CShape &s = inBuffer->shape;
+         CShape s = inBuffer->shape;
          match = s[0]==destH && s[1]==destW && s[2]==outputs;
       }
       Tensor *result = inBuffer;
@@ -390,7 +390,6 @@ public:
          result = new Tensor( Float32, s );
       }
       //printf("Cov2d -> %d %d %d\n", destW, destH, outputs);
-
 
       src0 = inSrc0;
       destTensor = result;

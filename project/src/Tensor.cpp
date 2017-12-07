@@ -55,7 +55,7 @@ Tensor *Tensor::makeBuffer(Tensor *inBuffer, int inW, int inH, int inChannels, i
    bool match = false;
    if (inBuffer && inBuffer->shape.size()==3 && inBuffer->type==inType)
    {
-      CShape &s = inBuffer->shape;
+      CShape s = inBuffer->shape;
       if (s[0]==inW && s[1]==inH && s[2]==inChannels)
          return inBuffer;
    }

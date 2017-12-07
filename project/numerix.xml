@@ -3,14 +3,26 @@
    <include name="${HXCPP}/toolchain/haxe-target.xml" />
    <set name="CUDA_PATH" value="${CUDA_SDK}" if="CUDA_SDK" unless="CUDA_PATH" />
 
+   <set name="NX_GPU" value="1" unless="rpi" />
+   <set name="NX_CUDA" value="1" unless="rpi" />
 
    <files id="numerix" >
      <compilerflag value="-Iinclude" />
-     <compilerflag value="-DNX_GPU" />
+     <compilerflag value="-DNX_GPU" if="NX_GPU" />
+     <compilerflag value="-DNX_CUDA" if="NX_CUDA" />
      <compilerflag value="-DNUMERIX_SIMD" />
-     <compilerflag value="-I${CUDA_PATH}/include" />
-     <compilerflag value="-I${CUDA_PATH}/cudnn/cuda/include" />
+     <section if="NX_CUDA" >
+        <compilerflag value="-I${CUDA_PATH}/include" />
+        <compilerflag value="-I${CUDA_PATH}/cudnn/cuda/include" />
+     </section>
      <compilerflag value="-mfpu=neon" if="HXCPP_ARMV7||HXCPP_ARM64" />
+     <section if="rpi" >
+        <compilerflag value="-mfpu=neon-vfpv4" />
+        <compilerflag value="-mfloat-abi=hard" />
+        <compilerflag value="-mcpu=cortex-a7" />
+        <compilerflag value="-fPIC" />
+     </section>
+
 
      <depend name="include/Tensor.h" />
      <depend name="include/Ops.h" />
@@ -28,7 +40,7 @@
      <file name="src/layers/Reorg.cpp" />
      <file name="src/layers/Yolo.cpp" />
 
-     <file name="src/Cuda.cpp" />
+     <file name="src/Cuda.cpp" if="NX_CUDA"  />
 
    </files>
 
@@ -37,16 +49,19 @@
       <outdir name="../ndll/${BINDIR}" />
       <ext value=".ndll" />
 
-      <libpath name="${CUDA_PATH}/lib/x64/" />
-      <libpath name="${CUDA_PATH}/cudnn/cuda/lib/x64" />
-      <libpath name="${CUDA_PATH}/lib/stubs" />
-      <libpath name="${CUDA_PATH}/lib" />
-      <section if="linux" >
+      <section if="NX_CUDA" >
+         <libpath name="${CUDA_PATH}/lib/x64/" />
+         <libpath name="${CUDA_PATH}/cudnn/cuda/lib/x64" />
+         <libpath name="${CUDA_PATH}/lib/stubs" />
+         <libpath name="${CUDA_PATH}/lib" />
+      </section>
+      <section if="linux" unless="rpi" >
          <lib name="-lcuda" />
          <lib name="-lcudart" />
          <lib name="-lcudnn" />
       </section>
-      <section unless="linux" >
+
+      <section unless="linux" if="NX_CUDA" >
          <lib base="cuda" />
          <lib base="cudart" />
          <lib base="cudnn" />

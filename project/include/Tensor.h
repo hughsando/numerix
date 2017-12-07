@@ -44,7 +44,11 @@ typedef unsigned __int64 TUInt64;
 // TODO - EMSCRIPTEN?
 #else
 typedef int64_t TInt64;
-typedef uint64_t TUInt64;
+   #ifdef HX_RPI
+   typedef unsigned long long TUInt64;
+   #else
+   typedef uint64_t TUInt64;
+   #endif
 #endif
 
 

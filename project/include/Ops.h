@@ -2,6 +2,7 @@
 #define OPS_H
 
 #include "Tensor.h"
+#include <math.h>
 
 #if defined(__arm__)
    #define NUMERIX_NEON
@@ -23,14 +24,15 @@ namespace numerix
 
 #if defined(NUMERIX_SIMD) && defined(NUMERIX_NEON)
 
+typedef float AlignedFloat __attribute__((aligned(sizeof(float32x4_t))));
 
-#define Load4f32(ptr) vld1q_f32(ptr)
+#define Load4f32(ptr) vld1q_f32( (const AlignedFloat*) (ptr) )
 #define Add4f32(a,b) vaddq_f32(a,b)
 #define Mul4f32(a,b) vmulq_f32(a,b)
 #define Zero4f32 vdupq_n_f32(0.0f)
 #define Const4f32(c) vdupq_n_f32(c)
 #define Max4f32(a,b) vmaxq_f32(a,b)
-#define Store4f32(ptr, value)  vst1q_f32(ptr, value)
+#define Store4f32(ptr, value)  vst1q_f32( (AlignedFloat *) (ptr) , (value) )
 
 inline float Accumulate4f32(float32x4_t v)
 {

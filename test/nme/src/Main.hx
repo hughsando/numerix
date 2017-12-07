@@ -165,6 +165,7 @@ class Main extends Sprite
          if (bitmap==null)
          {
             bitmap = new Bitmap( camera.bitmapData );
+            bitmap.smoothing = true;
             addChild(bitmap);
             overlay = new Sprite();
             addChild(overlay);
