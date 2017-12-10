@@ -6,6 +6,10 @@
 #include <Tensor.h>
 #include <Layer.h>
 
+#ifdef NX_MOVIDIUS
+#include "mvnc.h"
+#endif
+
 #undef max
 #undef min
 
@@ -824,6 +828,46 @@ void layRelease(value inLayer)
 }
 DEFINE_PRIME1v(layRelease);
 
+// Movidius device ...
 
+HxString moviGetDeviceName(int inIndex)
+{
+   #ifndef NX_MOVIDIUS
+   TensorThrow("Device not supported on this platform");
+   #else
+   #define NAME_SIZE 100
+
+   void *deviceHandle;
+   char devName[NAME_SIZE];
+   mvncStatus retCode = mvncGetDeviceName(0, devName, NAME_SIZE);
+   if (retCode != MVNC_OK)
+   {
+      char buf[1024];
+      sprintf(buf, "Error - No NCS devices found :%d.", retCode);
+      TensorThrow(buf);
+   }
+
+   return devName;
+   #endif
+}
+DEFINE_PRIME1(moviGetDeviceName);
+
+value layCreateMovidius(HxString devName, value inGraphDef, value inOutputShape)
+{
+   #ifndef NX_MOVIDIUS
+   TensorThrow("Device not supported on this platform");
+   #else
+
+   CffiBytes bytes = getByteData(inGraphDef);
+   if (!bytes.data)
+      TensorThrow("layCreateMovidius - bad buffer");
+
+   Shape shape;
+   fromValue(shape, inOutputShape);
+
+   return allocLayer( Layer::createMovidius(devName.c_str(), bytes.data, bytes.length, shape) );
+   #endif
+}
+DEFINE_PRIME3(layCreateMovidius);
 
 } // end namespace numerix

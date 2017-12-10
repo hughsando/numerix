@@ -32,6 +32,7 @@
      <file name="src/Api.cpp" />
      <file name="src/Tensor.cpp" />
      <file name="src/TensorData.cpp" />
+     <file name="src/Ops.cpp" />
      <file name="src/NxThread.cpp" />
      <file name="src/layers/Conv2D.cpp" />
      <file name="src/layers/MaxPool.cpp" />
@@ -41,6 +42,13 @@
      <file name="src/layers/Yolo.cpp" />
 
      <file name="src/Cuda.cpp" if="NX_CUDA"  />
+
+     <section if="linux||rpi" >
+        <compilerflag value="-Isrc/movidius" />
+        <compilerflag value="-DNX_MOVIDIUS" />
+        <file name="src/movidius/dynamic_mvnc.cpp" />
+        <file name="src/layers/Movidius.cpp" />
+     </section>
 
    </files>
 
@@ -66,8 +74,6 @@
          <lib base="cudart" />
          <lib base="cudnn" />
       </section>
-
-
 
       <lib name="-lpthread" if="linux" unless="static_link" />
    </target>

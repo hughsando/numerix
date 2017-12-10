@@ -68,6 +68,8 @@ public:
 
    static Layer *createYolo(const std::vector<float> &inAnchors,int inBoxCount, int inClassCount, float inThresh);
 
+   static Layer *createMovidius(const std::string &inDeviceName, const unsigned char *graphData, size_t dataLength, CShape outputSize);
+
 
    virtual ~Layer();
 

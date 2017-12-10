@@ -1,5 +1,6 @@
 -cpp cpp
 -main Test
--lib hxhdf5
 -lib numerix
 -lib nme
+-D nme_static
+-D toolkit

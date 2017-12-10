@@ -365,6 +365,12 @@ inline float dotSkip(const float *w, const float *s, int n, int inSkip)
    return sum;
 }
 
+
+
+void floattofp16(unsigned char *dst, const float *src, unsigned nelem);
+void fp16tofloat(float *dst, const unsigned char *src, unsigned nelem);
+
+
 } // end namespace numerix
 
 

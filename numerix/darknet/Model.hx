@@ -27,11 +27,13 @@ class Model extends numerix.Model
    var transpose:Bool;
    var paramStack:Array<Params>;
    var reorgLayer:Reorg = null;
+   var filename:String;
 
-   public function new(filename:String, removeReorg = false)
+   public function new(inFilename:String, removeReorg = false)
    {
       super();
 
+      filename = inFilename;
       var cfg = sys.io.File.getContent(filename);
       var lines = cfg.split("\r").join("").split("\n");
 
@@ -232,6 +234,11 @@ class Model extends numerix.Model
             var regions = new YoloRegions(config,params.layer);
             return new Params(1,1,1, regions);
 
+         case "ncs" :
+            var graphDir = haxe.io.Path.directory(filename);
+
+            var ncs = new Movidius(config, params.layer, graphDir);
+            return new Params(ncs.outputWidth, ncs.outputHeight, ncs.outputChannels, ncs);
 
 
          default:
