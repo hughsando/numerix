@@ -125,6 +125,16 @@ int GetWorkerCount()
    return sWorkerCount;
 }
 
+
+extern "C" {
+size_t pthreadpool_get_threads_count(struct pthreadpool *)
+{
+   return GetWorkerCount();
+}
+}
+
+
+
 void RunWorkerTask( WorkerFunc inFunc, void *inData )
 {
    gTaskId = 0;

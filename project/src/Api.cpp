@@ -834,6 +834,7 @@ HxString moviGetDeviceName(int inIndex)
 {
    #ifndef NX_MOVIDIUS
    TensorThrow("Device not supported on this platform");
+   return "";
    #else
    #define NAME_SIZE 100
 
@@ -856,6 +857,7 @@ value layCreateMovidius(HxString devName, value inGraphDef, value inOutputShape)
 {
    #ifndef NX_MOVIDIUS
    TensorThrow("Device not supported on this platform");
+   return alloc_null();
    #else
 
    CffiBytes bytes = getByteData(inGraphDef);

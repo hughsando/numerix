@@ -52,8 +52,48 @@
 
    </files>
 
+   <files id="nnpack" dir="src/nnpack" >
+      <compilerflag value="-DNNP_INFERENCE_ONLY" />
+      <compilerflag value="-Iinclude" />
+      <compilerflag value="-I${HXCPP}/include" />
+      <compilerflag value="-Iinclude/fakepthread" if="windows" />
+      <compilerflag value="-Isrc/nnpack" />
+      <compilerflag value="-mfpu=neon" if="HXCPP_ARMV7||HXCPP_ARM64" />
+      <section if="rpi" >
+         <compilerflag value="-mfpu=neon-vfpv4" />
+         <compilerflag value="-mfloat-abi=hard" />
+         <compilerflag value="-mcpu=cortex-a7" />
+         <compilerflag value="-fPIC" />
+      </section>
+
+
+
+      <file name="softmax-output.c" />
+      <file name="relu-output.c" />
+      <file name="pooling-output.c" />
+      <file name="init.c" />
+      <file name="fully-connected-output.c" />
+      <file name="fully-connected-inference.c" />
+      <file name="convolution-output.c" />
+      <file name="convolution-inference.c" />
+
+      <file name="psimd/2d-winograd-8x8-3x3.cpp" />
+      <file name="psimd/fft-real.cpp" />
+      <file name="psimd/winograd-f6k3.cpp" />
+      <file name="psimd/softmax.cpp" />
+      <file name="psimd/relu.cpp" />
+      <file name="psimd/fft-soa.cpp" />
+      <file name="psimd/fft-dualreal.cpp" />
+      <file name="psimd/fft-aos.cpp" />
+      <file name="psimd/exp.cpp" />
+      <file name="psimd/2d-fourier-8x8.cpp" />
+      <file name="psimd/2d-fourier-16x16.cpp" />
+
+   </files>
+
    <target id="default" tool="linker" toolid="dll" output="numerix" >
       <files id="numerix" />
+      <files id="nnpack" if="nnpack" />
       <outdir name="../ndll/${BINDIR}" />
       <ext value=".ndll" />
 
