@@ -7,14 +7,14 @@
 
 
 static NNP_INLINE void winograd_f6k3_input_transform_inplace(
-	float32x4_t d0[restrict static 1],
-	float32x4_t d1[restrict static 1],
-	float32x4_t d2[restrict static 1],
-	float32x4_t d3[restrict static 1],
-	float32x4_t d4[restrict static 1],
-	float32x4_t d5[restrict static 1],
-	float32x4_t d6[restrict static 1],
-	float32x4_t d7[restrict static 1])
+	float32x4_t d0[RESTRICT 1],
+	float32x4_t d1[RESTRICT 1],
+	float32x4_t d2[RESTRICT 1],
+	float32x4_t d3[RESTRICT 1],
+	float32x4_t d4[RESTRICT 1],
+	float32x4_t d5[RESTRICT 1],
+	float32x4_t d6[RESTRICT 1],
+	float32x4_t d7[RESTRICT 1])
 {
 	const float32x4_t const_0_25 = vdupq_n_f32(0.25f);
 
@@ -78,14 +78,14 @@ static NNP_INLINE void winograd_f6k3_input_transform_inplace(
 
 static NNP_INLINE void winograd_f6k3_kernel_transform(
 	const float32x4_t g0, const float32x4_t g1, const float32x4_t g2,
-	float32x4_t transform0[restrict static 1],
-	float32x4_t transform1[restrict static 1],
-	float32x4_t transform2[restrict static 1],
-	float32x4_t transform3[restrict static 1],
-	float32x4_t transform4[restrict static 1],
-	float32x4_t transform5[restrict static 1],
-	float32x4_t transform6[restrict static 1],
-	float32x4_t transform7[restrict static 1],
+	float32x4_t transform0[RESTRICT 1],
+	float32x4_t transform1[RESTRICT 1],
+	float32x4_t transform2[RESTRICT 1],
+	float32x4_t transform3[RESTRICT 1],
+	float32x4_t transform4[RESTRICT 1],
+	float32x4_t transform5[RESTRICT 1],
+	float32x4_t transform6[RESTRICT 1],
+	float32x4_t transform7[RESTRICT 1],
 	bool rescale_coefficients)
 {
 	/*
@@ -152,14 +152,14 @@ static NNP_INLINE void winograd_f6k3_kernel_transform(
 }
 
 static NNP_INLINE void winograd_f6k3_output_transform_inplace(
-	float32x4_t m0[restrict static 1],
-	float32x4_t m1[restrict static 1],
-	float32x4_t m2[restrict static 1],
-	float32x4_t m3[restrict static 1],
-	float32x4_t m4[restrict static 1],
-	float32x4_t m5[restrict static 1],
-	float32x4_t m6[restrict static 1],
-	float32x4_t m7[restrict static 1])
+	float32x4_t m0[RESTRICT 1],
+	float32x4_t m1[RESTRICT 1],
+	float32x4_t m2[RESTRICT 1],
+	float32x4_t m3[RESTRICT 1],
+	float32x4_t m4[RESTRICT 1],
+	float32x4_t m5[RESTRICT 1],
+	float32x4_t m6[RESTRICT 1],
+	float32x4_t m7[RESTRICT 1])
 {
 	/*
 	 * s0 = m0 + (m1 + m2) +      (m3 + m4) + 32 * (m5 + m6)

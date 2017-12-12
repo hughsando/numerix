@@ -6,9 +6,9 @@
 
 void nnp_s4gemm_only_3x4__psimd(
 	size_t k, size_t update,
-	const float a[restrict static 1],
-	const float b[restrict static 1],
-	float c[restrict static 1],
+	const float a[RESTRICT 1],
+	const float b[RESTRICT 1],
+	float c[RESTRICT 1],
 	size_t row_stride, size_t column_stride)
 {
 	psimd_f32 acc00 = psimd_zero_f32(), acc01 = psimd_zero_f32(), acc02 = psimd_zero_f32(), acc03 = psimd_zero_f32();
@@ -76,9 +76,9 @@ void nnp_s4gemm_only_3x4__psimd(
 void nnp_s4gemm_upto_3x4__psimd(
 	uint32_t mr, uint32_t nr,
 	size_t k, size_t update,
-	const float a[restrict static 1],
-	const float b[restrict static 1],
-	float c[restrict static 1],
+	const float a[RESTRICT 1],
+	const float b[RESTRICT 1],
+	float c[RESTRICT 1],
 	size_t row_stride, size_t column_stride)
 {
 	psimd_f32 acc00 = psimd_zero_f32(), acc01 = psimd_zero_f32(), acc02 = psimd_zero_f32(), acc03 = psimd_zero_f32();

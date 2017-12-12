@@ -6,8 +6,8 @@
 
 
 void nnp_relu__psimd(
-	const float input[restrict static 4],
-	float output[restrict static 4],
+	const float *input,
+	float *output,
 	size_t length,
 	float negative_slope)
 {
@@ -25,7 +25,7 @@ void nnp_relu__psimd(
 }
 
 void nnp_inplace_relu__psimd(
-	float data[restrict static 4],
+	float *data,
 	size_t length,
 	float negative_slope)
 {
@@ -42,9 +42,9 @@ void nnp_inplace_relu__psimd(
 }
 
 void nnp_grad_relu__psimd(
-	const float output_gradient[restrict static 4],
-	const float input[restrict static 4],
-	float input_gradient[restrict static 4],
+	const float *output_gradient,
+	const float *input,
+	float *input_gradient,
 	size_t length,
 	float negative_slope)
 {

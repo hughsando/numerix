@@ -2,8 +2,8 @@
 
 
 void nnp_iwt_f6k3__psimd(
-	const float d[restrict static 32],
-	float w[restrict static 32])
+	const float d[RESTRICT 32],
+	float w[RESTRICT 32])
 {
 	const psimd_f32 d0 = psimd_load_f32(d +  0);
 	const psimd_f32 d1 = psimd_load_f32(d +  4);
@@ -30,8 +30,8 @@ void nnp_iwt_f6k3__psimd(
 }
 
 void nnp_kwt_f6k3__psimd(
-	const float g[restrict static 12],
-	float w[restrict static 32])
+	const float g[RESTRICT 12],
+	float w[RESTRICT 32])
 {
 	const psimd_f32 g0 = psimd_load_f32(g + 0);
 	const psimd_f32 g1 = psimd_load_f32(g + 4);
@@ -54,8 +54,8 @@ void nnp_kwt_f6k3__psimd(
 }
 
 void nnp_owt_f6k3__psimd(
-	const float m[restrict static 32],
-	float s[restrict static 24])
+	const float m[RESTRICT 32],
+	float s[RESTRICT 24])
 {
 	const psimd_f32 m0 = psimd_load_f32(m +  0);
 	const psimd_f32 m1 = psimd_load_f32(m +  4);

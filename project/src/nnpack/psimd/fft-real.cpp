@@ -2,8 +2,8 @@
 
 
 void nnp_fft8_4real__psimd(
-	const float t[restrict static 32],
-	float f[restrict static 32])
+	const float t[RESTRICT 32],
+	float f[RESTRICT 32])
 {
 	psimd_fft8_real_f32(
 		t, t + 16, 4, 0, 8,
@@ -11,8 +11,8 @@ void nnp_fft8_4real__psimd(
 }
 
 void nnp_fft16_4real__psimd(
-	const float t[restrict static 64],
-	float f[restrict static 64])
+	const float t[RESTRICT 64],
+	float f[RESTRICT 64])
 {
 	psimd_fft16_real_f32(
 		t, t + 32, 4, 0, 16,
@@ -20,8 +20,8 @@ void nnp_fft16_4real__psimd(
 }
 
 void nnp_ifft8_4real__psimd(
-	const float f[restrict static 32],
-	float t[restrict static 32])
+	const float f[RESTRICT 32],
+	float t[RESTRICT 32])
 {
 	const psimd_f32 f0r = psimd_load_f32(f +  0);
 	const psimd_f32 f4r = psimd_load_f32(f +  4);
@@ -37,8 +37,8 @@ void nnp_ifft8_4real__psimd(
 }
 
 void nnp_ifft16_4real__psimd(
-	const float f[restrict static 64],
-	float t[restrict static 64])
+	const float f[RESTRICT 64],
+	float t[RESTRICT 64])
 {
 	const psimd_f32 f0r = psimd_load_f32(f +  0);
 	const psimd_f32 f8r = psimd_load_f32(f +  4);

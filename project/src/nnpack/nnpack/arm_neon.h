@@ -4,8 +4,8 @@
 
 
 static inline void vswapq_f32(
-	float32x4_t a[restrict static 1],
-	float32x4_t b[restrict static 1])
+	float32x4_t a[RESTRICT 1],
+	float32x4_t b[RESTRICT 1])
 {
 	const float32x4_t new_a = *b;
 	const float32x4_t new_b = *a;

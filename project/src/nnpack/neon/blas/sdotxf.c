@@ -4,10 +4,10 @@
 
 
 void nnp_sdotxf1__neon(
-	const float x[restrict static 1],
-	const float y[restrict static 1],
+	const float x[RESTRICT 1],
+	const float y[RESTRICT 1],
 	size_t stride_y,
-	float sum[restrict static 1],
+	float sum[RESTRICT 1],
 	size_t n)
 {
 	float32x4_t vacc0q = vdupq_n_f32(0.0f);
@@ -38,10 +38,10 @@ void nnp_sdotxf1__neon(
 }
 
 void nnp_sdotxf2__neon(
-	const float x[restrict static 1],
-	const float y[restrict static 1],
+	const float x[RESTRICT 1],
+	const float y[RESTRICT 1],
 	size_t stride_y,
-	float sum[restrict static 1],
+	float sum[RESTRICT 1],
 	size_t n)
 {
 	float32x4_t vacc0q = vdupq_n_f32(0.0f);
@@ -82,10 +82,10 @@ void nnp_sdotxf2__neon(
 }
 
 void nnp_sdotxf3__neon(
-	const float x[restrict static 1],
-	const float y[restrict static 1],
+	const float x[RESTRICT 1],
+	const float y[RESTRICT 1],
 	size_t stride_y,
-	float sum[restrict static 1],
+	float sum[RESTRICT 1],
 	size_t n)
 {
 	float32x4_t vacc0q = vdupq_n_f32(0.0f);
@@ -136,10 +136,10 @@ void nnp_sdotxf3__neon(
 }
 
 void nnp_sdotxf4__neon(
-	const float x[restrict static 1],
-	const float y[restrict static 1],
+	const float x[RESTRICT 1],
+	const float y[RESTRICT 1],
 	size_t stride_y,
-	float sum[restrict static 1],
+	float sum[RESTRICT 1],
 	size_t n)
 {
 	float32x4_t vacc0q = vdupq_n_f32(0.0f);
@@ -200,10 +200,10 @@ void nnp_sdotxf4__neon(
 }
 
 void nnp_sdotxf5__neon(
-	const float x[restrict static 1],
-	const float y[restrict static 1],
+	const float x[RESTRICT 1],
+	const float y[RESTRICT 1],
 	size_t stride_y,
-	float sum[restrict static 1],
+	float sum[RESTRICT 1],
 	size_t n)
 {
 	float32x4_t vacc0q = vdupq_n_f32(0.0f);
@@ -274,10 +274,10 @@ void nnp_sdotxf5__neon(
 }
 
 void nnp_sdotxf6__neon(
-	const float x[restrict static 1],
-	const float y[restrict static 1],
+	const float x[RESTRICT 1],
+	const float y[RESTRICT 1],
 	size_t stride_y,
-	float sum[restrict static 1],
+	float sum[RESTRICT 1],
 	size_t n)
 {
 	float32x4_t vacc0q = vdupq_n_f32(0.0f);
@@ -358,10 +358,10 @@ void nnp_sdotxf6__neon(
 }
 
 void nnp_sdotxf7__neon(
-	const float x[restrict static 1],
-	const float y[restrict static 1],
+	const float x[RESTRICT 1],
+	const float y[RESTRICT 1],
 	size_t stride_y,
-	float sum[restrict static 1],
+	float sum[RESTRICT 1],
 	size_t n)
 {
 	float32x4_t vacc0q = vdupq_n_f32(0.0f);
@@ -452,10 +452,10 @@ void nnp_sdotxf7__neon(
 }
 
 void nnp_sdotxf8__neon(
-	const float x[restrict static 1],
-	const float y[restrict static 1],
+	const float x[RESTRICT 1],
+	const float y[RESTRICT 1],
 	size_t stride_y,
-	float sum[restrict static 1],
+	float sum[RESTRICT 1],
 	size_t n)
 {
 	float32x4_t vacc0q = vdupq_n_f32(0.0f);

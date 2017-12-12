@@ -2,8 +2,8 @@
 
 
 void nnp_fft8_dualreal__scalar(
-	const float t[restrict static 16],
-	float f[restrict static 16])
+	const float t[RESTRICT 16],
+	float f[RESTRICT 16])
 {
 	float x0, y0, x1r, y1r, x2r, y2r, x3r, y3r;
 	float x4, y4, x1i, y1i, x2i, y2i, x3i, y3i;
@@ -31,8 +31,8 @@ void nnp_fft8_dualreal__scalar(
 }
 
 void nnp_fft16_dualreal__scalar(
-	const float t[restrict static 32],
-	float f[restrict static 32])
+	const float t[RESTRICT 32],
+	float f[RESTRICT 32])
 {
 	float x0, y0, x1r, y1r, x2r, y2r, x3r, y3r, x4r, y4r, x5r, y5r, x6r, y6r, x7r, y7r;
 	float x8, y8, x1i, y1i, x2i, y2i, x3i, y3i, x4i, y4i, x5i, y5i, x6i, y6i, x7i, y7i;
@@ -76,8 +76,8 @@ void nnp_fft16_dualreal__scalar(
 }
 
 void nnp_ifft8_dualreal__scalar(
-	const float f[restrict static 16],
-	float t[restrict static 16])
+	const float f[RESTRICT 16],
+	float t[RESTRICT 16])
 {
 	const float x0  = f[ 0];
 	const float y0  = f[ 1];
@@ -103,8 +103,8 @@ void nnp_ifft8_dualreal__scalar(
 }
 
 void nnp_ifft16_dualreal__scalar(
-	const float f[restrict static 32],
-	float t[restrict static 32])
+	const float f[RESTRICT 32],
+	float t[RESTRICT 32])
 {
 	const float x0  = f[ 0];
 	const float y0  = f[ 1];

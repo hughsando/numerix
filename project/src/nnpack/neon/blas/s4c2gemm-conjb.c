@@ -6,9 +6,9 @@
 
 void nnp_s4c2gemm_conjb_only_2x2__neon(
 	size_t k, size_t update,
-	const float a[restrict static 1],
-	const float b[restrict static 1],
-	float c[restrict static 1],
+	const float a[RESTRICT 1],
+	const float b[RESTRICT 1],
+	float c[RESTRICT 1],
 	size_t row_stride_c)
 {
 	float32x4_t acc00r = vdupq_n_f32(0.0f), acc00i = vdupq_n_f32(0.0f);
@@ -77,9 +77,9 @@ void nnp_s4c2gemm_conjb_only_2x2__neon(
 void nnp_s4c2gemm_conjb_upto_2x2__neon(
 	uint32_t mr, uint32_t nr,
 	size_t k, size_t update,
-	const float a[restrict static 1],
-	const float b[restrict static 1],
-	float c[restrict static 1],
+	const float a[RESTRICT 1],
+	const float b[RESTRICT 1],
+	float c[RESTRICT 1],
 	size_t row_stride_c)
 {
 	float32x4_t acc00r = vdupq_n_f32(0.0f), acc00i = vdupq_n_f32(0.0f);

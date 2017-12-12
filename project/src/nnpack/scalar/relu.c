@@ -5,8 +5,8 @@
 
 
 void nnp_relu__scalar(
-	const float input[restrict static 1],
-	float output[restrict static 1],
+	const float input[RESTRICT 1],
+	float output[RESTRICT 1],
 	size_t length,
 	float negative_slope)
 {
@@ -32,7 +32,7 @@ void nnp_relu__scalar(
 }
 
 void nnp_inplace_relu__scalar(
-	float data[restrict static 1],
+	float data[RESTRICT 1],
 	size_t length,
 	float negative_slope)
 {
@@ -59,9 +59,9 @@ void nnp_inplace_relu__scalar(
 }
 
 void nnp_grad_relu__scalar(
-	const float output_gradient[restrict static 4],
-	const float input[restrict static 4],
-	float input_gradient[restrict static 4],
+	const float output_gradient[RESTRICT 4],
+	const float input[RESTRICT 4],
+	float input_gradient[RESTRICT 4],
 	size_t length,
 	float negative_slope)
 {

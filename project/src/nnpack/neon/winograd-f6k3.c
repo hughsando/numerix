@@ -2,8 +2,8 @@
 
 
 void nnp_iwt_f6k3__neon(
-	const float d[restrict static 32],
-	float w[restrict static 32])
+	const float d[RESTRICT 32],
+	float w[RESTRICT 32])
 {
 	float32x4_t w0 = vld1q_f32(d +  0);
 	float32x4_t w1 = vld1q_f32(d +  4);
@@ -28,8 +28,8 @@ void nnp_iwt_f6k3__neon(
 }
 
 void nnp_kwt_f6k3__neon(
-	const float g[restrict static 12],
-	float w[restrict static 32])
+	const float g[RESTRICT 12],
+	float w[RESTRICT 32])
 {
 	const float32x4_t g0 = vld1q_f32(g + 0);
 	const float32x4_t g1 = vld1q_f32(g + 4);
@@ -52,8 +52,8 @@ void nnp_kwt_f6k3__neon(
 }
 
 void nnp_owt_f6k3__neon(
-	const float m[restrict static 32],
-	float s[restrict static 24])
+	const float m[RESTRICT 32],
+	float s[RESTRICT 24])
 {
 	float32x4_t w0 = vld1q_f32(m +  0);
 	float32x4_t w1 = vld1q_f32(m +  4);

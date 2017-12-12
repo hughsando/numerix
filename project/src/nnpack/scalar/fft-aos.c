@@ -2,8 +2,8 @@
 
 
 void nnp_fft4_aos__scalar(
-	const float t[restrict static 8],
-	float f[restrict static 8])
+	const float t[RESTRICT 8],
+	float f[RESTRICT 8])
 {
 	float w0r, w0i, w1r, w1i, w2r, w2i, w3r, w3i;
 	scalar_fft4_aos(
@@ -20,8 +20,8 @@ void nnp_fft4_aos__scalar(
 }
 
 void nnp_fft8_aos__scalar(
-	const float t[restrict static 16],
-	float f[restrict static 16])
+	const float t[RESTRICT 16],
+	float f[RESTRICT 16])
 {
 	float w0r, w0i, w1r, w1i, w2r, w2i, w3r, w3i, w4r, w4i, w5r, w5i, w6r, w6i, w7r, w7i;
 	scalar_fft8_aos(
@@ -46,8 +46,8 @@ void nnp_fft8_aos__scalar(
 }
 
 void nnp_ifft4_aos__scalar(
-	const float f[restrict static 8],
-	float t[restrict static 8])
+	const float f[RESTRICT 8],
+	float t[RESTRICT 8])
 {
 	const float w0r = f[0];
 	const float w0i = f[1];
@@ -64,8 +64,8 @@ void nnp_ifft4_aos__scalar(
 }
 
 void nnp_ifft8_aos__scalar(
-	const float f[restrict static 16],
-	float t[restrict static 16])
+	const float f[RESTRICT 16],
+	float t[RESTRICT 16])
 {
 	const float w0r = f[ 0];
 	const float w0i = f[ 1];

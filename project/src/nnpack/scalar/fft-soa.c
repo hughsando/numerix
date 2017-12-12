@@ -2,8 +2,8 @@
 
 
 void nnp_fft8_soa__scalar(
-	const float t[restrict static 16],
-	float f[restrict static 16])
+	const float t[RESTRICT 16],
+	float f[RESTRICT 16])
 {
 	float f0r, f1r, f2r, f3r, f4r, f5r, f6r, f7r;
 	float f0i, f1i, f2i, f3i, f4i, f5i, f6i, f7i;
@@ -31,8 +31,8 @@ void nnp_fft8_soa__scalar(
 }
 
 void nnp_fft16_soa__scalar(
-	const float t[restrict static 32],
-	float f[restrict static 32])
+	const float t[RESTRICT 32],
+	float f[RESTRICT 32])
 {
 	float f0r, f1r, f2r, f3r, f4r, f5r, f6r, f7r, f8r, f9r, f10r, f11r, f12r, f13r, f14r, f15r;
 	float f0i, f1i, f2i, f3i, f4i, f5i, f6i, f7i, f8i, f9i, f10i, f11i, f12i, f13i, f14i, f15i;
@@ -76,8 +76,8 @@ void nnp_fft16_soa__scalar(
 }
 
 void nnp_ifft8_soa__scalar(
-	const float f[restrict static 16],
-	float t[restrict static 16])
+	const float f[RESTRICT 16],
+	float t[RESTRICT 16])
 {
 	const float f0r = f[0];
 	const float f1r = f[1];
@@ -104,8 +104,8 @@ void nnp_ifft8_soa__scalar(
 }
 
 void nnp_ifft16_soa__scalar(
-	const float f[restrict static 32],
-	float t[restrict static 32])
+	const float f[RESTRICT 32],
+	float t[RESTRICT 32])
 {
 	const float f0r  = f[ 0];
 	const float f1r  = f[ 1];

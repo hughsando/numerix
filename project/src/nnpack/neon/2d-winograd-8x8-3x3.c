@@ -11,8 +11,8 @@
 
 
 void nnp_iwt8x8_3x3_with_offset__neon(
-	const float data[restrict static 1],
-	float transform[restrict static 1],
+	const float data[RESTRICT 1],
+	float transform[RESTRICT 1],
 	size_t data_stride,
 	size_t transform_stride,
 	uint32_t row_count,
@@ -83,8 +83,8 @@ void nnp_iwt8x8_3x3_with_offset__neon(
 }
 
 void nnp_kwt8x8_3x3__neon(
-	const float g[restrict static 9],
-	float transform[restrict static 1],
+	const float g[RESTRICT 9],
+	float transform[RESTRICT 1],
 	size_t stride_g,
 	size_t transform_stride,
 	uint32_t row_count,
@@ -125,8 +125,8 @@ void nnp_kwt8x8_3x3__neon(
 
 #if !NNP_INFERENCE_ONLY
 void nnp_kwt8x8_3Rx3R__neon(
-	const float g[restrict static 9],
-	float transform[restrict static 1],
+	const float g[RESTRICT 9],
+	float transform[RESTRICT 1],
 	size_t stride_g,
 	size_t transform_stride,
 	uint32_t row_count,
@@ -173,8 +173,8 @@ void nnp_kwt8x8_3Rx3R__neon(
 }
 
 void nnp_owt8x8_3x3__neon(
-	const float transform[restrict static 1],
-	float output[restrict static 1],
+	const float transform[RESTRICT 1],
+	float output[RESTRICT 1],
 	size_t transform_stride,
 	size_t output_stride,
 	uint32_t row_count,
@@ -251,9 +251,9 @@ void nnp_owt8x8_3x3__neon(
 #endif /* !NNP_INFERENCE_ONLY */
 
 void nnp_owt8x8_3x3_with_bias__neon(
-	const float transform[restrict static 1],
-	float output[restrict static 1],
-	const float bias[restrict static 1],
+	const float transform[RESTRICT 1],
+	float output[RESTRICT 1],
+	const float bias[RESTRICT 1],
 	size_t transform_stride,
 	size_t output_stride,
 	uint32_t row_count,
@@ -331,9 +331,9 @@ void nnp_owt8x8_3x3_with_bias__neon(
 }
 
 void nnp_owt8x8_3x3_with_bias_with_relu__neon(
-	const float transform[restrict static 1],
-	float output[restrict static 1],
-	const float bias[restrict static 1],
+	const float transform[RESTRICT 1],
+	float output[RESTRICT 1],
+	const float bias[RESTRICT 1],
 	size_t transform_stride, size_t output_stride,
 	uint32_t row_count, uint32_t column_count)
 {

@@ -6,9 +6,9 @@
 
 void nnp_s4c2gemm_conjb_transc_only_2x2__psimd(
 	size_t k, size_t update,
-	const float a[restrict static 1],
-	const float b[restrict static 1],
-	float c[restrict static 1],
+	const float a[RESTRICT 1],
+	const float b[RESTRICT 1],
+	float c[RESTRICT 1],
 	size_t row_stride_c)
 {
 	psimd_f32 acc00r = psimd_zero_f32(), acc00i = psimd_zero_f32();
@@ -83,9 +83,9 @@ void nnp_s4c2gemm_conjb_transc_only_2x2__psimd(
 void nnp_s4c2gemm_conjb_transc_upto_2x2__psimd(
 	uint32_t mr, uint32_t nr,
 	size_t k, size_t update,
-	const float a[restrict static 1],
-	const float b[restrict static 1],
-	float c[restrict static 1],
+	const float a[RESTRICT 1],
+	const float b[RESTRICT 1],
+	float c[RESTRICT 1],
 	size_t row_stride_c)
 {
 	psimd_f32 acc00r = psimd_zero_f32(), acc00i = psimd_zero_f32();

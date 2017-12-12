@@ -2,8 +2,8 @@
 
 
 void nnp_fft4_4aos__psimd(
-	const float t[restrict static 32],
-	float f[restrict static 32])
+	const float t[RESTRICT 32],
+	float f[RESTRICT 32])
 {
 	psimd_f32 w0r, w0i, w1r, w1i, w2r, w2i, w3r, w3i;
 	psimd_fft4_aos_f32(
@@ -20,8 +20,8 @@ void nnp_fft4_4aos__psimd(
 }
 
 void nnp_fft8_4aos__psimd(
-	const float t[restrict static 64],
-	float f[restrict static 64])
+	const float t[RESTRICT 64],
+	float f[RESTRICT 64])
 {
 	psimd_f32 w0r, w0i, w1r, w1i, w2r, w2i, w3r, w3i, w4r, w4i, w5r, w5i, w6r, w6i, w7r, w7i;
 	psimd_fft8_aos_f32(
@@ -46,8 +46,8 @@ void nnp_fft8_4aos__psimd(
 }
 
 void nnp_ifft4_4aos__psimd(
-	const float f[restrict static 32],
-	float t[restrict static 32])
+	const float f[RESTRICT 32],
+	float t[RESTRICT 32])
 {
 	const psimd_f32 w0r = psimd_load_f32(f +  0);
 	const psimd_f32 w0i = psimd_load_f32(f +  4);
@@ -64,8 +64,8 @@ void nnp_ifft4_4aos__psimd(
 }
 
 void nnp_ifft8_4aos__psimd(
-	const float f[restrict static 64],
-	float t[restrict static 64])
+	const float f[RESTRICT 64],
+	float t[RESTRICT 64])
 {
 	const psimd_f32 w0r = psimd_load_f32(f +  0);
 	const psimd_f32 w0i = psimd_load_f32(f +  4);

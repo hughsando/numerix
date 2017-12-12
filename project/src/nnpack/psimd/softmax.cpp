@@ -10,7 +10,7 @@
 #include <psimd/exp.h>
 
 
-static float max__scalar(size_t n, const float v[restrict static n]) {
+static float max__scalar(size_t n, const float *v) {
 	float max_v = *v++;
 	while (--n) {
 		max_v = maxf(max_v, *v++);
@@ -18,11 +18,11 @@ static float max__scalar(size_t n, const float v[restrict static n]) {
 	return max_v;
 }
 
-static psimd_f32 max__psimd(size_t n, const float v[restrict static n]) {
+static psimd_f32 max__psimd(size_t n, const float *v) {
 	NNP_ALIGN(16) static const int32_t mask[12] = {
-		0x00000000, 0x00000000, 0x00000000, 0xFFFFFFFF,
-		0x00000000, 0x00000000, 0xFFFFFFFF, 0xFFFFFFFF,
-		0x00000000, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF,
+		(int32_t)0x00000000, (int32_t)0x00000000, (int32_t)0x00000000, (int32_t)0xFFFFFFFF,
+		(int32_t)0x00000000, (int32_t)0x00000000, (int32_t)0xFFFFFFFF, (int32_t)0xFFFFFFFF,
+		(int32_t)0x00000000, (int32_t)0xFFFFFFFF, (int32_t)0xFFFFFFFF, (int32_t)0xFFFFFFFF,
 	};
 
 	psimd_f32 max0, max1, max2, max3;
@@ -51,7 +51,7 @@ static psimd_f32 max__psimd(size_t n, const float v[restrict static n]) {
 	return psimd_allreduce_max_f32(max0);
 }
 
-static float sum_exp_minus_c__scalar(size_t n, const float v[restrict static n], float c) {
+static float sum_exp_minus_c__scalar(size_t n, const float *v, float c) {
 	float sum = 0.0f;
 	do {
 		sum += expf(*v++ - c);
@@ -59,11 +59,11 @@ static float sum_exp_minus_c__scalar(size_t n, const float v[restrict static n],
 	return sum;
 }
 
-static float sum_exp_minus_c__psimd(size_t n, const float v[restrict static n], psimd_f32 c) {
+static float sum_exp_minus_c__psimd(size_t n, const float *v, psimd_f32 c) {
 	NNP_ALIGN(16) static const int32_t mask[12] = {
-		0x00000000, 0x00000000, 0x00000000, 0xFFFFFFFF,
-		0x00000000, 0x00000000, 0xFFFFFFFF, 0xFFFFFFFF,
-		0x00000000, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF,
+		(int32_t)0x00000000, (int32_t)0x00000000, (int32_t)0x00000000, (int32_t)0xFFFFFFFF,
+		(int32_t)0x00000000, (int32_t)0x00000000, (int32_t)0xFFFFFFFF, (int32_t)0xFFFFFFFF,
+		(int32_t)0x00000000, (int32_t)0xFFFFFFFF, (int32_t)0xFFFFFFFF, (int32_t)0xFFFFFFFF,
 	};
 	psimd_f32 sum0, sum1, sum2, sum3;
 	sum0 = sum1 = sum2 = sum3 = psimd_zero_f32();
@@ -89,13 +89,13 @@ static float sum_exp_minus_c__psimd(size_t n, const float v[restrict static n], 
 	return psimd_reduce_sum_f32(sum0);
 }
 
-static void scaled_exp_minus_c__scalar(size_t n, const float x[restrict static n], float y[restrict static n], float scale, float c) {
+static void scaled_exp_minus_c__scalar(size_t n, const float *x, float *y, float scale, float c) {
 	do {
 		*y++ = scale * expf(*x++ - c);
 	} while (--n);
 }
 
-static void inplace_scaled_exp_minus_c__psimd(size_t n, float v[restrict static n], psimd_f32 scale, psimd_f32 c) {
+static void inplace_scaled_exp_minus_c__psimd(size_t n, float *v, psimd_f32 scale, psimd_f32 c) {
 	const psimd_f32 vlast = scale * psimd_exp_f32(psimd_load_f32(v + n - 4) - c);
 	while (n >= 16) {
 		const psimd_f32 v0 = scale * psimd_exp_f32(psimd_load_f32(v +  0) - c);
@@ -122,7 +122,7 @@ static void inplace_scaled_exp_minus_c__psimd(size_t n, float v[restrict static 
 	}
 }
 
-static void outplace_scaled_exp_minus_c__psimd(size_t n, const float x[restrict static n], float y[restrict static n], psimd_f32 scale, psimd_f32 c) {
+static void outplace_scaled_exp_minus_c__psimd(size_t n, const float *x, float *y, psimd_f32 scale, psimd_f32 c) {
 	const psimd_f32 ylast = scale * psimd_exp_f32(psimd_load_f32(x + n - 4) - c);
 	while (n >= 16) {
 		const psimd_f32 y0 = scale * psimd_exp_f32(psimd_load_f32(x +  0) - c);
@@ -153,8 +153,8 @@ static void outplace_scaled_exp_minus_c__psimd(size_t n, const float x[restrict 
 
 void nnp_softmax__psimd(
 	size_t n,
-	const float x[restrict static n],
-	float y[restrict static n])
+	const float *x,
+	float *y)
 {
 	if (n >= 4) {
 		const psimd_f32 c = max__psimd(n, x);
@@ -170,7 +170,7 @@ void nnp_softmax__psimd(
 }
 void nnp_inplace_softmax__psimd(
 	size_t n,
-	float v[restrict static n])
+	float *v)
 {
 	if (n >= 4) {
 		const psimd_f32 c = max__psimd(n, v);

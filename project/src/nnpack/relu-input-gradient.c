@@ -20,7 +20,7 @@ struct NNP_CACHE_ALIGN relu_context {
 };
 
 static void compute_grad_relu(
-	const struct relu_context context[restrict static 1],
+	const struct relu_context context[RESTRICT 1],
 	size_t block_start, size_t block_size)
 {
 	nnp_grad_relu_function grad_relu = context->grad_relu_function;

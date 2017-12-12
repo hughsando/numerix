@@ -7,8 +7,8 @@
 
 void nnp_vector_exp__psimd(
 	size_t n,
-	const float x[restrict static n],
-	float y[restrict static n])
+	const float x[RESTRICT n],
+	float y[RESTRICT n])
 {
 	do {
 		psimd_store_f32(y,

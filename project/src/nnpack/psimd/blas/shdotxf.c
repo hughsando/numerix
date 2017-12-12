@@ -5,10 +5,10 @@
 #include <fp16/psimd.h>
 
 void nnp_shdotxf1__psimd(
-	const float x[restrict static 1],
-	const uint16_t y[restrict static 1],
+	const float x[RESTRICT 1],
+	const uint16_t y[RESTRICT 1],
 	size_t stride_y,
-	float sum[restrict static 1],
+	float sum[RESTRICT 1],
 	size_t n)
 {
 	psimd_f32 vacc0 = psimd_zero_f32();
@@ -33,10 +33,10 @@ void nnp_shdotxf1__psimd(
 }
 
 void nnp_shdotxf2__psimd(
-	const float x[restrict static 1],
-	const uint16_t y[restrict static 1],
+	const float x[RESTRICT 1],
+	const uint16_t y[RESTRICT 1],
 	size_t stride_y,
-	float sum[restrict static 1],
+	float sum[RESTRICT 1],
 	size_t n)
 {
 	psimd_f32 vacc0, vacc1;
@@ -72,10 +72,10 @@ void nnp_shdotxf2__psimd(
 }
 
 void nnp_shdotxf3__psimd(
-	const float x[restrict static 1],
-	const uint16_t y[restrict static 1],
+	const float x[RESTRICT 1],
+	const uint16_t y[RESTRICT 1],
 	size_t stride_y,
-	float sum[restrict static 1],
+	float sum[RESTRICT 1],
 	size_t n)
 {
 	psimd_f32 vacc0, vacc1, vacc2;
@@ -121,10 +121,10 @@ void nnp_shdotxf3__psimd(
 }
 
 void nnp_shdotxf4__psimd(
-	const float x[restrict static 1],
-	const uint16_t y[restrict static 1],
+	const float x[RESTRICT 1],
+	const uint16_t y[RESTRICT 1],
 	size_t stride_y,
-	float sum[restrict static 1],
+	float sum[RESTRICT 1],
 	size_t n)
 {
 	psimd_f32 vacc0, vacc1, vacc2, vacc3;
@@ -180,10 +180,10 @@ void nnp_shdotxf4__psimd(
 }
 
 void nnp_shdotxf5__psimd(
-	const float x[restrict static 1],
-	const uint16_t y[restrict static 1],
+	const float x[RESTRICT 1],
+	const uint16_t y[RESTRICT 1],
 	size_t stride_y,
-	float sum[restrict static 1],
+	float sum[RESTRICT 1],
 	size_t n)
 {
 	psimd_f32 vacc0, vacc1, vacc2, vacc3, vacc4;
@@ -249,10 +249,10 @@ void nnp_shdotxf5__psimd(
 }
 
 void nnp_shdotxf6__psimd(
-	const float x[restrict static 1],
-	const uint16_t y[restrict static 1],
+	const float x[RESTRICT 1],
+	const uint16_t y[RESTRICT 1],
 	size_t stride_y,
-	float sum[restrict static 1],
+	float sum[RESTRICT 1],
 	size_t n)
 {
 	psimd_f32 vacc0, vacc1, vacc2, vacc3, vacc4, vacc5;
@@ -328,10 +328,10 @@ void nnp_shdotxf6__psimd(
 }
 
 void nnp_shdotxf7__psimd(
-	const float x[restrict static 1],
-	const uint16_t y[restrict static 1],
+	const float x[RESTRICT 1],
+	const uint16_t y[RESTRICT 1],
 	size_t stride_y,
-	float sum[restrict static 1],
+	float sum[RESTRICT 1],
 	size_t n)
 {
 	psimd_f32 vacc0, vacc1, vacc2, vacc3, vacc4, vacc5, vacc6;
@@ -417,10 +417,10 @@ void nnp_shdotxf7__psimd(
 }
 
 void nnp_shdotxf8__psimd(
-	const float x[restrict static 1],
-	const uint16_t y[restrict static 1],
+	const float x[RESTRICT 1],
+	const uint16_t y[RESTRICT 1],
 	size_t stride_y,
-	float sum[restrict static 1],
+	float sum[RESTRICT 1],
 	size_t n)
 {
 	psimd_f32 vacc0, vacc1, vacc2, vacc3, vacc4, vacc5, vacc6, vacc7;

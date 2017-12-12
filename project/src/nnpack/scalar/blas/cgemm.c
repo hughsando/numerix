@@ -4,9 +4,9 @@
 
 void nnp_cgemm_only_2x2__scalar(
 	size_t k, size_t update,
-	const float a[restrict static 1],
-	const float b[restrict static 1],
-	float c[restrict static 1],
+	const float a[RESTRICT 1],
+	const float b[RESTRICT 1],
+	float c[RESTRICT 1],
 	size_t row_stride_c)
 {
 	float acc00r, acc01r, acc10r, acc11r;
@@ -71,9 +71,9 @@ void nnp_cgemm_only_2x2__scalar(
 void nnp_cgemm_upto_2x2__scalar(
 	uint32_t mr, uint32_t nr,
 	size_t k, size_t update,
-	const float a[restrict static 1],
-	const float b[restrict static 1],
-	float c[restrict static 1],
+	const float a[RESTRICT 1],
+	const float b[RESTRICT 1],
+	float c[RESTRICT 1],
 	size_t row_stride_c)
 {
 	float acc00r, acc01r, acc10r, acc11r;

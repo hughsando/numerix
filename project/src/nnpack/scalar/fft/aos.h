@@ -8,18 +8,18 @@
 
 
 static inline void scalar_fft4_aos(
-	const float t_lo[restrict static 4],
-	const float t_hi[restrict static 4],
+	const float t_lo[RESTRICT 4],
+	const float t_hi[RESTRICT 4],
 	size_t stride_t,
 	uint32_t row_start, uint32_t row_count,
-	float f0r[restrict static 1],
-	float f0i[restrict static 1],
-	float f1r[restrict static 1],
-	float f1i[restrict static 1],
-	float f2r[restrict static 1],
-	float f2i[restrict static 1],
-	float f3r[restrict static 1],
-	float f3i[restrict static 1])
+	float f0r[RESTRICT 1],
+	float f0i[RESTRICT 1],
+	float f1r[RESTRICT 1],
+	float f1i[RESTRICT 1],
+	float f2r[RESTRICT 1],
+	float f2i[RESTRICT 1],
+	float f3r[RESTRICT 1],
+	float f3i[RESTRICT 1])
 {
 	/* Load inputs and FFT4: butterfly */
 	float w0r, w0i, w1r, w1i, w2r, w2i, w3r, w3i;
@@ -122,8 +122,8 @@ fft4_twiddle:
 
 static inline void scalar_ifft4_aos(
 	float w0r, float w0i, float w1r, float w1i, float w2r, float w2i, float w3r, float w3i,
-	float t0[restrict static 4],
-	float t2[restrict static 4],
+	float t0[RESTRICT 4],
+	float t2[RESTRICT 4],
 	size_t stride_t)
 {
 	/* Bit reversal */
@@ -181,26 +181,26 @@ static inline void scalar_ifft4_aos(
 }
 
 static inline void scalar_fft8_aos(
-	const float t_lo[restrict static 8],
-	const float t_hi[restrict static 8],
+	const float t_lo[RESTRICT 8],
+	const float t_hi[RESTRICT 8],
 	size_t stride_t,
 	uint32_t row_start, uint32_t row_count,
-	float f0r[restrict static 1],
-	float f0i[restrict static 1],
-	float f1r[restrict static 1],
-	float f1i[restrict static 1],
-	float f2r[restrict static 1],
-	float f2i[restrict static 1],
-	float f3r[restrict static 1],
-	float f3i[restrict static 1],
-	float f4r[restrict static 1],
-	float f4i[restrict static 1],
-	float f5r[restrict static 1],
-	float f5i[restrict static 1],
-	float f6r[restrict static 1],
-	float f6i[restrict static 1],
-	float f7r[restrict static 1],
-	float f7i[restrict static 1])
+	float f0r[RESTRICT 1],
+	float f0i[RESTRICT 1],
+	float f1r[RESTRICT 1],
+	float f1i[RESTRICT 1],
+	float f2r[RESTRICT 1],
+	float f2i[RESTRICT 1],
+	float f3r[RESTRICT 1],
+	float f3i[RESTRICT 1],
+	float f4r[RESTRICT 1],
+	float f4i[RESTRICT 1],
+	float f5r[RESTRICT 1],
+	float f5i[RESTRICT 1],
+	float f6r[RESTRICT 1],
+	float f6i[RESTRICT 1],
+	float f7r[RESTRICT 1],
+	float f7i[RESTRICT 1])
 {
 	/* Load inputs and FFT8: butterfly */
 	float w0r, w0i, w1r, w1i, w2r, w2i, w3r, w3i, w4r, w4i, w5r, w5i, w6r, w6i, w7r, w7i;
@@ -418,8 +418,8 @@ fft8_twiddle:;
 static inline void scalar_ifft8_aos(
 	float w0r, float w0i, float w1r, float w1i, float w2r, float w2i, float w3r, float w3i,
 	float w4r, float w4i, float w5r, float w5i, float w6r, float w6i, float w7r, float w7i,
-	float t_lo[restrict static 8],
-	float t_hi[restrict static 8],
+	float t_lo[RESTRICT 8],
+	float t_hi[RESTRICT 8],
 	size_t stride_t)
 {
 	/* Bit reversal */

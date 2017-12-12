@@ -50,7 +50,7 @@
 #define RESTRICT
 #define RESTRICT_VAL __restrict
 #else
-#define RESTRICT restrict static
+#define RESTRICT RESTRICT
 #define RESTRICT_VAL restrict
 #define NNP_ALIGN(alignment) __attribute__((__aligned__(alignment)))
 #endif

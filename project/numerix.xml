@@ -66,8 +66,6 @@
          <compilerflag value="-fPIC" />
       </section>
 
-
-
       <file name="softmax-output.c" />
       <file name="relu-output.c" />
       <file name="pooling-output.c" />
@@ -84,10 +82,12 @@
       <file name="psimd/relu.cpp" />
       <file name="psimd/fft-soa.cpp" />
       <file name="psimd/fft-dualreal.cpp" />
+      <!--
       <file name="psimd/fft-aos.cpp" />
       <file name="psimd/exp.cpp" />
       <file name="psimd/2d-fourier-8x8.cpp" />
       <file name="psimd/2d-fourier-16x16.cpp" />
+      -->
 
    </files>
 

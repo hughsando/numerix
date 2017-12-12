@@ -2,8 +2,8 @@
 
 
 void nnp_iwt_f6k3__scalar(
-	const float d[restrict static 8],
-	float w[restrict static 8])
+	const float d[RESTRICT 8],
+	float w[RESTRICT 8])
 {
 	winograd_f6k3_input_transform(
 		d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7],
@@ -11,8 +11,8 @@ void nnp_iwt_f6k3__scalar(
 }
 
 void nnp_kwt_f6k3__scalar(
-	const float g[restrict static 3],
-	float w[restrict static 8])
+	const float g[RESTRICT 3],
+	float w[RESTRICT 8])
 {
 	winograd_f6k3_kernel_transform(
 		g[0], g[1], g[2],
@@ -21,8 +21,8 @@ void nnp_kwt_f6k3__scalar(
 }
 
 void nnp_owt_f6k3__scalar(
-	const float m[restrict static 8],
-	float s[restrict static 6])
+	const float m[RESTRICT 8],
+	float s[RESTRICT 6])
 {
 	winograd_f6k3_output_transform(
 		m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7],

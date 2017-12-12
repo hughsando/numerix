@@ -11,7 +11,7 @@
 
 
 void nnp_iwt8x8_3x3_fp16_with_offset__neonhp(
-	const float data[restrict static 1],
+	const float data[RESTRICT 1],
 	void *restrict transform,
 	size_t data_stride,
 	size_t transform_stride,
@@ -81,7 +81,7 @@ void nnp_iwt8x8_3x3_fp16_with_offset__neonhp(
 }
 
 void nnp_kwt8x8_3x3_fp16__neonhp(
-	const float g[restrict static 9],
+	const float g[RESTRICT 9],
 	void *restrict transform,
 	size_t stride_g,
 	size_t transform_stride,
@@ -122,7 +122,7 @@ void nnp_kwt8x8_3x3_fp16__neonhp(
 #if !NNP_INFERENCE_ONLY
 void nnp_owt8x8_3x3_fp16__neonhp(
 	const void *restrict transform,
-	float output[restrict static 1],
+	float output[RESTRICT 1],
 	size_t transform_stride,
 	size_t output_stride,
 	uint32_t row_count,
@@ -198,8 +198,8 @@ void nnp_owt8x8_3x3_fp16__neonhp(
 
 void nnp_owt8x8_3x3_fp16_with_bias__neonhp(
 	const void *restrict transform,
-	float output[restrict static 1],
-	const float bias[restrict static 1],
+	float output[RESTRICT 1],
+	const float bias[RESTRICT 1],
 	size_t transform_stride,
 	size_t output_stride,
 	uint32_t row_count,
@@ -277,8 +277,8 @@ void nnp_owt8x8_3x3_fp16_with_bias__neonhp(
 
 void nnp_owt8x8_3x3_fp16_with_bias_with_relu__neonhp(
 	const void *restrict transform,
-	float output[restrict static 1],
-	const float bias[restrict static 1],
+	float output[RESTRICT 1],
+	const float bias[RESTRICT 1],
 	size_t transform_stride,
 	size_t output_stride,
 	uint32_t row_count,

@@ -1176,6 +1176,7 @@ struct psimd_f32
    inline psimd_f32 &operator+=(const psimd_f32 &o) { val = _mm_add_ps(val,o.val); return *this;  }
    inline psimd_f32 &operator*=(const psimd_f32 &o) { val = _mm_mul_ps(val,o.val); return *this;  }
    inline psimd_f32 &operator-=(const psimd_f32 &o) { val = _mm_sub_ps(val,o.val); return *this;  }
+   inline psimd_f32 operator-() const { return _mm_xor_ps(val, _mm_set1_ps(-0.f));  }
 };
 inline psimd_f32 psimd_splat_f32(float c) { return _mm_set1_ps(c); }
 
@@ -1186,6 +1187,8 @@ struct psimd_s32
    inline psimd_s32() { }
    inline psimd_s32(const psimd_s32 &inVal) : val(inVal.val) {  }
    inline psimd_s32(const __m128i &inVal) : val(inVal) { }
+
+   inline __m128 asFloats() { return _mm_castsi128_ps(val); }
 
    //inline psimd_f32 operator+(const psimd_f32 &o) const { return _mm_add_ps(val,o.val); }
    //inline psimd_f32 operator*(const psimd_f32 &o) const { return _mm_mul_ps(val,o.val); }
@@ -1213,6 +1216,7 @@ struct psimd_u32
 };
 
 inline psimd_f32 psimd_load_f32(const float *f) { return _mm_load_ps(f); }
+inline psimd_s32 psimd_load_s32(const int *i) { return _mm_castps_si128( _mm_load_ps((const float *)i)) ; }
 inline void psimd_store_f32(float *f, const psimd_f32 &o) { _mm_store_ps(f, o.val); }
 inline psimd_f32 psimd_zero_f32() { return  _mm_castsi128_ps(_mm_setzero_si128()); }
 inline void psimd_swap_f32(psimd_f32 *a, psimd_f32 *b)
@@ -1220,6 +1224,14 @@ inline void psimd_swap_f32(psimd_f32 *a, psimd_f32 *b)
    psimd_f32 tmp(*a);
    *b = *a;
    *a = tmp;
+}
+
+inline psimd_f32 psimd_max_f32(const psimd_f32 &a, const psimd_f32 &b) {
+   return _mm_max_ps(a.val, b.val);
+}
+
+inline psimd_f32 psimd_min_f32(const psimd_f32 &a, const psimd_f32 &b) {
+   return _mm_min_ps(a.val, b.val);
 }
 
 inline psimd_f32 psimd_concat_lo_f32(const psimd_f32 &a, const psimd_f32 &b) {
@@ -1249,10 +1261,41 @@ inline psimd_f32 psimd_blend_f32(const psimd_s32 &mask, const psimd_f32 &a, cons
 }
 
 inline psimd_f32 psimd_signblend_f32(const psimd_f32 &x, const psimd_f32 &a, const psimd_f32 &b) {
-		const psimd_s32 mask = _mm_srai_epi32( _mm_castps_si128(x.val),31);
-      //psimd_s32 mask = _mm_movemask_ps(x.val);
-		return psimd_blend_f32(mask, a, b);
-	}
+   const psimd_s32 mask = _mm_srai_epi32( _mm_castps_si128(x.val),31);
+   //psimd_s32 mask = _mm_movemask_ps(x.val);
+   return psimd_blend_f32(mask, a, b);
+}
+
+
+inline psimd_f32 psimd_allreduce_max_f32(psimd_f32 v) {
+   const psimd_f32 temp = psimd_max_f32(v, __builtin_shufflevector(v, v, 2, 3, 0, 1));
+   return psimd_max_f32(temp, __builtin_shufflevector(temp, temp, 1, 0, 3, 2));
+}
+
+inline psimd_f32 psimd_andmask_f32(psimd_s32 mask, psimd_f32 v) {
+   return  _mm_and_ps( mask.asFloats(), v.val);
+}
+
+inline psimd_f32 psimd_allreduce_sum_f32(psimd_f32 v) {
+   const psimd_f32 temp = v + __builtin_shufflevector(v, v, 2, 3, 0, 1);
+   return temp + __builtin_shufflevector(temp, temp, 1, 0, 3, 2);
+}
+
+inline  float psimd_reduce_sum_f32(psimd_f32 v) {
+   const psimd_f32 temp = v + __builtin_shufflevector(v, v, 2, 3, -1, -1);
+   const psimd_f32 result = temp + __builtin_shufflevector(temp, temp, 1, -1, -1, -1);
+   return _mm_cvtss_f32(result.val);
+}
+
+inline psimd_f32 psimd_concat_even_f32(psimd_f32 a, psimd_f32 b) {
+   return __builtin_shufflevector(a, b, 0, 2, 4+0, 4+2);
+}
+
+inline psimd_f32 psimd_concat_odd_f32(psimd_f32 a, psimd_f32 b) {
+   return __builtin_shufflevector(a, b, 1, 3, 4+1, 4+3);
+}
+
+
 
 #endif
 

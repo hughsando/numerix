@@ -2,6 +2,16 @@
 
 #include <psimd.h>
 
+#ifdef HX_WINDOWS
+
+#define USE_SSE2
+#include "sse_mathfun.h"
+
+inline psimd_f32 psimd_exp_f32(const psimd_f32 &x) { return exp_ps(x.val); }
+
+#else
+
+
 
 static inline psimd_f32 psimd_exp_f32(psimd_f32 x) {
 	const psimd_f32 magic_bias = psimd_splat_f32(0x1.800000p+23f);
@@ -43,3 +53,6 @@ static inline psimd_f32 psimd_exp_f32(psimd_f32 x) {
     f = psimd_blend_f32(x > inf_cutoff, plus_inf, f);
     return f;
 }
+
+
+#endif

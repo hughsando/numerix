@@ -5,23 +5,23 @@
 
 
 static inline void scalar_fft8_soa(
-	const float t[restrict static 16],
-	float f0r[restrict static 1],
-	float f1r[restrict static 1],
-	float f2r[restrict static 1],
-	float f3r[restrict static 1],
-	float f4r[restrict static 1],
-	float f5r[restrict static 1],
-	float f6r[restrict static 1],
-	float f7r[restrict static 1],
-	float f0i[restrict static 1],
-	float f1i[restrict static 1],
-	float f2i[restrict static 1],
-	float f3i[restrict static 1],
-	float f4i[restrict static 1],
-	float f5i[restrict static 1],
-	float f6i[restrict static 1],
-	float f7i[restrict static 1])
+	const float t[RESTRICT 16],
+	float f0r[RESTRICT 1],
+	float f1r[RESTRICT 1],
+	float f2r[RESTRICT 1],
+	float f3r[RESTRICT 1],
+	float f4r[RESTRICT 1],
+	float f5r[RESTRICT 1],
+	float f6r[RESTRICT 1],
+	float f7r[RESTRICT 1],
+	float f0i[RESTRICT 1],
+	float f1i[RESTRICT 1],
+	float f2i[RESTRICT 1],
+	float f3i[RESTRICT 1],
+	float f4i[RESTRICT 1],
+	float f5i[RESTRICT 1],
+	float f6i[RESTRICT 1],
+	float f7i[RESTRICT 1])
 {
 	/* Load inputs and FFT8: butterfly */
 	float w0r = t[0], w4r = t[4];
@@ -130,7 +130,7 @@ static inline void scalar_fft8_soa(
 static inline void scalar_ifft8_soa(
 	float w0r, float w1r, float w2r, float w3r, float w4r, float w5r, float w6r, float w7r,
 	float w0i, float w1i, float w2i, float w3i, float w4i, float w5i, float w6i, float w7i,
-	float t[restrict static 16])
+	float t[RESTRICT 16])
 {
 	/* Bit reversal */
 	scalar_swap(&w1r, &w4r);
@@ -243,39 +243,39 @@ static inline void scalar_ifft8_soa(
 }
 
 static inline void scalar_fft16_soa(
-	const float t[restrict static 32],
-	float f0r[restrict static 1],
-	float f1r[restrict static 1],
-	float f2r[restrict static 1],
-	float f3r[restrict static 1],
-	float f4r[restrict static 1],
-	float f5r[restrict static 1],
-	float f6r[restrict static 1],
-	float f7r[restrict static 1],
-	float f8r[restrict static 1],
-	float f9r[restrict static 1],
-	float f10r[restrict static 1],
-	float f11r[restrict static 1],
-	float f12r[restrict static 1],
-	float f13r[restrict static 1],
-	float f14r[restrict static 1],
-	float f15r[restrict static 1],
-	float f0i[restrict static 1],
-	float f1i[restrict static 1],
-	float f2i[restrict static 1],
-	float f3i[restrict static 1],
-	float f4i[restrict static 1],
-	float f5i[restrict static 1],
-	float f6i[restrict static 1],
-	float f7i[restrict static 1],
-	float f8i[restrict static 1],
-	float f9i[restrict static 1],
-	float f10i[restrict static 1],
-	float f11i[restrict static 1],
-	float f12i[restrict static 1],
-	float f13i[restrict static 1],
-	float f14i[restrict static 1],
-	float f15i[restrict static 1])
+	const float t[RESTRICT 32],
+	float f0r[RESTRICT 1],
+	float f1r[RESTRICT 1],
+	float f2r[RESTRICT 1],
+	float f3r[RESTRICT 1],
+	float f4r[RESTRICT 1],
+	float f5r[RESTRICT 1],
+	float f6r[RESTRICT 1],
+	float f7r[RESTRICT 1],
+	float f8r[RESTRICT 1],
+	float f9r[RESTRICT 1],
+	float f10r[RESTRICT 1],
+	float f11r[RESTRICT 1],
+	float f12r[RESTRICT 1],
+	float f13r[RESTRICT 1],
+	float f14r[RESTRICT 1],
+	float f15r[RESTRICT 1],
+	float f0i[RESTRICT 1],
+	float f1i[RESTRICT 1],
+	float f2i[RESTRICT 1],
+	float f3i[RESTRICT 1],
+	float f4i[RESTRICT 1],
+	float f5i[RESTRICT 1],
+	float f6i[RESTRICT 1],
+	float f7i[RESTRICT 1],
+	float f8i[RESTRICT 1],
+	float f9i[RESTRICT 1],
+	float f10i[RESTRICT 1],
+	float f11i[RESTRICT 1],
+	float f12i[RESTRICT 1],
+	float f13i[RESTRICT 1],
+	float f14i[RESTRICT 1],
+	float f15i[RESTRICT 1])
 {
 	/* Load inputs and FFT16: butterfly */
 	float w0r = t[0], w8r = t[8];
@@ -544,7 +544,7 @@ static inline void scalar_ifft16_soa(
 	float w8r, float w9r, float w10r, float w11r, float w12r, float w13r, float w14r, float w15r,
 	float w0i, float w1i, float  w2i, float  w3i, float  w4i, float  w5i, float  w6i, float  w7i,
 	float w8i, float w9i, float w10i, float w11i, float w12i, float w13i, float w14i, float w15i,
-	float t[restrict static 16])
+	float t[RESTRICT 16])
 {
 	/* Bit reversal */
 	scalar_swap(&w1r, &w8r);

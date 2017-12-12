@@ -8,14 +8,14 @@
 static NNP_INLINE void winograd_f6k3_input_transform(
 	const float d0, const float d1, const float d2, const float d3, 
 	const float d4, const float d5, const float d6, const float d7,
-	float transform0[restrict static 1],
-	float transform1[restrict static 1],
-	float transform2[restrict static 1],
-	float transform3[restrict static 1],
-	float transform4[restrict static 1],
-	float transform5[restrict static 1],
-	float transform6[restrict static 1],
-	float transform7[restrict static 1])
+	float transform0[RESTRICT 1],
+	float transform1[RESTRICT 1],
+	float transform2[RESTRICT 1],
+	float transform3[RESTRICT 1],
+	float transform4[RESTRICT 1],
+	float transform5[RESTRICT 1],
+	float transform6[RESTRICT 1],
+	float transform7[RESTRICT 1])
 {
 	const float const_0_25 = 0.25f;
 
@@ -79,14 +79,14 @@ static NNP_INLINE void winograd_f6k3_input_transform(
 
 static NNP_INLINE void winograd_f6k3_kernel_transform(
 	const float g0, const float g1, const float g2,
-	float transform0[restrict static 1],
-	float transform1[restrict static 1],
-	float transform2[restrict static 1],
-	float transform3[restrict static 1],
-	float transform4[restrict static 1],
-	float transform5[restrict static 1],
-	float transform6[restrict static 1],
-	float transform7[restrict static 1],
+	float transform0[RESTRICT 1],
+	float transform1[RESTRICT 1],
+	float transform2[RESTRICT 1],
+	float transform3[RESTRICT 1],
+	float transform4[RESTRICT 1],
+	float transform5[RESTRICT 1],
+	float transform6[RESTRICT 1],
+	float transform7[RESTRICT 1],
 	bool rescale_coefficients)
 {
 	/*
@@ -154,12 +154,12 @@ static NNP_INLINE void winograd_f6k3_kernel_transform(
 
 static NNP_INLINE void winograd_f6k3_output_transform(
 	const float m0, const float m1, const float m2, const float m3, const float m4, const float m5, const float m6, const float m7,
-	float output0[restrict static 1],
-	float output1[restrict static 1],
-	float output2[restrict static 1],
-	float output3[restrict static 1],
-	float output4[restrict static 1],
-	float output5[restrict static 1])
+	float output0[RESTRICT 1],
+	float output1[RESTRICT 1],
+	float output2[RESTRICT 1],
+	float output3[RESTRICT 1],
+	float output4[RESTRICT 1],
+	float output5[RESTRICT 1])
 {
 	/*
 	 * s0 = m0 + (m1 + m2) +      (m3 + m4) + 32 * (m5 + m6)

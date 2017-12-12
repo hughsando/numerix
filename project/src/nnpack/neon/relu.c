@@ -5,8 +5,8 @@
 
 
 void nnp_relu__neon(
-	const float input[restrict static 4],
-	float output[restrict static 4],
+	const float input[RESTRICT 4],
+	float output[RESTRICT 4],
 	size_t length,
 	float negative_slope)
 {
@@ -24,7 +24,7 @@ void nnp_relu__neon(
 }
 
 void nnp_inplace_relu__neon(
-	float data[restrict static 4],
+	float data[RESTRICT 4],
 	size_t length,
 	float negative_slope)
 {
@@ -41,9 +41,9 @@ void nnp_inplace_relu__neon(
 }
 
 void nnp_grad_relu__neon(
-	const float output_gradient[restrict static 4],
-	const float input[restrict static 4],
-	float input_gradient[restrict static 4],
+	const float output_gradient[RESTRICT 4],
+	const float input[RESTRICT 4],
+	float input_gradient[RESTRICT 4],
 	size_t length,
 	float negative_slope)
 {

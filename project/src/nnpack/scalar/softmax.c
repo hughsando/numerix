@@ -6,7 +6,7 @@
 #include <nnpack/softmax.h>
 
 
-static float max__scalar(size_t n, const float v[restrict static n]) {
+static float max__scalar(size_t n, const float v[RESTRICT n]) {
 	float max_v = *v++;
 	while (--n) {
 		max_v = maxf(max_v, *v++);
@@ -14,7 +14,7 @@ static float max__scalar(size_t n, const float v[restrict static n]) {
 	return max_v;
 }
 
-static float sum_exp_minus_c__scalar(size_t n, const float v[restrict static n], float c) {
+static float sum_exp_minus_c__scalar(size_t n, const float v[RESTRICT n], float c) {
 	float sum = 0.0f;
 	do {
 		sum += expf(*v++ - c);
@@ -22,7 +22,7 @@ static float sum_exp_minus_c__scalar(size_t n, const float v[restrict static n],
 	return sum;
 }
 
-static void scaled_exp_minus_c__scalar(size_t n, const float x[restrict static n], float y[restrict static n], float scale, float c) {
+static void scaled_exp_minus_c__scalar(size_t n, const float x[RESTRICT n], float y[RESTRICT n], float scale, float c) {
 	do {
 		*y++ = scale * expf(*x++ - c);
 	} while (--n);
@@ -30,8 +30,8 @@ static void scaled_exp_minus_c__scalar(size_t n, const float x[restrict static n
 
 void nnp_softmax__scalar(
 	size_t n,
-	const float x[restrict static n],
-	float y[restrict static n])
+	const float x[RESTRICT n],
+	float y[RESTRICT n])
 {
 	const float c = max__scalar(n, x);
 	const float sum = sum_exp_minus_c__scalar(n, x, c);
@@ -41,7 +41,7 @@ void nnp_softmax__scalar(
 
 void nnp_inplace_softmax__scalar(
 	size_t n,
-	float v[restrict static n])
+	float v[RESTRICT n])
 {
 	const float c = max__scalar(n, v);
 	const float sum = sum_exp_minus_c__scalar(n, v, c);

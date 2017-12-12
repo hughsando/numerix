@@ -27,7 +27,7 @@ struct NNP_CACHE_ALIGN input_transform_context {
 };
 
 static void compute_input_transform(
-	const struct input_transform_context context[restrict static 1],
+	const struct input_transform_context context[RESTRICT 1],
 	size_t batch_block_offset,       size_t input_channels_subblock_start,
 	size_t batch_block_offset_range, size_t input_channels_subblock_size)
 {
@@ -71,7 +71,7 @@ struct NNP_CACHE_ALIGN grad_output_transform_context {
 };
 
 static void compute_grad_output_transform(
-	const struct grad_output_transform_context context[restrict static 1],
+	const struct grad_output_transform_context context[RESTRICT 1],
 	size_t batch_block_offset,       size_t output_channels_subblock_start,
 	size_t batch_block_offset_range, size_t output_channels_subblock_size)
 {
@@ -111,7 +111,7 @@ struct NNP_CACHE_ALIGN grad_kernel_transform_context {
 };
 
 static void compute_grad_kernel_transform(
-	const struct grad_kernel_transform_context context[restrict static 1],
+	const struct grad_kernel_transform_context context[RESTRICT 1],
 	size_t output_channel,       size_t input_channels_subblock_start,
 	size_t output_channel_range, size_t input_channels_subblock_size)
 {
@@ -162,7 +162,7 @@ struct NNP_CACHE_ALIGN matrix_multiplication_context {
 };
 
 static void compute_matrix_multiplication(
-	const struct matrix_multiplication_context context[restrict static 1],
+	const struct matrix_multiplication_context context[RESTRICT 1],
 	size_t output_channels_block_start, size_t input_channels_subblock_start,
 	size_t output_channels_block_size,  size_t input_channels_subblock_size)
 {

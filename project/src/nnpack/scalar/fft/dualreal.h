@@ -5,23 +5,23 @@
 
 
 static inline void scalar_fft8_dualreal(
-	const float seq[restrict static 16],
-	float x0[restrict static 1],
-	float y0[restrict static 1],
-	float x1r[restrict static 1],
-	float y1r[restrict static 1],
-	float x2r[restrict static 1],
-	float y2r[restrict static 1],
-	float x3r[restrict static 1],
-	float y3r[restrict static 1],
-	float x4[restrict static 1],
-	float y4[restrict static 1],
-	float x1i[restrict static 1],
-	float y1i[restrict static 1],
-	float x2i[restrict static 1],
-	float y2i[restrict static 1],
-	float x3i[restrict static 1],
-	float y3i[restrict static 1])
+	const float seq[RESTRICT 16],
+	float x0[RESTRICT 1],
+	float y0[RESTRICT 1],
+	float x1r[RESTRICT 1],
+	float y1r[RESTRICT 1],
+	float x2r[RESTRICT 1],
+	float y2r[RESTRICT 1],
+	float x3r[RESTRICT 1],
+	float y3r[RESTRICT 1],
+	float x4[RESTRICT 1],
+	float y4[RESTRICT 1],
+	float x1i[RESTRICT 1],
+	float y1i[RESTRICT 1],
+	float x2i[RESTRICT 1],
+	float y2i[RESTRICT 1],
+	float x3i[RESTRICT 1],
+	float y3i[RESTRICT 1])
 {
 	float w0r, w1r, w2r, w3r, w4r, w5r, w6r, w7r;
 	float w0i, w1i, w2i, w3i, w4i, w5i, w6i, w7i;
@@ -49,39 +49,39 @@ static inline void scalar_fft8_dualreal(
 }
 
 static inline void scalar_fft16_dualreal(
-	const float seq[restrict static 32],
-	float x0[restrict static 1],
-	float y0[restrict static 1],
-	float x1r[restrict static 1],
-	float y1r[restrict static 1],
-	float x2r[restrict static 1],
-	float y2r[restrict static 1],
-	float x3r[restrict static 1],
-	float y3r[restrict static 1],
-	float x4r[restrict static 1],
-	float y4r[restrict static 1],
-	float x5r[restrict static 1],
-	float y5r[restrict static 1],
-	float x6r[restrict static 1],
-	float y6r[restrict static 1],
-	float x7r[restrict static 1],
-	float y7r[restrict static 1],
-	float x8[restrict static 1],
-	float y8[restrict static 1],
-	float x1i[restrict static 1],
-	float y1i[restrict static 1],
-	float x2i[restrict static 1],
-	float y2i[restrict static 1],
-	float x3i[restrict static 1],
-	float y3i[restrict static 1],
-	float x4i[restrict static 1],
-	float y4i[restrict static 1],
-	float x5i[restrict static 1],
-	float y5i[restrict static 1],
-	float x6i[restrict static 1],
-	float y6i[restrict static 1],
-	float x7i[restrict static 1],
-	float y7i[restrict static 1])
+	const float seq[RESTRICT 32],
+	float x0[RESTRICT 1],
+	float y0[RESTRICT 1],
+	float x1r[RESTRICT 1],
+	float y1r[RESTRICT 1],
+	float x2r[RESTRICT 1],
+	float y2r[RESTRICT 1],
+	float x3r[RESTRICT 1],
+	float y3r[RESTRICT 1],
+	float x4r[RESTRICT 1],
+	float y4r[RESTRICT 1],
+	float x5r[RESTRICT 1],
+	float y5r[RESTRICT 1],
+	float x6r[RESTRICT 1],
+	float y6r[RESTRICT 1],
+	float x7r[RESTRICT 1],
+	float y7r[RESTRICT 1],
+	float x8[RESTRICT 1],
+	float y8[RESTRICT 1],
+	float x1i[RESTRICT 1],
+	float y1i[RESTRICT 1],
+	float x2i[RESTRICT 1],
+	float y2i[RESTRICT 1],
+	float x3i[RESTRICT 1],
+	float y3i[RESTRICT 1],
+	float x4i[RESTRICT 1],
+	float y4i[RESTRICT 1],
+	float x5i[RESTRICT 1],
+	float y5i[RESTRICT 1],
+	float x6i[RESTRICT 1],
+	float y6i[RESTRICT 1],
+	float x7i[RESTRICT 1],
+	float y7i[RESTRICT 1])
 {
 	float w0r, w1r, w2r, w3r, w4r, w5r, w6r, w7r, w8r, w9r, w10r, w11r, w12r, w13r, w14r, w15r;
 	float w0i, w1i, w2i, w3i, w4i, w5i, w6i, w7i, w8i, w9i, w10i, w11i, w12i, w13i, w14i, w15i;
@@ -127,7 +127,7 @@ static inline void scalar_fft16_dualreal(
 static inline void scalar_ifft8_dualreal(
 	float x0, float y0, float x1r, float y1r, float x2r, float y2r, float x3r, float y3r,
 	float x4, float y4, float x1i, float y1i, float x2i, float y2i, float x3i, float y3i,
-	float seq[restrict static 16])
+	float seq[RESTRICT 16])
 {
 	float w0r = x0;
 	float w0i = y0;
@@ -158,7 +158,7 @@ static inline void scalar_ifft16_dualreal(
 	float x4r, float y4r, float x5r, float y5r, float x6r, float y6r, float x7r, float y7r,
 	float x8,  float y8,  float x1i, float y1i, float x2i, float y2i, float x3i, float y3i,
 	float x4i, float y4i, float x5i, float y5i, float x6i, float y6i, float x7i, float y7i,
-	float seq[restrict static 16])
+	float seq[RESTRICT 16])
 {
 	float w0r = x0;
 	float w0i = y0;

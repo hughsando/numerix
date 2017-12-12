@@ -10,18 +10,18 @@
 
 
 static inline void psimd_fft4_aos_f32(
-	const float t_lo[restrict static 16],
-	const float t_hi[restrict static 16],
+	const float t_lo[RESTRICT 16],
+	const float t_hi[RESTRICT 16],
 	size_t stride_t,
 	uint32_t row_start, uint32_t row_count,
-	psimd_f32 f0r[restrict static 1],
-	psimd_f32 f0i[restrict static 1],
-	psimd_f32 f1r[restrict static 1],
-	psimd_f32 f1i[restrict static 1],
-	psimd_f32 f2r[restrict static 1],
-	psimd_f32 f2i[restrict static 1],
-	psimd_f32 f3r[restrict static 1],
-	psimd_f32 f3i[restrict static 1])
+	psimd_f32 f0r[RESTRICT 1],
+	psimd_f32 f0i[RESTRICT 1],
+	psimd_f32 f1r[RESTRICT 1],
+	psimd_f32 f1i[RESTRICT 1],
+	psimd_f32 f2r[RESTRICT 1],
+	psimd_f32 f2i[RESTRICT 1],
+	psimd_f32 f3r[RESTRICT 1],
+	psimd_f32 f3i[RESTRICT 1])
 {
 	/* Load inputs and FFT4: butterfly */
 	psimd_f32 w0r, w0i, w1r, w1i, w2r, w2i, w3r, w3i;
@@ -124,8 +124,8 @@ fft4_twiddle:
 
 static inline void psimd_ifft4_aos_f32(
 	psimd_f32 w0r, psimd_f32 w0i, psimd_f32 w1r, psimd_f32 w1i, psimd_f32 w2r, psimd_f32 w2i, psimd_f32 w3r, psimd_f32 w3i,
-	float t0[restrict static 16],
-	float t2[restrict static 16],
+	float t0[RESTRICT 16],
+	float t2[RESTRICT 16],
 	size_t stride_t)
 {
 	/* Bit reversal */
@@ -183,26 +183,26 @@ static inline void psimd_ifft4_aos_f32(
 }
 
 static inline void psimd_fft8_aos_f32(
-	const float t_lo[restrict static 32],
-	const float t_hi[restrict static 32],
+	const float t_lo[RESTRICT 32],
+	const float t_hi[RESTRICT 32],
 	size_t stride_t,
 	uint32_t row_start, uint32_t row_count,
-	psimd_f32 f0r[restrict static 1],
-	psimd_f32 f0i[restrict static 1],
-	psimd_f32 f1r[restrict static 1],
-	psimd_f32 f1i[restrict static 1],
-	psimd_f32 f2r[restrict static 1],
-	psimd_f32 f2i[restrict static 1],
-	psimd_f32 f3r[restrict static 1],
-	psimd_f32 f3i[restrict static 1],
-	psimd_f32 f4r[restrict static 1],
-	psimd_f32 f4i[restrict static 1],
-	psimd_f32 f5r[restrict static 1],
-	psimd_f32 f5i[restrict static 1],
-	psimd_f32 f6r[restrict static 1],
-	psimd_f32 f6i[restrict static 1],
-	psimd_f32 f7r[restrict static 1],
-	psimd_f32 f7i[restrict static 1])
+	psimd_f32 f0r[RESTRICT 1],
+	psimd_f32 f0i[RESTRICT 1],
+	psimd_f32 f1r[RESTRICT 1],
+	psimd_f32 f1i[RESTRICT 1],
+	psimd_f32 f2r[RESTRICT 1],
+	psimd_f32 f2i[RESTRICT 1],
+	psimd_f32 f3r[RESTRICT 1],
+	psimd_f32 f3i[RESTRICT 1],
+	psimd_f32 f4r[RESTRICT 1],
+	psimd_f32 f4i[RESTRICT 1],
+	psimd_f32 f5r[RESTRICT 1],
+	psimd_f32 f5i[RESTRICT 1],
+	psimd_f32 f6r[RESTRICT 1],
+	psimd_f32 f6i[RESTRICT 1],
+	psimd_f32 f7r[RESTRICT 1],
+	psimd_f32 f7i[RESTRICT 1])
 {
 	/* Load inputs and FFT8: butterfly */
 	psimd_f32 w0r, w0i, w1r, w1i, w2r, w2i, w3r, w3i, w4r, w4i, w5r, w5i, w6r, w6i, w7r, w7i;
@@ -420,8 +420,8 @@ fft8_twiddle:;
 static inline void psimd_ifft8_aos_f32(
 	psimd_f32 w0r, psimd_f32 w0i, psimd_f32 w1r, psimd_f32 w1i, psimd_f32 w2r, psimd_f32 w2i, psimd_f32 w3r, psimd_f32 w3i,
 	psimd_f32 w4r, psimd_f32 w4i, psimd_f32 w5r, psimd_f32 w5i, psimd_f32 w6r, psimd_f32 w6i, psimd_f32 w7r, psimd_f32 w7i,
-	float t_lo[restrict static 32],
-	float t_hi[restrict static 32],
+	float t_lo[RESTRICT 32],
+	float t_hi[RESTRICT 32],
 	size_t stride_t)
 {
 	/* Bit reversal */

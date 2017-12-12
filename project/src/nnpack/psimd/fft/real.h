@@ -7,11 +7,11 @@
 
 
 static inline void psimd_fft8_real_f32(
-	const float t0[restrict static 16],
-	const float t4[restrict static 16],
+	const float t0[RESTRICT 16],
+	const float t4[RESTRICT 16],
 	size_t stride_t,
 	uint32_t row_offset, uint32_t row_count,
-	float f[restrict static 1],
+	float f[RESTRICT 1],
 	size_t stride_f)
 {
 	psimd_f32 w0r, w0i, w1r, w1i, w2r, w2i, w3r, w3i;
@@ -49,11 +49,11 @@ static inline void psimd_fft8_real_f32(
 }
 
 static inline void psimd_fft16_real_f32(
-	const float t0[restrict static 32],
-	const float t8[restrict static 32],
+	const float t0[RESTRICT 32],
+	const float t8[RESTRICT 32],
 	size_t stride_t,
 	uint32_t row_offset, uint32_t row_count,
-	float f[restrict static 1],
+	float f[RESTRICT 1],
 	size_t stride_f)
 {
 	psimd_f32 w0r, w0i, w1r, w1i, w2r, w2i, w3r, w3i, w4r, w4i, w5r, w5i, w6r, w6i, w7r, w7i;
@@ -120,8 +120,8 @@ static inline void psimd_fft16_real_f32(
 
 static inline void psimd_ifft8_real_f32(
 	psimd_f32 f0r, psimd_f32 f4r, psimd_f32 f1r, psimd_f32 f1i, psimd_f32 f2r, psimd_f32 f2i, psimd_f32 f3r, psimd_f32 f3i,
-	float t0[restrict static 16],
-	float t4[restrict static 16],
+	float t0[RESTRICT 16],
+	float t4[RESTRICT 16],
 	size_t stride_t)
 {
 	/* Load inputs and scale */
@@ -161,8 +161,8 @@ static inline void psimd_ifft8_real_f32(
 static inline void psimd_ifft16_real_f32(
 	psimd_f32 f0r, psimd_f32 f8r, psimd_f32 f1r, psimd_f32 f1i, psimd_f32 f2r, psimd_f32 f2i, psimd_f32 f3r, psimd_f32 f3i,
 	psimd_f32 f4r, psimd_f32 f4i, psimd_f32 f5r, psimd_f32 f5i, psimd_f32 f6r, psimd_f32 f6i, psimd_f32 f7r, psimd_f32 f7i,
-	float t0[restrict static 16],
-	float t8[restrict static 16],
+	float t0[RESTRICT 16],
+	float t8[RESTRICT 16],
 	size_t stride_t)
 {
 	/* Load inputs and scale */

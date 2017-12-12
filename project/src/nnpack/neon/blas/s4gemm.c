@@ -6,9 +6,9 @@
 
 void nnp_s4gemm_only_3x4__neon(
 	size_t k, size_t update,
-	const float a[restrict static 1],
-	const float b[restrict static 1],
-	float c[restrict static 1],
+	const float a[RESTRICT 1],
+	const float b[RESTRICT 1],
+	float c[RESTRICT 1],
 	size_t row_stride, size_t column_stride)
 {
 	float32x4_t acc00 = vdupq_n_f32(0.0f), acc01 = vdupq_n_f32(0.0f), acc02 = vdupq_n_f32(0.0f), acc03 = vdupq_n_f32(0.0f);
@@ -76,9 +76,9 @@ void nnp_s4gemm_only_3x4__neon(
 void nnp_s4gemm_upto_3x4__neon(
 	uint32_t mr, uint32_t nr,
 	size_t k, size_t update,
-	const float a[restrict static 1],
-	const float b[restrict static 1],
-	float c[restrict static 1],
+	const float a[RESTRICT 1],
+	const float b[RESTRICT 1],
+	float c[RESTRICT 1],
 	size_t row_stride, size_t column_stride)
 {
 	float32x4_t acc00 = vdupq_n_f32(0.0f), acc01 = vdupq_n_f32(0.0f), acc02 = vdupq_n_f32(0.0f), acc03 = vdupq_n_f32(0.0f);
