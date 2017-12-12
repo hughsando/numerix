@@ -8,104 +8,244 @@
 namespace numerix
 {
 
-class Conv2D : public Layer
+// ----- Conv2DBase ---------------
+
+Conv2DBase::Conv2DBase(int inStrideY, int inStrideX,
+       Activation inActivation, Padding inPadding,
+       Tensor *inWeights, Tensor *inPWeights, Tensor *inBias)
 {
-   int        strideX;
-   int        strideY;
-   int        filterY;
-   int        filterX;
-   int        inputs;
-   int        outputs;
-   int        diSize;
-   bool       padInputsWithZero;
+   strideY = inStrideY;
+   strideX = inStrideX;
+   activation = inActivation;
+   padding = inPadding;
+   diSize = 0;
+   padInputsWithZero = false;
+   weightsOriginal = 0;
 
-   int        srcW;
-   int        srcH;
-   int        destW;
-   int        destH;
-   int        padOx;
-   int        padOy;
+   // Output x Height x Width x Input
+   CShape s = inWeights->shape;
+   if (!inPWeights && s.size()!=4)
+      TensorThrow("Invalid Conv2D weight shape");
+   if (inPWeights && s.size()!=3)
+      TensorThrow("Invalid SeparableConv2D depthwise shape");
 
-   Activation activation;
-   Padding    padding;
-   Tensor     *weightsOriginal;
-   Tensor     *weights;
-   Tensor     *pweights;
-   Tensor     *bias;
+   if (inPWeights)
+   {
+      CShape p = inPWeights->shape;
+      if (p.size()!=2)
+         TensorThrow("Invalid SeparableConv2D pointwise shape");
+      if (s[0]!=p[1])
+         TensorThrow("SeparableConv2D mismatched weights");
+      diSize = p[1];
 
+      outputs = p[0];
+      inputs =  s[0];
+      filterY = s[1];
+      filterX = s[2];
+      if (filterX==1 && filterY==1)
+         TensorThrow("SeparableConv2D 1x1 not supported");
+   }
+   else
+   {
+      outputs = s[0];
+      filterY = s[1];
+      filterX = s[2];
+      inputs =  s[3];
+   }
+
+   if (inBias && inBias->shape.size()!=1)
+      TensorThrow("Conv2D - bias should be one dimensional");
+
+   if (inBias && inBias->shape[0]!=outputs)
+      TensorThrow("Conv2D - bias does not match output size");
+
+
+   weights = inWeights->incRef();
+   pweights = inPWeights ? inPWeights->incRef() : 0;
+   bias = inBias ? inBias->incRef() : 0;
+
+   is1x1 = filterX*filterY==1;
+   is1x1Aligned = is1x1 && (inputs & 0x3) == 0;
+
+}
+
+
+Conv2DBase::~Conv2DBase()
+{
+   if (weightsOriginal)
+      weightsOriginal->decRef();
+   weights->decRef();
+   if (pweights)
+      pweights->decRef();
+   if (bias)
+      bias->decRef();
+}
+
+
+void Conv2DBase::setNormalization(Tensor *inScales, Tensor *inMeans, Tensor *inVars)
+{
+   // a set of output features are first "normalized":
+   //
+   // O'i = (Oi - Mean_i)/(sqrt(Vars_i) +  .000001f)
+   //
+   // Then 'scale_bias'
+   //
+   // O''i = O'i * Scale_i
+   //
+   // Let Ki = Scale_i/(sqrt(Vars_i) +  .000001f)
+   //     Ci = -Mean_i * Ki
+   //
+   // O' = Ki Oi + Ci
+   // This is the same as multiplying the Weights_i by Ki and adding Ci to the biases
+
+   const float *scale = (const float *)inScales->cpuRead();
+   const float *mean = (const float *)inMeans->cpuRead();
+   const float *var = (const float *)inVars->cpuRead();
+
+   if (!bias)
+   {
+      Shape s(1);
+      s[0]=outputs;
+      bias = new Tensor(Float32, s);
+      bias->zero(0,outputs);
+   }
+   float *b = (float *)bias->cpuWritePart();
+   float *w = (float *)weights->cpuWritePart();
+
+   int wCount = weights->strides[0];
+   for(int i=0;i<outputs;i++)
+   {
+      float Ki = scale[i]/(sqrt(var[i])+.000001f);
+      for(int j=0;j<wCount;j++)
+         *w++ *= Ki;
+      b[i] -= mean[i]*Ki;
+   }
+
+   rebuildWeights();
+}
+
+
+void Conv2DBase::reduceInputs(int inCount)
+{
+   if (!weightsOriginal)
+      weightsOriginal = weights;
+   else
+      weights->decRef();
+
+   // take last ones ...
+   int skip = weightsOriginal->shape[3] - inCount;
+   weights = weightsOriginal->resizeAxis(3,inCount,skip);
+   inputs = inCount;
+   rebuildWeights();
+}
+
+
+Tensor *Conv2DBase::run(Tensor *inSrc0, Tensor *inBuffer)
+{
+   if (inSrc0->type != Float32)
+      TensorThrow("Conv2D only supports Float32 tensors");
+
+   CShape sin = inSrc0->shape;
+   if (sin.size()!=3)
+   {
+      printf("Conv2D %dx%dx%dx%d\n", outputs, filterY, filterX, inputs);
+      printf("Src dimension %d :", (int)sin.size());
+      for(int i=0;i<sin.size();i++)
+         printf(" %d", sin[i]);
+      printf("\n");
+      TensorThrow("Conv2D only supports H*W*C tensors");
+   }
+
+   if (sin[2]!=inputs && padInputsWithZero)
+   {
+      int maxIn = weightsOriginal ? weightsOriginal->shape[3] : inputs;
+      if (sin[2]>maxIn)
+         TensorThrow("Conv2D - too many inputs for the number of weights");
+      reduceInputs(sin[2]);
+   }
+
+   if (sin[2]!=inputs)
+   {
+      printf("sin : %d %d %d\n", sin[0], sin[1], sin[2]);
+      printf("weights : %d %dx%d %d\n", outputs, filterY, filterX, inputs );
+      TensorThrow("Conv2D - weights do not match the number of input channels");
+   }
+
+   srcH = sin[0];
+   srcW = sin[1];
+
+   destH = 0;
+   destW = 0;
+   padOx = 0;
+   padOy = 0;
+
+   if (padding==padSame)
+   {
+      destW = (srcW+strideX-1)/strideX;
+      int padX = (destW - 1)*strideX + filterX - srcW;
+      padOx = padX>>1;
+
+      destH = (srcH+strideY-1)/strideY;
+      int padY = (destH - 1)*strideY + filterY - srcH;
+      padOy = padY>>1;
+   }
+   else // padValid
+   {
+      destW = (srcW-filterX+1 + strideX-1)/strideX;
+      destH = (srcH-filterY+1 + strideY-1)/strideY;
+   }
+
+   bool match = false;
+   if (inBuffer && inBuffer->shape.size()==3 && inBuffer->type==Float32)
+   {
+      CShape s = inBuffer->shape;
+      match = s[0]==destH && s[1]==destW && s[2]==outputs;
+   }
+   Tensor *result = inBuffer;
+   if (!match)
+   {
+      Shape s(3);
+      s[0] = destH;
+      s[1] = destW;
+      s[2] = outputs;
+      result = new Tensor( Float32, s );
+   }
+   //printf("Cov2d -> %d %d %d\n", destW, destH, outputs);
+
+   doRun(inSrc0, result);
+
+   return result;
+}
+
+
+// -- Conv2D -----------------------
+
+
+class Conv2D : public Conv2DBase
+{
    bool       interlacedWeights;
    int        interlacedCount;
-   bool       is1x1Aligned;
-   bool       is1x1;
-
    std::vector <float *> srcBuffers;
    std::vector <float *> diBuffers;
    std::vector <float *> weightBuffers;
 
-   float                 *alignedWeightsBuffer;
-   float                 *alignedWeights;
-   float                 *alignedBias;
-   int                   alignedWeightSize;
+   float      *alignedWeightsBuffer;
+   float      *alignedWeights;
+   float      *alignedBias;
+   int        alignedWeightSize;
+
 
 public:
    Conv2D(int inStrideY, int inStrideX,
           Activation inActivation, Padding inPadding,
           Tensor *inWeights, Tensor *inPWeights, Tensor *inBias)
+      : Conv2DBase(inStrideY, inStrideX, inActivation, inPadding,  inWeights, inPWeights, inBias)
    {
-      strideY = inStrideY;
-      strideX = inStrideX;
-      activation = inActivation;
-      padding = inPadding;
-      diSize = 0;
-      padInputsWithZero = false;
-      weightsOriginal = 0;
-
-      // Output x Height x Width x Input
-      CShape s = inWeights->shape;
-      if (!inPWeights && s.size()!=4)
-         TensorThrow("Invalid Conv2D weight shape");
-      if (inPWeights && s.size()!=3)
-         TensorThrow("Invalid SeparableConv2D depthwise shape");
-
-      if (inPWeights)
-      {
-         CShape p = inPWeights->shape;
-         if (p.size()!=2)
-            TensorThrow("Invalid SeparableConv2D pointwise shape");
-         if (s[0]!=p[1])
-            TensorThrow("SeparableConv2D mismatched weights");
-         diSize = p[1];
-
-         outputs = p[0];
-         inputs =  s[0];
-         filterY = s[1];
-         filterX = s[2];
-         if (filterX==1 && filterY==1)
-            TensorThrow("SeparableConv2D 1x1 not supported");
-      }
-      else
-      {
-         outputs = s[0];
-         filterY = s[1];
-         filterX = s[2];
-         inputs =  s[3];
-      }
-
-      if (inBias && inBias->shape.size()!=1)
-         TensorThrow("Conv2D - bias should be one dimensional");
-
-      if (inBias && inBias->shape[0]!=outputs)
-         TensorThrow("Conv2D - bias does not match output size");
-
-
-      weights = inWeights->incRef();
-      pweights = inPWeights ? inPWeights->incRef() : 0;
-      bias = inBias ? inBias->incRef() : 0;
-
-      is1x1 = filterX*filterY==1;
-      is1x1Aligned = is1x1 && (inputs & 0x3) == 0;
       interlacedWeights = false;
       interlacedCount = 0;
+      alignedBias = 0;
+      alignedWeights = 0;
+
       #ifdef NUMERIX_SIMD
       interlacedWeights = (outputs & 0x3)==0  && !pweights && (!is1x1 || is1x1Aligned);
       #endif
@@ -173,52 +313,7 @@ public:
       }
 
       if (interlacedWeights)
-      {
          createInterlacedWeights();
-      }
-   }
-
-
-   void setNormalization(Tensor *inScales, Tensor *inMeans, Tensor *inVars)
-   {
-      // a set of output features are first "normalized":
-      //
-      // O'i = (Oi - Mean_i)/(sqrt(Vars_i) +  .000001f)
-      //
-      // Then 'scale_bias'
-      //
-      // O''i = O'i * Scale_i
-      //
-      // Let Ki = Scale_i/(sqrt(Vars_i) +  .000001f)
-      //     Ci = -Mean_i * Ki
-      //
-      // O' = Ki Oi + Ci
-      // This is the same as multiplying the Weights_i by Ki and adding Ci to the biases
-
-      const float *scale = (const float *)inScales->cpuRead();
-      const float *mean = (const float *)inMeans->cpuRead();
-      const float *var = (const float *)inVars->cpuRead();
-
-      if (!bias)
-      {
-         Shape s(1);
-         s[0]=outputs;
-         bias = new Tensor(Float32, s);
-         bias->zero(0,outputs);
-      }
-      float *b = (float *)bias->cpuWritePart();
-      float *w = (float *)weights->cpuWritePart();
-
-      int wCount = weights->strides[0];
-      for(int i=0;i<outputs;i++)
-      {
-         float Ki = scale[i]/(sqrt(var[i])+.000001f);
-         for(int j=0;j<wCount;j++)
-            *w++ *= Ki;
-         b[i] -= mean[i]*Ki;
-      }
-
-      rebuildWeights();
    }
 
 
@@ -292,119 +387,21 @@ public:
       }
    }
 
+   Tensor *src0;
+   Tensor *destTensor;
 
-   ~Conv2D()
+   virtual void doRun(Tensor *input, Tensor *output)
    {
-      if (weightsOriginal)
-         weightsOriginal->decRef();
-      weights->decRef();
-      if (pweights)
-         pweights->decRef();
-      if (bias)
-         bias->decRef();
-   }
-
-   void reduceInputs(int inCount)
-   {
-      if (!weightsOriginal)
-         weightsOriginal = weights;
-      else
-         weights->decRef();
-
-      // take last ones ...
-      int skip = weightsOriginal->shape[3] - inCount;
-      weights = weightsOriginal->resizeAxis(3,inCount,skip);
-      inputs = inCount;
-      rebuildWeights();
-   }
-
-
-   virtual Tensor *run(Tensor *inSrc0, Tensor *inBuffer)
-   {
-      if (inSrc0->type != Float32)
-         TensorThrow("Conv2D only supports Float32 tensors");
-
-      CShape sin = inSrc0->shape;
-      if (sin.size()!=3)
-      {
-         printf("Conv2D %dx%dx%dx%d\n", outputs, filterY, filterX, inputs);
-         printf("Src dimension %d :", (int)sin.size());
-         for(int i=0;i<sin.size();i++)
-            printf(" %d", sin[i]);
-         printf("\n");
-         TensorThrow("Conv2D only supports H*W*C tensors");
-      }
-
-      if (sin[2]!=inputs && padInputsWithZero)
-      {
-         int maxIn = weightsOriginal ? weightsOriginal->shape[3] : inputs;
-         if (sin[2]>maxIn)
-            TensorThrow("Conv2D - too many inputs for the number of weights");
-         reduceInputs(sin[2]);
-      }
-
-      if (sin[2]!=inputs)
-      {
-         printf("sin : %d %d %d\n", sin[0], sin[1], sin[2]);
-         printf("weights : %d %dx%d %d\n", outputs, filterY, filterX, inputs );
-         TensorThrow("Conv2D - weights do not match the number of input channels");
-      }
-
-      srcH = sin[0];
-      srcW = sin[1];
-
-      destH = 0;
-      destW = 0;
-      padOx = 0;
-      padOy = 0;
-
-      if (padding==padSame)
-      {
-         destW = (srcW+strideX-1)/strideX;
-         int padX = (destW - 1)*strideX + filterX - srcW;
-         padOx = padX>>1;
-
-         destH = (srcH+strideY-1)/strideY;
-         int padY = (destH - 1)*strideY + filterY - srcH;
-         padOy = padY>>1;
-      }
-      else // padValid
-      {
-         destW = (srcW-filterX+1 + strideX-1)/strideX;
-         destH = (srcH-filterY+1 + strideY-1)/strideY;
-      }
-
-      bool match = false;
-      if (inBuffer && inBuffer->shape.size()==3 && inBuffer->type==Float32)
-      {
-         CShape s = inBuffer->shape;
-         match = s[0]==destH && s[1]==destW && s[2]==outputs;
-      }
-      Tensor *result = inBuffer;
-      if (!match)
-      {
-         Shape s(3);
-         s[0] = destH;
-         s[1] = destW;
-         s[2] = outputs;
-         result = new Tensor( Float32, s );
-      }
-      //printf("Cov2d -> %d %d %d\n", destW, destH, outputs);
-
-      src0 = inSrc0;
-      destTensor = result;
+      src0 = input;
+      destTensor = output;
       src0->cpuRead();
       destTensor->cpuWrite();
 
       runThreaded();
       src0 = 0;
       destTensor = 0;
-
-      return result;
    }
 
-   Tensor *src0;
-   Tensor *destTensor;
 
 
    void runThread(int threadId)

@@ -171,23 +171,10 @@ void gpuDownloadConvert(unsigned char *buffer, const GpuData *inData, int n, boo
 
 
 
-class CudaConv2D : public Layer
+class CudaConv2D : public Conv2DBase
 {
-   int        strideX;
-   int        strideY;
-   int        filterY;
-   int        filterX;
-   int        padX;
-   int        padY;
-   int        inputs;
-   int        outputs;
-
-   Activation activation;
-   Padding    padding;
-   bool       padInputsWithZero;
-   Tensor     *weightsOriginal;
-   Tensor     *weights;
-   Tensor     *bias;
+   int padX;
+   int padY;
 
    cudnnTensorDescriptor_t srcDesc;
    cudnnTensorDescriptor_t destDesc;
@@ -204,34 +191,8 @@ public:
    CudaConv2D(int inStrideY, int inStrideX,
           Activation inActivation, Padding inPadding,
           Tensor *inWeights, Tensor *inBias)
+      : Conv2DBase(inStrideY, inStrideX, inActivation, inPadding,  inWeights, 0, inBias)
    {
-      strideY = inStrideY;
-      strideX = inStrideX;
-      activation = inActivation;
-      padding = inPadding;
-      padInputsWithZero = false;
-      weightsOriginal = 0;
-
-      // Output x Height x Width x Input
-      CShape s = inWeights->shape;
-      if (s.size()!=4)
-         TensorThrow("Invalid Conv2D weight shape");
-
-      outputs = s[0];
-      filterY = s[1];
-      filterX = s[2];
-      inputs =  s[3];
-
-      if (inBias && inBias->shape.size()!=1)
-         TensorThrow("Conv2D - bias should be one dimensional");
-
-      if (inBias && inBias->shape[0]!=outputs)
-         TensorThrow("Conv2D - bias does not match output size");
-
-
-      weights = inWeights->incRef();
-      bias = inBias ? inBias->incRef() : 0;
-
       cudnnCheck( cudnnCreateTensorDescriptor(&srcDesc) );
       cudnnCheck( cudnnCreateTensorDescriptor(&destDesc) );
       cudnnCheck( cudnnCreateFilterDescriptor(&weightDesc) );
@@ -262,6 +223,7 @@ public:
                                 1.0 ) );
       }
       #endif
+
    }
 
    ~CudaConv2D()
@@ -276,108 +238,12 @@ public:
       #ifdef NEW_CUDNN
       cudnnDestroyActivationDescriptor(activationDesc);
       #endif
-
-
-      if (weightsOriginal)
-         weightsOriginal->decRef();
-      weights->decRef();
-      if (bias)
-         bias->decRef();
-   }
-
-   void setNormalization(Tensor *inScales, Tensor *inMeans, Tensor *inVars)
-   {
-      // a set of output features are first "normalized":
-      //
-      // O'i = (Oi - Mean_i)/(sqrt(Vars_i) +  .000001f)
-      //
-      // Then 'scale_bias'
-      //
-      // O''i = O'i * Scale_i
-      //
-      // Let Ki = Scale_i/(sqrt(Vars_i) +  .000001f)
-      //     Ci = -Mean_i * Ki
-      //
-      // O' = Ki Oi + Ci
-      // This is the same as multiplying the Weights_i by Ki and adding Ci to the biases
-
-      const float *scale = (const float *)inScales->cpuRead();
-      const float *mean = (const float *)inMeans->cpuRead();
-      const float *var = (const float *)inVars->cpuRead();
-
-      if (!bias)
-      {
-         Shape s(1);
-         s[0]=outputs;
-         bias = new Tensor(Float32, s);
-         bias->zero(0,outputs);
-      }
-      float *b = (float *)bias->cpuWritePart();
-      float *w = (float *)weights->cpuWritePart();
-
-      int wCount = weights->strides[0];
-      for(int i=0;i<outputs;i++)
-      {
-         float Ki = scale[i]/(sqrt(var[i])+.000001f);
-         for(int i=0;i<wCount;i++)
-            *w++ *= Ki;
-         b[i] -= mean[i]*Ki;
-      }
-
-   }
-
-   void reduceInputs(int inCount)
-   {
-      if (!weightsOriginal)
-         weightsOriginal = weights;
-      else
-         weights->decRef();
-
-      // take last ones ...
-      int skip = weightsOriginal->shape[3] - inCount;
-      weights = weightsOriginal->resizeAxis(3,inCount,skip);
-      inputs = inCount;
-   }
-
-   void setPadInput()
-   {
-      padInputsWithZero = true;
    }
 
 
-
-   virtual Tensor *run(Tensor *inSrc0, Tensor *inBuffer)
+   void doRun(Tensor *input, Tensor *output)
    {
-      if (inSrc0->type != Float32)
-         TensorThrow("Conv2D only supports Float32 tensors");
-
-      CShape &sin = inSrc0->shape;
-      if (sin.size()!=3)
-      {
-         printf("CudaConv2D %dx%dx%dx%d\n", outputs, filterY, filterX, inputs);
-         printf("Src dimension %d :", (int)sin.size());
-         for(int i=0;i<sin.size();i++)
-            printf(" %d", sin[i]);
-         printf("\n");
-
-         TensorThrow("Conv2D only supports H*W*C tensors");
-      }
-
-      if (sin[2]!=inputs && padInputsWithZero)
-      {
-         int maxIn = weightsOriginal ? weightsOriginal->shape[3] : inputs;
-         if (sin[2]>maxIn)
-            TensorThrow("Conv2D - too many inputs for the number of weights");
-         reduceInputs(sin[2]);
-      }
-
-
-      if (sin[2]!=inputs)
-      {
-         printf("sin : %d %d %d\n", sin[0], sin[1], sin[2]);
-         printf("weights : %d %dx%d %d\n", outputs, filterY, filterX, inputs );
-         TensorThrow("Conv2D - weights do not match the number of input channels");
-      }
+      CShape sin = input->shape;
 
       int srcH = sin[0];
       int srcW = sin[1];
@@ -385,20 +251,9 @@ public:
       int destW = (srcW + 2*padX - filterX) / strideX + 1;
       int destH = (srcH + 2*padY - filterY) / strideY + 1;
 
-      bool match = false;
-      if (inBuffer && inBuffer->shape.size()==3 && inBuffer->type==Float32)
-      {
-         CShape &s = inBuffer->shape;
-         match = s[0]==destH && s[1]==destW && s[2]==outputs;
-      }
-      Tensor *result = inBuffer;
-      if (!match)
-         result = new Tensor( Float32, Shape3(destH, destW, outputs ) );
-
-
 
       // Load source according to what it is ...
-      bool srcNchw = preferNchw; //inSrc0->isGpuNchw();
+      bool srcNchw = preferNchw; //input->isGpuNchw();
       cudnnCheck( cudnnSetTensor4dDescriptor(srcDesc, srcNchw ? CUDNN_TENSOR_NCHW : CUDNN_TENSOR_NHWC, CUDNN_DATA_FLOAT, 1, sin[2], sin[0], sin[1]) );
 
       // Dest according to preference...
@@ -437,7 +292,7 @@ public:
       cudnnConvolutionForward(cudnnHandle,
                 &alpha,
                 srcDesc,
-                inSrc0->gpuRead(srcNchw),
+                input->gpuRead(srcNchw),
                 weightDesc,
                 weights->gpuRead(preferNchw),
                 convDesc,
@@ -446,7 +301,7 @@ public:
                 workSize,
                 &beta,
                 destDesc,
-                result->gpuWrite(preferNchw) );
+                output->gpuWrite(preferNchw) );
 
       // TODO - cudnnConvolutionBiasActivationForward, but what is z for?
 
@@ -465,7 +320,7 @@ public:
                         bias->gpuRead(),
                         &beta,
                         destDesc,
-                        result->gpuWrite(preferNchw) );
+                        output->gpuWrite(preferNchw) );
       }
 
       if (activation==actRelu || activation==actSigmoid || activation==actLeaky)
@@ -485,13 +340,11 @@ public:
                        #endif
                        &alpha,
                        destDesc,
-                       result->gpuRead(preferNchw),
+                       output->gpuRead(preferNchw),
                        &beta,
                        destDesc,
-                       result->gpuWrite(preferNchw) ) );
+                       output->gpuWrite(preferNchw) ) );
       }
-
-      return result;
    }
 };
 

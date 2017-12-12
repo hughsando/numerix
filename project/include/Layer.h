@@ -94,6 +94,87 @@ public:
 };
 
 
+
+
+
+
+
+class Conv2DBase : public Layer
+{
+protected:
+   int        strideX;
+   int        strideY;
+   int        filterY;
+   int        filterX;
+   int        inputs;
+   int        outputs;
+   int        diSize;
+   bool       padInputsWithZero;
+
+   int        srcW;
+   int        srcH;
+   int        destW;
+   int        destH;
+   int        padOx;
+   int        padOy;
+
+
+   Activation activation;
+   Padding    padding;
+   Tensor     *weightsOriginal;
+   Tensor     *weights;
+   Tensor     *pweights;
+   Tensor     *bias;
+
+   bool       is1x1Aligned;
+   bool       is1x1;
+
+
+
+public:
+   Conv2DBase(int inStrideY, int inStrideX,
+          Activation inActivation, Padding inPadding,
+          Tensor *inWeights, Tensor *inPWeights, Tensor *inBias);
+
+   ~Conv2DBase();
+
+   void setPadInput() { padInputsWithZero = true; }
+
+   virtual void rebuildWeights() { };
+
+   void setNormalization(Tensor *inScales, Tensor *inMeans, Tensor *inVars);
+
+   void reduceInputs(int inCount);
+
+   Tensor *run(Tensor *inSrc0, Tensor *inBuffer);
+
+   virtual void doRun(Tensor *input, Tensor *output) = 0;
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 } // end namespace numerix
 
 #endif
