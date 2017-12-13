@@ -606,10 +606,243 @@ public:
    }
 };
 
+
+#ifdef NUMERIX_WINOGRAD
+class Conv2DWinograd : public Conv2DBase
+{
+   std::vector <float *> srcBuffers;
+   std::vector <float *> srcTransBuffers;
+   std::vector <float *> outputTransBuffers;
+
+public:
+   Conv2DWinograd(int inStrideY, int inStrideX,
+          Activation inActivation, Padding inPadding,
+          Tensor *inWeights, Tensor *inBias)
+      : Conv2DBase(inStrideY, inStrideX, inActivation, inPadding,  inWeights, 0, inBias)
+   {
+      rebuildWeights();
+   }
+
+   void rebuildWeights()
+   {
+      releaseFloats();
+
+      srcBuffers.resize(0);
+      srcTransBuffers.resize(0);
+      outputTransBuffers.resize(0);
+
+
+      int threads = GetWorkerCount();
+
+      for(int i=0;i<threads;i++)
+      {
+         srcBuffers.push_back( allocFloats(8*8*inputs,false) );
+         srcTransBuffers.push_back( allocFloats(8*8*4,false) );
+         outputTransBuffers.push_back( allocFloats(8*8*outputs,false) );
+      }
+   }
+
+
+   Tensor *src0;
+   Tensor *destTensor;
+
+   virtual void doRun(Tensor *input, Tensor *output)
+   {
+      src0 = input;
+      destTensor = output;
+      src0->cpuRead();
+      destTensor->cpuWrite();
+
+      //runThreaded();
+      src0 = 0;
+      destTensor = 0;
+   }
+
+   inline void runTile( const float *src, float *dest,
+                       int xCount, int yCount, 
+                       float *sBuf, float *oBuf)
+   {
+      /*
+        src is HWC format, 8 x 8 x inputs float32
+
+        dest is HWC format wanting the central 6 x 6 x outputs float32
+      */
+
+      // Loop over source channels, four at a time
+      int ss = inputs;
+      for(inputIdx=0; inputIdx<inputs; inputIdx+=4)
+      {
+         const float *s0 = src + inputIdx;
+         float *s1 = sBuf;
+         // Transorm 4 channels to 4 channels of wonigrad coeffs
+
+         // Tranform rows to buffer
+         for(int i=0;i<8;i++)
+         {
+            TRANS_WINO( s0+0, s0+ds, s0+2*ds, s0+3*ds, s0+4*ds, s0+5*ds, s0+6*ds, s0+7*ds, \
+                        s1+0, s1+4,  s1+8,    s1+12,   s1+16,   s1+20,   s1+24,   s1+28 );
+            s0 += inputs*8;
+            s1 += 8*4;
+         }
+         // Transform buffer columns in-situ
+         s1 = sBuf;
+         for(int i=0;i<8;i++)
+         {
+            TRANS_WINO( s1+0, s1+32,  s1+64, s1+96, s1+128, s1+160, s1+192, s1+224,
+                        s1+0, s1+32,  s1+64, s1+96, s1+128, s1+160, s1+192, s1+224 );
+            s1++;
+         }
+
+         // Accumulate T(channel_i * weight_t) for each output an these 4 inputs
+         float32x4_t *w = (float32x4_t)transformWeights;
+         for(int o=0; o<outputs;o+=4)
+         {
+            float32x4_t *inCoeff = (float32x4_t *)sBuf;
+            float32x4_t *outCh = (float32x4_t *)oBuf + o*8*8;
+            // Accumulate 4 output channels
+            if (inputIdx==0)
+            {
+               // just set
+               for(int pixel=0;pixel<64;pixel++)
+               {
+                  float32x4_t coeff = Load4f32(inCoeff++);
+                  float32x4_t wei   = Load4f32(w++);
+                  Store4f32( outCh++, Mul4f32(coeff,wei) );
+               }
+            }
+            else
+            {
+               // accumulate
+               for(int pixel=0;pixel<64;pixel++)
+               {
+                  float32x4_t val = Load4f32(outCh);
+                  float32x4_t coeff = Load4f32(inCoeff++);
+                  float32x4_t wei   = Load4f32(w++);
+                  Store4f32( outCh++, Add4f32(val, Mul4f32(coeff,wei)) );
+               }
+            }
+         }
+      }
+
+      // Inverse-winograd output channel coeff-slabs
+      for(int o=0; o<outputs;o+=4)
+      {
+         float *s0 = oBuf + o*8*8*4;
+         float *s1 = sBuf;
+
+         // compact rows...
+         for(int i=0;i<8;i++)
+         {
+            TRANS_WINO_INV(s0+0, s0+4,  s0+8,    s0+12,   s0+16,   s0+20,   s0+24,   s0+28, \
+                           s1+0, s1+4,  s1+8,    s1+12,   s1+16,   s1+20 );
+            s0+= 32;
+            s1+=24;
+         }
+
+         // compact cols...
+         float *s1 = sBuf;
+         for(int i=0;i<xCount;i++)
+         {
+            TRANS_WINO_INV(s1+24, s1+48, s1+72, s1+96, s1+120, s1+144, s1+168, s1+192, \
+                           s1+24, s1+48, s1+72, s1+96, s1+120, s1+144 );
+            s1+=4;
+         }
+
+         // Activate and bias ...
+         float *src = s1;
+         float32x4_t zero = Zero4f32();
+         float32x4_t biasVal = Load4f32(bias + o);
+         float *out = dest + o;
+         for(int oy=0; oy<yCount; oy++)
+         {
+            for(int ox=0; ox<xCount;ox++)
+               Store4f32( out + ox*4, Max4f32( Add4f32( Load4f32( src+ox*4 ), biasVal) ) );
+            src += 24;
+            out += outputs*destW;
+         }
+      }
+   }
+
+   void runThread(int threadId)
+   {
+      const float *b = bias ? (const float *)bias->cpuRead() : 0;
+      const int *srcStride = &src0->strides[0];
+      const int *destStride = &destTensor->strides[0];
+
+
+      int tilesX = (srcW + 5)/6;
+      int tilesY = (srcH + 5)/6;
+      int tileCount = tilesX * tilesY;
+
+      const float *sIn = (float *)src0->cpuRead();
+      float *sOut = (float *)destTensor->cpuRead();
+
+      while(true)
+      {
+         int tid = getNextJob();
+         if (tid>=tileCount)
+            break;
+
+         int ty = tid/tilesX;
+         int tx = tid-ty*tilesX;
+
+         float *buf = srcBuffers[tid];
+         int outY = ty*6;
+         int outX = tx*6;
+         int sy0 = outY - 1;
+         int sy1 = std::min(sy0+8,srcH);
+         int sx0 = outX - 1;
+         int sxEnd = sx0+8;
+         int sx1 = std::min(sxEnd,srcW);
+
+         if (ty==0)
+         {
+            memset(buf,0,inputs*8*sizeof(float)); 
+            sy0++;
+            buf += inputs*8;
+         }
+         for(int y=sy0;y<sy1;y++)
+         {
+            if (sx0<0)
+            {
+               memset(buf,0,inputs*sizeof(float)); 
+               buf += inputs;
+            }
+            memcpy(buf, sIn + (y*srcW + sx0)*inputs,(sx1-sx0)*sizeof(float)); 
+            buf += inputs*(sx1-sx0);
+            if (sx0 < sxEnd)
+            {
+               memset(buf, 0, (sxEnd-sx0)*inputs*sizeof(float));
+               buf += (sxEnd-sx0)*inputs;
+            }
+         }
+
+         runTile( srcBuffers[tid], sOut + (outY*destW + outX)*outputs,
+                    std::min(outX+6,destW)-outX, std::min(outY+6,destH)-outY,
+                    srcTransBuffers[tid], outputTransBuffers[tid] );
+      }
+   }
+
+
+};
+#endif
+
+
+
+
+
 Layer *Layer::createConv2D(int strideY, int strideX,
                     Activation activation, Padding padding,
                     Tensor *weights, Tensor *pweights, Tensor *bias)
 {
+   CShape filter = weights->shape;
+
+   #ifdef NUMERIX_WINOGRAD
+   if (filter.size()==4 && (filter[0]&3)==0 && filter[1]==3 && filter[2]==3 && (filter[3]&3)==0 &&
+       pweights==0 )
+      return new Conv2DWinograd(strideY, strideX, activation, padding, weights, bias);
+   #endif
+
    return new Conv2D(strideY, strideX, activation, padding, weights, pweights, bias);
 }
 
