@@ -607,6 +607,7 @@ public:
 };
 
 
+//#define NUMERIX_WINOGRAD
 #ifdef NUMERIX_WINOGRAD
 class Conv2DWinograd : public Conv2DBase
 {
@@ -672,10 +673,75 @@ public:
                        int xCount, int yCount, 
                        float *sBuf, float *oBuf)
    {
-
+      const psimd_f32 const_0_25 = psimd_splat_f32(0.25f);
 
       #define TRANS_WINO(i0, i1, i2, i3, i4, i5, i6, i7, \
-                         o0, o1, o2, o3, o4, o5, o6, o7 )
+                         o0, o1, o2, o3, o4, o5, o6, o7 ) { \
+         psimd_f32 d0(i0); \
+         psimd_f32 d1(i1); \
+         psimd_f32 d2(i2); \
+         psimd_f32 d3(i3); \
+         psimd_f32 d4(i4); \
+         psimd_f32 d5(i5); \
+         psimd_f32 d6(i6); \
+         psimd_f32 d7(i7); \
+         /*  Compute wd0 := d0 - d6  */ \
+         psimd_f32 wd0 = d0 - d6; \
+         const psimd_f32 d4_sub_d2 = d4 - d2; \
+         /*  Compute wd7 := d7 - d1  */ \
+         psimd_f32 wd7 = d7 - d1; \
+         const psimd_f32 d3_sub_d5 = d3 - d5; \
+         /*  Compute wd1 := d2 + d6  */ \
+         psimd_f32 wd1 = d2 + d6; \
+         /*  Compute wd2 := d1 + d5  */ \
+         psimd_f32 wd2 = d1 + d5; \
+         /*  Compute wd4 := d5 + 0.25 * d1  */ \
+         psimd_f32 wd4 = d5 + const_0_25 * d1; \
+         /*  Compute wd5 := d6 - 5.0 * d4  */ \
+         psimd_f32 wd5 = d6 - psimd_splat_f32(5.0f) * d4; \
+         /*  Compute wd3 := d6 + 0.25 * d2  */ \
+         psimd_f32 wd3 = d6 + const_0_25 * d2; \
+         /*  Compute wd6 := d1 + 0.25 * d5  */ \
+         psimd_f32 wd6 = d1 + const_0_25 * d5; \
+ \
+         const psimd_f32 const_5_25 = psimd_splat_f32(5.25f); \
+         /*  Compute wd0 := (d0 - d6) + 5.25 * (d4 - d2)  */ \
+         wd0 += const_5_25 * d4_sub_d2; \
+         /*  Compute wd7 := (d7 - d1) + 5.25 * (d3 - d5)  */ \
+         wd7 += const_5_25 * d3_sub_d5; \
+ \
+         const psimd_f32 const_4_25 = psimd_splat_f32(4.25f); \
+         /*  Compute  */ \
+         /*    wd1 := (d6 + d2) - 4.25 * d4  */ \
+         /*    wd2 := (d1 + d5) - 4.25 * d3  */ \
+         wd1 -= const_4_25 * d4; \
+         wd2 -= const_4_25 * d3; \
+ \
+         const psimd_f32 const_1_25 = psimd_splat_f32(1.25f); \
+         /*  Compute  */ \
+         /*    wd3 := (d6 + 0.25 * d2) - 1.25 * d4  */ \
+         /*    wd4 := (d5 + 0.25 * d1) - 1.25 * d3  */ \
+         /*    wd6 := (d1 + 0.25 * d5) - 1.25 * d3  */ \
+         /*    wd5 := (d6 - 5.0 * d4) + 4.0 * d2  */ \
+         wd3 -= const_1_25 * d4; \
+         const psimd_f32 d3_times_1_25 = d3 * const_1_25; \
+         wd5 += psimd_splat_f32(4.0f) * d2; \
+         wd4 -= d3_times_1_25; \
+         wd6 -= d3_times_1_25; \
+ \
+         const psimd_f32 const_2 = psimd_splat_f32(2.0f); \
+         wd4 *= const_2; \
+         wd6 *= const_2; \
+         psimd_f32_store( o0, wd0 ); \
+         psimd_f32_store( o1, wd1 + wd2 ); \
+         psimd_f32_store( o2, wd1 - wd2 ); \
+         psimd_f32_store( o3, wd3 + wd4 ); \
+         psimd_f32_store( o4, wd3 - wd4 ); \
+         psimd_f32_store( o5, wd5 + wd6 ); \
+         psimd_f32_store( o6, wd5 - wd6 ); \
+         psimd_f32_store( o7, wd2 ); \
+      }
+
 
       #define TRANS_WINO_INV(i0, i1, i2, i3, i4, i5, i6, i7, \
                              o0, o1, o2, o3, o4, o5 )
@@ -698,7 +764,7 @@ public:
          // Tranform rows to buffer
          for(int i=0;i<8;i++)
          {
-            TRANS_WINO( s0+0, s0+ds, s0+2*ds, s0+3*ds, s0+4*ds, s0+5*ds, s0+6*ds, s0+7*ds, \
+            TRANS_WINO( s0+0, s0+ss, s0+2*ss, s0+3*ss, s0+4*ss, s0+5*ss, s0+6*ss, s0+7*ss, \
                         s1+0, s1+4,  s1+8,    s1+12,   s1+16,   s1+20,   s1+24,   s1+28 );
             s0 += inputs*8;
             s1 += 8*4;
@@ -717,7 +783,7 @@ public:
          for(int o=0; o<outputs;o+=4)
          {
             float32x4_t *inCoeff = (float32x4_t *)sBuf;
-            float32x4_t *outCh = (float32x4_t *)oBuf + o*8*8;
+            float32x4_t *outCh = (float32x4_t *)(oBuf + o*8*8);
             // Accumulate 4 output channels
             if (inputIdx==0)
             {
@@ -797,14 +863,14 @@ public:
 
       while(true)
       {
-         int tid = getNextJob();
-         if (tid>=tileCount)
+         int tileId = getNextJob();
+         if (tileId>=tileCount)
             break;
 
-         int ty = tid/tilesX;
-         int tx = tid-ty*tilesX;
+         int ty = tileId/tilesX;
+         int tx = tileId-ty*tilesX;
 
-         float *buf = srcBuffers[tid];
+         float *buf = srcBuffers[threadId];
          int outY = ty*6;
          int outX = tx*6;
          int sy0 = outY - 1;
@@ -824,20 +890,24 @@ public:
             if (sx0<0)
             {
                memset(buf,0,inputs*sizeof(float)); 
-               buf += inputs;
+               memcpy(buf+inputs, sIn + (y*srcW)*inputs,sx1*sizeof(float)); 
+               buf += inputs*sx1;
             }
-            memcpy(buf, sIn + (y*srcW + sx0)*inputs,(sx1-sx0)*sizeof(float)); 
-            buf += inputs*(sx1-sx0);
-            if (sx0 < sxEnd)
+            else
             {
-               memset(buf, 0, (sxEnd-sx0)*inputs*sizeof(float));
-               buf += (sxEnd-sx0)*inputs;
+               memcpy(buf, sIn + (y*srcW + sx0)*inputs,(sx1-sx0)*sizeof(float)); 
+               buf += inputs*(sx1-sx0);
+            }
+            if (sx1 < sxEnd)
+            {
+               memset(buf, 0, (sxEnd-sx1)*inputs*sizeof(float));
+               buf += (sxEnd-sx1)*inputs;
             }
          }
 
-         runTile( srcBuffers[tid], sOut + (outY*destW + outX)*outputs,
+         runTile( srcBuffers[threadId], sOut + (outY*destW + outX)*outputs,
                     std::min(outX+6,destW)-outX, std::min(outY+6,destH)-outY,
-                    srcTransBuffers[tid], outputTransBuffers[tid] );
+                    srcTransBuffers[threadId], outputTransBuffers[threadId] );
       }
    }
 

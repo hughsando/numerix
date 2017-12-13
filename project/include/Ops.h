@@ -28,6 +28,7 @@ typedef float AlignedFloat __attribute__((aligned(sizeof(float32x4_t))));
 
 #define Load4f32(ptr) vld1q_f32( (const AlignedFloat*) (ptr) )
 #define Add4f32(a,b) vaddq_f32(a,b)
+#define Sub4f32(a,b) vsubq_f32(a,b)
 #define Mul4f32(a,b) vmulq_f32(a,b)
 #define Zero4f32 vdupq_n_f32(0.0f)
 #define Const4f32(c) vdupq_n_f32(c)
@@ -67,6 +68,7 @@ inline float Accumulate4f32(float32x4_t v)
 typedef __m128 float32x4_t;
 #define Load4f32(ptr) _mm_load_ps(ptr)
 #define Add4f32(a,b) _mm_add_ps(a,b)
+#define Sub4f32(a,b) _mm_sub_ps(a,b)
 #define Mul4f32(a,b) _mm_mul_ps(a,b)
 #define Zero4f32 _mm_castsi128_ps(_mm_setzero_si128())
 #define Const4f32(c) _mm_set1_ps(c)
@@ -94,6 +96,29 @@ inline float Accumulate4f32(float32x4_t v) {
 
 #endif
 
+#if defined(NUMERIX_SIMD)
+struct psimd_f32
+{
+   float32x4_t val;
+
+   inline psimd_f32() { }
+   inline psimd_f32(const psimd_f32 &inVal) : val(inVal.val) {  }
+   inline psimd_f32(const float32x4_t &inVal) : val(inVal) { }
+   inline psimd_f32(const float *inPtr) : val(Load4f32(inPtr)) { }
+
+
+   inline psimd_f32 operator+(const psimd_f32 &o) const { return Add4f32(val,o.val); }
+   inline psimd_f32 operator*(const psimd_f32 &o) const { return Mul4f32(val,o.val); }
+   inline psimd_f32 operator-(const psimd_f32 &o) const { return Sub4f32(val,o.val); }
+   inline psimd_f32 &operator+=(const psimd_f32 &o) { val = Add4f32(val,o.val); return *this;  }
+   inline psimd_f32 &operator*=(const psimd_f32 &o) { val = Mul4f32(val,o.val); return *this;  }
+   inline psimd_f32 &operator-=(const psimd_f32 &o) { val = Sub4f32(val,o.val); return *this;  }
+   inline psimd_f32 operator-() const { return _mm_xor_ps(val, Const4f32(-0.f));  }
+};
+inline psimd_f32 psimd_splat_f32(float c) { return Const4f32(c); }
+inline void psimd_f32_store(float *outPtr, const psimd_f32 &inVal) { Store4f32(outPtr, inVal.val); }
+
+#endif
 
 /*
  Here we attempt to re-use the same 4 source channels with 4 consecutive outputs.
