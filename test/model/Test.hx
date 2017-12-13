@@ -17,6 +17,11 @@ class Test
    public static function main()
    {
       var args = Sys.args();
+
+      var cpu = args.remove("-cpu");
+      if (cpu)
+         numerix.Model.enableGpu(false);
+
       var modelname = args.shift();
       if (modelname==null)
       {

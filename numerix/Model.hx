@@ -11,6 +11,7 @@ class Model
    public var width:Null<Int>;
    public var height:Null<Int>;
    public var channels:Null<Int>;
+
    var resizeBuffer:Tensor;
 
    public function new()
@@ -69,6 +70,13 @@ class Model
       throw "Could not deduce model type from filename";
       return null;
    }
+
+   public static function  enableGpu(inEnable:Bool)
+   {
+      nxEnableGpu(inEnable);
+   }
+
+   static var nxEnableGpu = Loader.load("nxEnableGpu","bv");
 
 }
 

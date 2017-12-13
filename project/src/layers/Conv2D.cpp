@@ -613,6 +613,9 @@ class Conv2DWinograd : public Conv2DBase
    std::vector <float *> srcBuffers;
    std::vector <float *> srcTransBuffers;
    std::vector <float *> outputTransBuffers;
+   float *transformWeights;
+   float *biasPtr;
+
 
 public:
    Conv2DWinograd(int inStrideY, int inStrideX,
@@ -631,6 +634,12 @@ public:
       srcTransBuffers.resize(0);
       outputTransBuffers.resize(0);
 
+      transformWeights = allocFloats( 8*8*inputs*outputs );
+
+      if (bias)
+         biasPtr = (float *)bias->cpuRead();
+      else
+         biasPtr = allocFloats(outputs,true);
 
       int threads = GetWorkerCount();
 
@@ -653,7 +662,8 @@ public:
       src0->cpuRead();
       destTensor->cpuWrite();
 
-      //runThreaded();
+      runThreaded();
+
       src0 = 0;
       destTensor = 0;
    }
@@ -662,6 +672,15 @@ public:
                        int xCount, int yCount, 
                        float *sBuf, float *oBuf)
    {
+
+
+      #define TRANS_WINO(i0, i1, i2, i3, i4, i5, i6, i7, \
+                         o0, o1, o2, o3, o4, o5, o6, o7 )
+
+      #define TRANS_WINO_INV(i0, i1, i2, i3, i4, i5, i6, i7, \
+                             o0, o1, o2, o3, o4, o5 )
+
+
       /*
         src is HWC format, 8 x 8 x inputs float32
 
@@ -670,7 +689,7 @@ public:
 
       // Loop over source channels, four at a time
       int ss = inputs;
-      for(inputIdx=0; inputIdx<inputs; inputIdx+=4)
+      for(int inputIdx=0; inputIdx<inputs; inputIdx+=4)
       {
          const float *s0 = src + inputIdx;
          float *s1 = sBuf;
@@ -694,7 +713,7 @@ public:
          }
 
          // Accumulate T(channel_i * weight_t) for each output an these 4 inputs
-         float32x4_t *w = (float32x4_t)transformWeights;
+         float32x4_t *w = (float32x4_t *)transformWeights;
          for(int o=0; o<outputs;o+=4)
          {
             float32x4_t *inCoeff = (float32x4_t *)sBuf;
@@ -705,9 +724,9 @@ public:
                // just set
                for(int pixel=0;pixel<64;pixel++)
                {
-                  float32x4_t coeff = Load4f32(inCoeff++);
-                  float32x4_t wei   = Load4f32(w++);
-                  Store4f32( outCh++, Mul4f32(coeff,wei) );
+                  float32x4_t coeff = Load4f32((float *)inCoeff++);
+                  float32x4_t wei   = Load4f32((float *)w++);
+                  Store4f32( (float *)outCh++, Mul4f32(coeff,wei) );
                }
             }
             else
@@ -715,10 +734,10 @@ public:
                // accumulate
                for(int pixel=0;pixel<64;pixel++)
                {
-                  float32x4_t val = Load4f32(outCh);
-                  float32x4_t coeff = Load4f32(inCoeff++);
-                  float32x4_t wei   = Load4f32(w++);
-                  Store4f32( outCh++, Add4f32(val, Mul4f32(coeff,wei)) );
+                  float32x4_t val = Load4f32((float *)outCh);
+                  float32x4_t coeff = Load4f32((float *)inCoeff++);
+                  float32x4_t wei   = Load4f32((float *)w++);
+                  Store4f32( (float *)outCh++, Add4f32(val, Mul4f32(coeff,wei)) );
                }
             }
          }
@@ -740,7 +759,7 @@ public:
          }
 
          // compact cols...
-         float *s1 = sBuf;
+         s1 = sBuf;
          for(int i=0;i<xCount;i++)
          {
             TRANS_WINO_INV(s1+24, s1+48, s1+72, s1+96, s1+120, s1+144, s1+168, s1+192, \
@@ -750,13 +769,13 @@ public:
 
          // Activate and bias ...
          float *src = s1;
-         float32x4_t zero = Zero4f32();
-         float32x4_t biasVal = Load4f32(bias + o);
+         float32x4_t zero = Zero4f32;
+         float32x4_t biasVal = Load4f32(biasPtr + o);
          float *out = dest + o;
          for(int oy=0; oy<yCount; oy++)
          {
             for(int ox=0; ox<xCount;ox++)
-               Store4f32( out + ox*4, Max4f32( Add4f32( Load4f32( src+ox*4 ), biasVal) ) );
+               Store4f32( out + ox*4, Max4f32( Add4f32( Load4f32( src+ox*4 ), biasVal), zero ) );
             src += 24;
             out += outputs*destW;
          }
@@ -765,7 +784,6 @@ public:
 
    void runThread(int threadId)
    {
-      const float *b = bias ? (const float *)bias->cpuRead() : 0;
       const int *srcStride = &src0->strides[0];
       const int *destStride = &destTensor->strides[0];
 

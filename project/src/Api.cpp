@@ -578,6 +578,13 @@ value tdCropAndScale(value inTensor, int inWidth, int inHeight, value inBuffer)
 DEFINE_PRIME4(tdCropAndScale);
 
 
+void nxEnableGpu(bool inEnable)
+{
+   enableGpu = inEnable;
+}
+DEFINE_PRIME1v(nxEnableGpu);
+
+
 // ----------- Layer
 
 
