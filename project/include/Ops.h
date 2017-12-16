@@ -88,12 +88,22 @@ inline float Accumulate4f32(float32x4_t v) {
     return    _mm_cvtss_f32(sums);
 }
 
+#define SumRows4x4f32(a, b, c, d) \
+    /* [a0+a2 c0+c2 a1+a3 c1+c3 */ \
+    a = _mm_add_ps(_mm_unpacklo_ps(a,c),_mm_unpackhi_ps(a,c)); \
+    /* [b0+b2 d0+d2 b1+b3 d1+d3 */ \
+    b = _mm_add_ps(_mm_unpacklo_ps(b,d),_mm_unpackhi_ps(b,d)); \
+    /* [a0+a2 b0+b2 c0+c2 d0+d2]+ \
+       [a1+a3 b1+b3 c1+c3 d1+d3] */ \
+    a = _mm_add_ps(_mm_unpacklo_ps(a,b),_mm_unpackhi_ps(a,b)); \
+
+/*
 #define SumRows4x4f32(sum0, sum1, sum2, sum3) \
       _MM_TRANSPOSE4_PS(sum0, sum1, sum2, sum3) \
       sum0 = Add4f32(sum0,sum1); \
       sum2 = Add4f32(sum2,sum3); \
       sum0 = Add4f32(sum0,sum2); \
-
+*/
 #endif
 
 #if defined(NUMERIX_SIMD)

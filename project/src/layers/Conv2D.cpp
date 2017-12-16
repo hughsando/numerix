@@ -627,6 +627,88 @@ public:
       rebuildWeights();
    }
 
+   static void TransKernel(const float *src0, const float *src1, const float *src2,
+      float *t0,
+      float *t1,
+      float *t2,
+      float *t3,
+      float *t4,
+      float *t5,
+      float *t6,
+      float *t7,
+      bool rescale_coefficients)
+   {
+      const psimd_f32 g0(src0);
+      const psimd_f32 g1(src1);
+      const psimd_f32 g2(src2);
+      /*
+       * w0 = g0
+       * w1 = ((g0 + g2) + g1) * (-2.0 / 9)
+       * w2 = ((g0 + g2) - g1) * (-2.0 / 9)
+       * w3 = ((g0 + 4 * g2) + 2 * g1) * (1.0 / 90)
+       * w4 = ((g0 + 4 * g2) - 2 * g1) * (1.0 / 90)
+       * w5 = ((g2 + 4 * g0) + 2 * g1) * (1.0 / 180)
+       * w6 = ((g2 + 4 * g0) - 2 * g1) * (1.0 / 180)
+       * w7 = g2
+       */
+
+      /*
+       * Compute
+       *   w2 := g0 + g2
+       *   w4 := g0 + 4 * g2
+       *   w6 := g2 + 4 * g0
+       */
+      const psimd_f32 const_4 = psimd_splat_f32(4.0f);
+      psimd_f32 w2 = g0 + g2;
+      psimd_f32 w4 = g0 + const_4 * g2;
+      psimd_f32 w6 = g2 + const_4 * g0;
+
+      /*
+       * Compute
+       *   w1 = (g0 + g2) + g1
+       *   w2 = (g0 + g2) - g1
+       *   w3 = (g0 + 4 * g2) + 2 * g1
+       *   w4 = (g0 + 4 * g2) - 2 * g1
+       *   w5 = (g2 + 4 * g0) + 2 * g1
+       *   w6 = (g2 + 4 * g0) - 2 * g1
+       */
+      const psimd_f32 two_g1 = g1 * psimd_splat_f32(2.0f);
+      psimd_f32 w1 = w2 + g1;
+      w2 = w2 - g1;
+      psimd_f32 w3 = w4 + two_g1;
+      w4 = w4 - two_g1;
+      psimd_f32 w5 = w6 + two_g1;
+      w6 = w6 - two_g1;
+
+      if (rescale_coefficients) {
+         //const psimd_f32 minus_2_over_9 = psimd_splat_f32(-0x1.C71C72p-3f);
+         const psimd_f32 minus_2_over_9 = psimd_splat_f32(-0.2222222222222222f);
+         w1 *= minus_2_over_9;
+         w2 *= minus_2_over_9;
+
+         //const psimd_f32 rcp_90 = psimd_splat_f32( 0x1.6C16C2p-7f);
+         const psimd_f32 rcp_90 = psimd_splat_f32( 0.011111111 );
+         w3 *= rcp_90;
+         w4 *= rcp_90;
+
+         //const psimd_f32 rcp_180 = psimd_splat_f32( 0x1.6C16C2p-8f);
+         const psimd_f32 rcp_180 = psimd_splat_f32( 0x005555556);
+         w5 *= rcp_180;
+         w6 *= rcp_180;
+      }
+
+      psimd_f32_store(t0, g0);
+      psimd_f32_store(t1, w1);
+      psimd_f32_store(t2, w2);
+      psimd_f32_store(t3, w3);
+      psimd_f32_store(t4, w4);
+      psimd_f32_store(t5, w5);
+      psimd_f32_store(t6, w6);
+      psimd_f32_store(t7, g2);
+   }
+
+
+
    void rebuildWeights()
    {
       releaseFloats();
@@ -635,7 +717,71 @@ public:
       srcTransBuffers.resize(0);
       outputTransBuffers.resize(0);
 
-      transformWeights = allocFloats( 8*8*inputs*outputs );
+      float *baseWeights = allocFloats( 8*8*inputs*outputs, true );
+      const float *win = (const float *)weights->cpuRead();
+      // Weights OHWI -> HW(O%4)(I/4)(4i 4o)
+      
+      // Transform inputs, to O(I/4)WH4i...
+      for(int o=0;o<outputs; o++)
+      {
+         const float *wBase = win + o*3*3*inputs;
+         for(int i=0;i<inputs;i+=4)
+         {
+            float *w = baseWeights + o*inputs*8*8 + i*8*8;
+            // Trans kernel columns
+            for(int col=0;col<3;col++)
+            {
+               TransKernel(wBase+col*inputs, wBase+inputs*(col+3), wBase+inputs*(col+6), \
+                        w, w+8*4, w+8*4*2, w+8*4*3, w+8*4*4, w+8*4*5, w+8*4*6, w+8*4*7, true);
+               w+=4;
+            }
+            // Trans kernel rows
+            w = baseWeights + o*inputs*8*8 + i*8*8;
+            for(int row=0;row<8;row++)
+            {
+               TransKernel(w, w+4, w+8,
+                           w, w+4, w+8, w+12, w+16, w+20, w+24, w+28, true );
+               w+=8;
+            }
+            wBase += 4;
+         }
+      }
+      // Interlace 4 outputs ...
+      // Transform inputs, to O(I/4)WH4i -> (O/4)(I/4)WH4o4i
+      transformWeights = allocFloats( 8*8*inputs*outputs, true );
+      for(int o=0;o<outputs; o+=4)
+      {
+         float *dest = transformWeights + o*inputs*8*8;
+         for(int i=0;i<inputs;i+=4)
+         {
+            const float *si0 = baseWeights + o*inputs + i*8*8;
+            const float *si1 = baseWeights + (o+1)*inputs + i*8*8;
+            const float *si2 = baseWeights + (o+2)*inputs + i*8*8;
+            const float *si3 = baseWeights + (o+3)*inputs + i*8*8;
+            for(int pixel=0;pixel<64;pixel++)
+            {
+               *dest++ = *si0++;
+               *dest++ = *si0++;
+               *dest++ = *si0++;
+               *dest++ = *si0++;
+
+               *dest++ = *si1++;
+               *dest++ = *si1++;
+               *dest++ = *si1++;
+               *dest++ = *si1++;
+
+               *dest++ = *si2++;
+               *dest++ = *si2++;
+               *dest++ = *si2++;
+               *dest++ = *si2++;
+
+               *dest++ = *si3++;
+               *dest++ = *si3++;
+               *dest++ = *si3++;
+               *dest++ = *si3++;
+            }
+         }
+      }
 
       if (bias)
          biasPtr = (float *)bias->cpuRead();
@@ -647,7 +793,7 @@ public:
       for(int i=0;i<threads;i++)
       {
          srcBuffers.push_back( allocFloats(8*8*inputs,false) );
-         srcTransBuffers.push_back( allocFloats(8*8*4,false) );
+         srcTransBuffers.push_back( allocFloats(8*8*inputs,false) );
          outputTransBuffers.push_back( allocFloats(8*8*outputs,false) );
       }
    }
@@ -743,8 +889,66 @@ public:
       }
 
 
+      /*
+       * s0 = m0 + (m1 + m2) +      (m3 + m4) + 32 * (m5 + m6)
+       * s1 =      (m1 - m2) +  2 * (m3 - m4) + 16 * (m5 - m6)
+       * s2 =      (m1 + m2) +  4 * (m3 + m4) +  8 * (m5 + m6)
+       * s3 =      (m1 - m2) +  8 * (m3 - m4) +  4 * (m5 - m6)
+       * s4 =      (m1 + m2) + 16 * (m3 + m4) +  2 * (m5 + m6)
+       * s5 =      (m1 - m2) + 32 * (m3 - m4) +      (m5 - m6) + m7
+       */
       #define TRANS_WINO_INV(i0, i1, i2, i3, i4, i5, i6, i7, \
-                             o0, o1, o2, o3, o4, o5 )
+                             o0, o1, o2, o3, o4, o5 ) { \
+ \
+      psimd_f32 m1(i1); \
+      psimd_f32 m2(i2); \
+      const psimd_f32 m1_add_m2 = m1 + m2; \
+      const psimd_f32 m1_sub_m2 = m1 - m2; \
+      psimd_f32 m3(i3); \
+      psimd_f32 m4(i4); \
+      const psimd_f32 m3_add_m4 = m3 + m4; \
+      const psimd_f32 m3_sub_m4 = m3 - m4; \
+      psimd_f32 m5(i5); \
+      psimd_f32 m6(i6); \
+      const psimd_f32 m5_add_m6 = m5 + m6; \
+      const psimd_f32 m5_sub_m6 = m5 - m6; \
+ \
+      psimd_f32 m0(i0); \
+      psimd_f32 m7(i7); \
+      psimd_f32 s0 = m0 + m1_add_m2; \
+      psimd_f32 s5 = m7 + m1_sub_m2; \
+ \
+      const psimd_f32 const_16 = psimd_splat_f32(16.0f); \
+      psimd_f32 s1 = m1_sub_m2 + const_16 * m5_sub_m6; \
+      psimd_f32 s4 = m1_add_m2 + const_16 * m3_add_m4; \
+ \
+      const psimd_f32 const_8 = psimd_splat_f32(8.0f); \
+      psimd_f32 s2 = m1_add_m2 + const_8 * m5_add_m6; \
+      psimd_f32 s3 = m1_sub_m2 + const_8 * m3_sub_m4; \
+ \
+      const psimd_f32 const_32 = psimd_splat_f32(32.0f); \
+      s0 += const_32 * m5_add_m6; \
+      s5 += const_32 * m3_sub_m4; \
+ \
+      s0 += m3_add_m4; \
+      s5 += m5_sub_m6; \
+ \
+      const psimd_f32 const_2 = psimd_splat_f32(2.0f); \
+      s1 += m3_sub_m4 * const_2; \
+      s4 += m5_add_m6 * const_2; \
+ \
+      const psimd_f32 const_4 = psimd_splat_f32(4.0f); \
+      s2 += m3_add_m4 * const_4; \
+      s3 += m5_sub_m6 * const_4; \
+\
+      psimd_f32_store( o0, s0 ); \
+      psimd_f32_store( o1, s1 ); \
+      psimd_f32_store( o2, s2 ); \
+      psimd_f32_store( o3, s3 ); \
+      psimd_f32_store( o4, s4 ); \
+      psimd_f32_store( o5, s5 ); \
+   }
+
 
 
       /*
@@ -757,84 +961,83 @@ public:
       int ss = inputs;
       for(int inputIdx=0; inputIdx<inputs; inputIdx+=4)
       {
-         const float *s0 = src + inputIdx;
-         float *s1 = sBuf;
+         const float *src0 = src + inputIdx;
+         float *blockBase = sBuf + 8*8*inputIdx;
+         float *out0 = blockBase;
          // Transorm 4 channels to 4 channels of wonigrad coeffs
-
          // Tranform rows to buffer
          for(int i=0;i<8;i++)
          {
-            TRANS_WINO( s0+0, s0+ss, s0+2*ss, s0+3*ss, s0+4*ss, s0+5*ss, s0+6*ss, s0+7*ss, \
-                        s1+0, s1+4,  s1+8,    s1+12,   s1+16,   s1+20,   s1+24,   s1+28 );
-            s0 += inputs*8;
-            s1 += 8*4;
+            TRANS_WINO( src0+0, src0+ss, src0+2*ss, src0+3*ss, src0+4*ss, src0+5*ss, src0+6*ss, src0+7*ss, \
+                        out0+0, out0+4,  out0+8,    out0+12,   out0+16,   out0+20,   out0+24,   out0+28 );
+            src0 += inputs*8;
+            out0 += 8*4;
          }
          // Transform buffer columns in-situ
-         s1 = sBuf;
+         float *ioPtr = blockBase;
          for(int i=0;i<8;i++)
          {
-            TRANS_WINO( s1+0, s1+32,  s1+64, s1+96, s1+128, s1+160, s1+192, s1+224,
-                        s1+0, s1+32,  s1+64, s1+96, s1+128, s1+160, s1+192, s1+224 );
-            s1++;
+            TRANS_WINO( ioPtr+0, ioPtr+32,  ioPtr+64, ioPtr+96, ioPtr+128, ioPtr+160, ioPtr+192, ioPtr+224,
+                        ioPtr+0, ioPtr+32,  ioPtr+64, ioPtr+96, ioPtr+128, ioPtr+160, ioPtr+192, ioPtr+224 );
+            ioPtr+=4;
          }
+      }
 
-         // Accumulate T(channel_i * weight_t) for each output an these 4 inputs
-         float32x4_t *w = (float32x4_t *)transformWeights;
+      // sBuf is now in (inputs/4) blocks of 8x8x4 winograd coeffs
+
+
+      // Accumulate four output winograd coeffs at a time for each x,y
+      float *w = (float *)transformWeights;
+      float *outCh = oBuf;
+      for(int pixel=0;pixel<64;pixel++)
+      {
+         const float *srcTxy = sBuf + pixel*4;
          for(int o=0; o<outputs;o+=4)
          {
-            float32x4_t *inCoeff = (float32x4_t *)sBuf;
-            float32x4_t *outCh = (float32x4_t *)(oBuf + o*8*8);
-            // Accumulate 4 output channels
-            if (inputIdx==0)
+            float32x4_t sumO0 = Zero4f32;
+            float32x4_t sumO1 = sumO0;
+            float32x4_t sumO2 = sumO0;
+            float32x4_t sumO3 = sumO0;
+            for(int i=0;i<inputs;i+=4)
             {
-               // just set
-               for(int pixel=0;pixel<64;pixel++)
-               {
-                  float32x4_t coeff = Load4f32((float *)inCoeff++);
-                  float32x4_t wei   = Load4f32((float *)w++);
-                  Store4f32( (float *)outCh++, Mul4f32(coeff,wei) );
-               }
+               float32x4_t src = Load4f32(srcTxy+i*8*8);
+               sumO0 = Add4f32( Mul4f32(src, Load4f32(w   ) ), sumO0 );
+               sumO1 = Add4f32( Mul4f32(src, Load4f32(w+4 ) ), sumO1 );
+               sumO2 = Add4f32( Mul4f32(src, Load4f32(w+8 ) ), sumO2 );
+               sumO3 = Add4f32( Mul4f32(src, Load4f32(w+12) ), sumO3 );
+               w+=16;
             }
-            else
-            {
-               // accumulate
-               for(int pixel=0;pixel<64;pixel++)
-               {
-                  float32x4_t val = Load4f32((float *)outCh);
-                  float32x4_t coeff = Load4f32((float *)inCoeff++);
-                  float32x4_t wei   = Load4f32((float *)w++);
-                  Store4f32( (float *)outCh++, Add4f32(val, Mul4f32(coeff,wei)) );
-               }
-            }
+
+            SumRows4x4f32(sumO0, sumO1, sumO2, sumO3);
+            Store4f32( outCh+o, sumO0 );
          }
+         outCh += outputs;
       }
 
       // Inverse-winograd output channel coeff-slabs
       for(int o=0; o<outputs;o+=4)
       {
-         float *s0 = oBuf + o*8*8*4;
-         float *s1 = sBuf;
-
+         float *r0 = oBuf + o*8*8;
+         float *r1 = sBuf;
          // compact rows...
          for(int i=0;i<8;i++)
          {
-            TRANS_WINO_INV(s0+0, s0+4,  s0+8,    s0+12,   s0+16,   s0+20,   s0+24,   s0+28, \
-                           s1+0, s1+4,  s1+8,    s1+12,   s1+16,   s1+20 );
-            s0+= 32;
-            s1+=24;
+            TRANS_WINO_INV(r0+0, r0+4,  r0+8,    r0+12,   r0+16,   r0+20,   r0+24,   r0+28, \
+                           r1+0, r1+4,  r1+8,    r1+12,   r1+16,   r1+20 );
+            r0+= 32;
+            r1+=24;
          }
 
          // compact cols...
-         s1 = sBuf;
+         float *c = sBuf;
          for(int i=0;i<xCount;i++)
          {
-            TRANS_WINO_INV(s1+24, s1+48, s1+72, s1+96, s1+120, s1+144, s1+168, s1+192, \
-                           s1+24, s1+48, s1+72, s1+96, s1+120, s1+144 );
-            s1+=4;
+            TRANS_WINO_INV(c, c+24, c+48, c+72, c+96, c+120, c+144, c+168, \
+                           c, c+24, c+48, c+72, c+96, c+120 );
+            c+=4;
          }
-
          // Activate and bias ...
-         float *src = s1;
+         float *src = sBuf;
          float32x4_t zero = Zero4f32;
          float32x4_t biasVal = Load4f32(biasPtr + o);
          float *out = dest + o;
@@ -904,7 +1107,6 @@ public:
                buf += (sxEnd-sx1)*inputs;
             }
          }
-
          runTile( srcBuffers[threadId], sOut + (outY*destW + outX)*outputs,
                     std::min(outX+6,destW)-outX, std::min(outY+6,destH)-outY,
                     srcTransBuffers[threadId], outputTransBuffers[threadId] );
