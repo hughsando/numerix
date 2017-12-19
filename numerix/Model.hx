@@ -54,6 +54,18 @@ class Model
       return outputLayer.getOutput();
    }
 
+   public function makeInputLayer() : InputLayer
+   {
+      if (inputLayer==null)
+         inputLayer = new InputLayer();
+      return inputLayer;
+   }
+
+   public function addLayer(layer:Layer)
+   {
+      layers.push(layer);
+   }
+
    public static function load(modelname:String) : Model
    {
       #if hxhdf5
