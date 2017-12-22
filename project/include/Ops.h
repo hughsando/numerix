@@ -74,6 +74,7 @@ typedef __m128 float32x4_t;
 #define Const4f32(c) _mm_set1_ps(c)
 #define Max4f32(a,b) _mm_max_ps(a,b)
 #define Store4f32(ptr, value)  _mm_store_ps(ptr, value)
+#define LaneF32(a, lane)  (a).m128_f32[lane]
 
 inline float Accumulate4f32(float32x4_t v) {
      // v : abcd
@@ -102,7 +103,7 @@ inline float Accumulate4f32(float32x4_t v) {
       _MM_TRANSPOSE4_PS(sum0, sum1, sum2, sum3) \
       sum0 = Add4f32(sum0,sum1); \
       sum2 = Add4f32(sum2,sum3); \
-      sum0 = Add4f32(sum0,sum2); \
+      sum0 = Add4f32(sum0,sum2);
 */
 #endif
 
@@ -123,7 +124,7 @@ struct psimd_f32
    inline psimd_f32 &operator+=(const psimd_f32 &o) { val = Add4f32(val,o.val); return *this;  }
    inline psimd_f32 &operator*=(const psimd_f32 &o) { val = Mul4f32(val,o.val); return *this;  }
    inline psimd_f32 &operator-=(const psimd_f32 &o) { val = Sub4f32(val,o.val); return *this;  }
-   inline psimd_f32 operator-() const { return _mm_xor_ps(val, Const4f32(-0.f));  }
+   //inline psimd_f32 operator-() const { return _mm_xor_ps(val, Const4f32(-0.f));  }
 };
 inline psimd_f32 psimd_splat_f32(float c) { return Const4f32(c); }
 inline void psimd_f32_store(float *outPtr, const psimd_f32 &inVal) { Store4f32(outPtr, inVal.val); }

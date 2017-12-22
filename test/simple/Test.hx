@@ -5,6 +5,11 @@ class Test
 {
    public static function main()
    {
+      testConv();
+   }
+
+   public static function testCreate()
+   {
       var t = Nx.tensor([ [for(i in 0...15) [for(j in 0...15) i*j]] ]);
       Sys.print("t : " + t + " = ");
       t.print();
@@ -29,9 +34,8 @@ class Test
       var reduced = trans.resizeAxis(0,4,1);
       Sys.println("Reduced");
       reduced.print();
-
-      //testConv();
    }
+
 
    static function testConv()
    {
@@ -43,16 +47,20 @@ class Test
       var conv2D = new Conv2D(cfg,input);
       model.addLayer( conv2D );
 
-      var weight = Nx.zeros( [3,3,3,4] );
-      weight.setAt(5, 1);
+      var weight = Nx.zeros( [4,3,3,4] );
+      weight.setAt(16, 1);
+      //for(i in 0...4*4*3*3)
+      //   weight.setAt(i,i);
 
       conv2D.setWeights( [weight] );
 
       var input = Nx.zeros( [3,3,4] );
-      input.setAt(16, 1);
+      for(i in 0...3*3*4)
+         input.setAt(i, i);
       input.print();
-      model.run(input).print();
-
+      var res = model.run(input);
+      trace(res);
+      res.print();
    }
 }
 

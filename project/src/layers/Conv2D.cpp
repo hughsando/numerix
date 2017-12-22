@@ -624,6 +624,7 @@ public:
           Tensor *inWeights, Tensor *inBias)
       : Conv2DBase(inStrideY, inStrideX, inActivation, inPadding,  inWeights, 0, inBias)
    {
+      printf("winograd!\n");
       rebuildWeights();
    }
 
@@ -692,7 +693,7 @@ public:
          w4 *= rcp_90;
 
          //const psimd_f32 rcp_180 = psimd_splat_f32( 0x1.6C16C2p-8f);
-         const psimd_f32 rcp_180 = psimd_splat_f32( 0x005555556);
+         const psimd_f32 rcp_180 = psimd_splat_f32( 0.005555556);
          w5 *= rcp_180;
          w6 *= rcp_180;
       }
@@ -741,11 +742,12 @@ public:
             {
                TransKernel(w, w+4, w+8,
                            w, w+4, w+8, w+12, w+16, w+20, w+24, w+28, true );
-               w+=8;
+               w+=8*4;
             }
             wBase += 4;
          }
       }
+
       // Interlace 4 outputs ...
       // Transform inputs, to O(I/4)WH4i -> (O/4)(I/4)WH4o4i
       transformWeights = allocFloats( 8*8*inputs*outputs, true );
@@ -754,10 +756,10 @@ public:
          float *dest = transformWeights + o*inputs*8*8;
          for(int i=0;i<inputs;i+=4)
          {
-            const float *si0 = baseWeights + o*inputs + i*8*8;
-            const float *si1 = baseWeights + (o+1)*inputs + i*8*8;
-            const float *si2 = baseWeights + (o+2)*inputs + i*8*8;
-            const float *si3 = baseWeights + (o+3)*inputs + i*8*8;
+            const float *si0 = baseWeights + (o  )*inputs*8*8 + i*8*8;
+            const float *si1 = baseWeights + (o+1)*inputs*8*8 + i*8*8;
+            const float *si2 = baseWeights + (o+2)*inputs*8*8 + i*8*8;
+            const float *si3 = baseWeights + (o+3)*inputs*8*8 + i*8*8;
             for(int pixel=0;pixel<64;pixel++)
             {
                *dest++ = *si0++;
@@ -819,7 +821,6 @@ public:
                        int xCount, int yCount, 
                        float *sBuf, float *oBuf)
    {
-      const psimd_f32 const_0_25 = psimd_splat_f32(0.25f);
 
       #define TRANS_WINO(i0, i1, i2, i3, i4, i5, i6, i7, \
                          o0, o1, o2, o3, o4, o5, o6, o7 ) { \
@@ -842,6 +843,7 @@ public:
          /*  Compute wd2 := d1 + d5  */ \
          psimd_f32 wd2 = d1 + d5; \
          /*  Compute wd4 := d5 + 0.25 * d1  */ \
+         const psimd_f32 const_0_25 = psimd_splat_f32(0.25f); \
          psimd_f32 wd4 = d5 + const_0_25 * d1; \
          /*  Compute wd5 := d6 - 5.0 * d4  */ \
          psimd_f32 wd5 = d6 - psimd_splat_f32(5.0f) * d4; \
@@ -900,21 +902,22 @@ public:
       #define TRANS_WINO_INV(i0, i1, i2, i3, i4, i5, i6, i7, \
                              o0, o1, o2, o3, o4, o5 ) { \
  \
+      psimd_f32 m0(i0); \
       psimd_f32 m1(i1); \
       psimd_f32 m2(i2); \
-      const psimd_f32 m1_add_m2 = m1 + m2; \
-      const psimd_f32 m1_sub_m2 = m1 - m2; \
       psimd_f32 m3(i3); \
       psimd_f32 m4(i4); \
-      const psimd_f32 m3_add_m4 = m3 + m4; \
-      const psimd_f32 m3_sub_m4 = m3 - m4; \
       psimd_f32 m5(i5); \
       psimd_f32 m6(i6); \
+      psimd_f32 m7(i7); \
+ \
+      const psimd_f32 m1_add_m2 = m1 + m2; \
+      const psimd_f32 m1_sub_m2 = m1 - m2; \
+      const psimd_f32 m3_add_m4 = m3 + m4; \
+      const psimd_f32 m3_sub_m4 = m3 - m4; \
       const psimd_f32 m5_add_m6 = m5 + m6; \
       const psimd_f32 m5_sub_m6 = m5 - m6; \
  \
-      psimd_f32 m0(i0); \
-      psimd_f32 m7(i7); \
       psimd_f32 s0 = m0 + m1_add_m2; \
       psimd_f32 s5 = m7 + m1_sub_m2; \
  \
@@ -958,7 +961,21 @@ public:
       */
 
       // Loop over source channels, four at a time
+      //  source stride (pixel width)
       int ss = inputs;
+      // Transform inputs 4 at a time into inputs/4 blocks of 8x8x4 winograd coeffs
+      //
+      //  src = 
+      //    0,0                             0,1                     ...   7,7
+      //  i0 i1 i2 i3 i4 i5 i6 i7 i8 ... i0 i1 i2 i3 i4 i5 i6 i7 i8 ... i0 i1 i2 i3 i4 i5 i6 i7 i8 ...
+      //
+      //  -> sBuf = coeffs 'c'  (i/4) * 8 * 8 * 4
+      //
+      //    0,0          0,1        ...    7,7
+      //   c0 c1 c2 c3  c0 c1 c2 c2 ...  c0 c1 c2 c3
+      //   c4 c5 c6 c7  c4 c5 c6 c7 ...  c4 c5 c7 c7
+      //   c8 ....
+      //  
       for(int inputIdx=0; inputIdx<inputs; inputIdx+=4)
       {
          const float *src0 = src + inputIdx;
@@ -970,25 +987,56 @@ public:
          {
             TRANS_WINO( src0+0, src0+ss, src0+2*ss, src0+3*ss, src0+4*ss, src0+5*ss, src0+6*ss, src0+7*ss, \
                         out0+0, out0+4,  out0+8,    out0+12,   out0+16,   out0+20,   out0+24,   out0+28 );
+            // Next input column
             src0 += inputs*8;
+            // Next output column
             out0 += 8*4;
          }
+
          // Transform buffer columns in-situ
          float *ioPtr = blockBase;
          for(int i=0;i<8;i++)
          {
             TRANS_WINO( ioPtr+0, ioPtr+32,  ioPtr+64, ioPtr+96, ioPtr+128, ioPtr+160, ioPtr+192, ioPtr+224,
                         ioPtr+0, ioPtr+32,  ioPtr+64, ioPtr+96, ioPtr+128, ioPtr+160, ioPtr+192, ioPtr+224 );
+            // Next 4 coeffs
             ioPtr+=4;
          }
       }
 
-      // sBuf is now in (inputs/4) blocks of 8x8x4 winograd coeffs
+      // TODO - store in output arrangement
+
+      // sBuf:   0,0          0,1        ...    7,7
+      // i0:3  c0 c1 c2 c3  c0 c1 c2 c3 ...  c0 c1 c2 c3     (8*8*4 floats)
+      // i4:7  c4 c5 c6 c7  c4 c5 c6 c7 ...  c4 c5 c7 c7
+      // i8:.  c8 ....
+      //
+      // for cN = total number of inputs
+
+
+      // Each output does an element-wise multiplication with its weights and these co-efficients,
+      // then accumulates over input channels at the same x,y and then inverse transforms in the x,y plane
+
+
+      // weights are something like blocks of 8x8x4 winograd coeffs
+      /*
+       W 0:3   0,0                     0,1                 ...  7,7
+       w0: i0 i1 i2 i3             w0: i4 i5 i6 i7
+          w1: i0 i1 i2 i3           w1: i4 i5 i6 i7
+             w2: i0 i1 i2 i3          w2: i4 i5 i6 i7
+                w3: i0 i1 i2 i3         w3: i4 i5 i6 i7
+
+       W 4:7   0,0                     0,1                 ...  7,7
+
+       ...
+      */
+
 
 
       // Accumulate four output winograd coeffs at a time for each x,y
       float *w = (float *)transformWeights;
       float *outCh = oBuf;
+
       for(int pixel=0;pixel<64;pixel++)
       {
          const float *srcTxy = sBuf + pixel*4;
@@ -1013,6 +1061,7 @@ public:
          }
          outCh += outputs;
       }
+
 
       // Inverse-winograd output channel coeff-slabs
       for(int o=0; o<outputs;o+=4)
@@ -1044,7 +1093,7 @@ public:
          for(int oy=0; oy<yCount; oy++)
          {
             for(int ox=0; ox<xCount;ox++)
-               Store4f32( out + ox*4, Max4f32( Add4f32( Load4f32( src+ox*4 ), biasVal), zero ) );
+               Store4f32( out + ox*outputs, Max4f32( Add4f32( Load4f32( src+ox*4 ), biasVal), zero ) );
             src += 24;
             out += outputs*destW;
          }
@@ -1081,6 +1130,9 @@ public:
          int sx0 = outX - 1;
          int sxEnd = sx0+8;
          int sx1 = std::min(sxEnd,srcW);
+         int syEnd = sy0+8;
+
+         memset(buf,0xff,8*8*inputs*sizeof(float));
 
          if (ty==0)
          {
@@ -1088,17 +1140,18 @@ public:
             sy0++;
             buf += inputs*8;
          }
+
          for(int y=sy0;y<sy1;y++)
          {
             if (sx0<0)
             {
                memset(buf,0,inputs*sizeof(float)); 
-               memcpy(buf+inputs, sIn + (y*srcW)*inputs,sx1*sizeof(float)); 
-               buf += inputs*sx1;
+               memcpy(buf+inputs, sIn + (y*srcW)*inputs,sx1*inputs*sizeof(float)); 
+               buf += inputs*(sx1+1);
             }
             else
             {
-               memcpy(buf, sIn + (y*srcW + sx0)*inputs,(sx1-sx0)*sizeof(float)); 
+               memcpy(buf, sIn + (y*srcW + sx0)*inputs,(sx1-sx0)*inputs*sizeof(float)); 
                buf += inputs*(sx1-sx0);
             }
             if (sx1 < sxEnd)
@@ -1107,6 +1160,9 @@ public:
                buf += (sxEnd-sx1)*inputs;
             }
          }
+         if (sy1<syEnd)
+            memset(buf, 0, (syEnd-sy1)*inputs*8*sizeof(float));
+
          runTile( srcBuffers[threadId], sOut + (outY*destW + outX)*outputs,
                     std::min(outX+6,destW)-outX, std::min(outY+6,destH)-outY,
                     srcTransBuffers[threadId], outputTransBuffers[threadId] );
