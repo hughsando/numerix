@@ -612,8 +612,7 @@ public:
 class Conv2DWinograd : public Conv2DBase
 {
    std::vector <float *> srcBuffers;
-   std::vector <float *> srcTransBuffers;
-   std::vector <float *> outputTransBuffers;
+   std::vector <float *> scratchBuffer;
    float *transformWeights;
    float *biasPtr;
 
@@ -688,12 +687,12 @@ public:
          w2 *= minus_2_over_9;
 
          //const psimd_f32 rcp_90 = psimd_splat_f32( 0x1.6C16C2p-7f);
-         const psimd_f32 rcp_90 = psimd_splat_f32( 0.011111111 );
+         const psimd_f32 rcp_90 = psimd_splat_f32( 0.01111111111111 );
          w3 *= rcp_90;
          w4 *= rcp_90;
 
          //const psimd_f32 rcp_180 = psimd_splat_f32( 0x1.6C16C2p-8f);
-         const psimd_f32 rcp_180 = psimd_splat_f32( 0.005555556);
+         const psimd_f32 rcp_180 = psimd_splat_f32( 0.00555555555556);
          w5 *= rcp_180;
          w6 *= rcp_180;
       }
@@ -715,89 +714,77 @@ public:
       releaseFloats();
 
       srcBuffers.resize(0);
-      srcTransBuffers.resize(0);
-      outputTransBuffers.resize(0);
-
-      float *baseWeights = allocFloats( 8*8*inputs*outputs, true );
-      const float *win = (const float *)weights->cpuRead();
-      // Weights OHWI -> HW(O%4)(I/4)(4i 4o)
-      
-      // Transform inputs, to O(I/4)WH4i...
-      for(int o=0;o<outputs; o++)
-      {
-         const float *wBase = win + o*3*3*inputs;
-         for(int i=0;i<inputs;i+=4)
-         {
-            float *w = baseWeights + o*inputs*8*8 + i*8*8;
-            // Trans kernel columns
-            for(int col=0;col<3;col++)
-            {
-               TransKernel(wBase+col*inputs, wBase+inputs*(col+3), wBase+inputs*(col+6), \
-                        w, w+8*4, w+8*4*2, w+8*4*3, w+8*4*4, w+8*4*5, w+8*4*6, w+8*4*7, true);
-               w+=4;
-            }
-            // Trans kernel rows
-            w = baseWeights + o*inputs*8*8 + i*8*8;
-            for(int row=0;row<8;row++)
-            {
-               TransKernel(w, w+4, w+8,
-                           w, w+4, w+8, w+12, w+16, w+20, w+24, w+28, true );
-               w+=8*4;
-            }
-            wBase += 4;
-         }
-      }
-
-      // Interlace 4 outputs ...
-      // Transform inputs, to O(I/4)WH4i -> (O/4)(I/4)WH4o4i
-      transformWeights = allocFloats( 8*8*inputs*outputs, true );
-      for(int o=0;o<outputs; o+=4)
-      {
-         float *dest = transformWeights + o*inputs*8*8;
-         for(int i=0;i<inputs;i+=4)
-         {
-            const float *si0 = baseWeights + (o  )*inputs*8*8 + i*8*8;
-            const float *si1 = baseWeights + (o+1)*inputs*8*8 + i*8*8;
-            const float *si2 = baseWeights + (o+2)*inputs*8*8 + i*8*8;
-            const float *si3 = baseWeights + (o+3)*inputs*8*8 + i*8*8;
-            for(int pixel=0;pixel<64;pixel++)
-            {
-               *dest++ = *si0++;
-               *dest++ = *si0++;
-               *dest++ = *si0++;
-               *dest++ = *si0++;
-
-               *dest++ = *si1++;
-               *dest++ = *si1++;
-               *dest++ = *si1++;
-               *dest++ = *si1++;
-
-               *dest++ = *si2++;
-               *dest++ = *si2++;
-               *dest++ = *si2++;
-               *dest++ = *si2++;
-
-               *dest++ = *si3++;
-               *dest++ = *si3++;
-               *dest++ = *si3++;
-               *dest++ = *si3++;
-            }
-         }
-      }
-
-      if (bias)
-         biasPtr = (float *)bias->cpuRead();
-      else
-         biasPtr = allocFloats(outputs,true);
+      scratchBuffer.resize(0);
 
       int threads = GetWorkerCount();
 
       for(int i=0;i<threads;i++)
       {
          srcBuffers.push_back( allocFloats(8*8*inputs,false) );
-         srcTransBuffers.push_back( allocFloats(8*8*inputs,false) );
-         outputTransBuffers.push_back( allocFloats(8*8*outputs,false) );
+         scratchBuffer.push_back( allocFloats(8*8*4,false) );
       }
+
+
+      // Transform O*3*3*I weights into
+      //
+      // (O/4)*8*8*I4o winograd coeffs...
+
+      // Interlace 4 outputs ...
+      /*
+       W 0:3   0,0                     0,1                 ...  7,7
+       w0: i0 i1 i2 i3             w0: i4 i5 i6 i7
+          w1: i0 i1 i2 i3           w1: i4 i5 i6 i7
+             w2: i0 i1 i2 i3          w2: i4 i5 i6 i7
+                w3: i0 i1 i2 i3         w3: i4 i5 i6 i7
+
+       W 4:7   0,0                     0,1                 ...  7,7
+
+       ...
+      */
+
+
+      const float *weightIn = (const float *)weights->cpuRead();
+      transformWeights = allocFloats( 8*8*inputs*outputs, true );
+
+      // Transform inputs, to (O/4)WHi4o
+      // output stride between pixel
+      int os = inputs*4;
+      for(int o=0;o<outputs;o++)
+      {
+         int baseBlock = (o>>2)*8*8*4*inputs;
+         int baseOffset = o&3;
+         for(int inputIdx=0;inputIdx<inputs;inputIdx+=4)
+         {
+            const float *w0 = weightIn + o*3*3*inputs + inputIdx;
+            float *t = scratchBuffer[0];
+
+            // Trans kernel columns of 4 inputs into scratch buffer
+            for(int col=0;col<3;col++)
+            {
+               TransKernel(w0, w0+inputs*3, w0+inputs*6, \
+                        t, t+3*4, t+3*4*2, t+3*4*3, t+3*4*4, t+3*4*5, t+3*4*6, t+3*4*7, true);
+               w0 += inputs;
+               t+=4;
+            }
+            // Trans scratch buffer rows to 8*8 lots of 4 inputs and write to interlaced-weights buffer
+            float *w = scratchBuffer[0];
+
+            float *out = transformWeights + baseBlock + inputIdx*4 + baseOffset*4;
+            for(int row=0;row<8;row++)
+            {
+               TransKernel(w, w+4, w+8,
+                           out, out+os, out+os*2, out+os*3, out+os*4, out+os*5, out+os*6, out+os*7, true );
+               w+=3*4;
+               out += os*8;
+            }
+         }
+      }
+
+
+      if (bias)
+         biasPtr = (float *)bias->cpuRead();
+      else
+         biasPtr = allocFloats(outputs,true);
    }
 
 
@@ -817,9 +804,9 @@ public:
       destTensor = 0;
    }
 
-   inline void runTile( const float *src, float *dest,
-                       int xCount, int yCount, 
-                       float *sBuf, float *oBuf)
+   inline void runTile( float *src, float *dest,
+                        int xCount, int yCount, 
+                        float *scratch)
    {
 
       #define TRANS_WINO(i0, i1, i2, i3, i4, i5, i6, i7, \
@@ -953,7 +940,6 @@ public:
    }
 
 
-
       /*
         src is HWC format, 8 x 8 x inputs float32
 
@@ -961,86 +947,81 @@ public:
       */
 
       // Loop over source channels, four at a time
-      //  source stride (pixel width)
-      int ss = inputs;
-      // Transform inputs 4 at a time into inputs/4 blocks of 8x8x4 winograd coeffs
-      //
+      // Src is in linear input components (features) per pixel, like:
       //  src = 
-      //    0,0                             0,1                     ...   7,7
-      //  i0 i1 i2 i3 i4 i5 i6 i7 i8 ... i0 i1 i2 i3 i4 i5 i6 i7 i8 ... i0 i1 i2 i3 i4 i5 i6 i7 i8 ...
+      //     i0 i1 i2 i3 i4 i5 i6 i7 i8 ... i0 i1 i2 i3 i4 i5 i6 i7 i8 ... i0 i1 i2 i3 i4 i5 i6 i7 i8 ...
       //
-      //  -> sBuf = coeffs 'c'  (i/4) * 8 * 8 * 4
+      //  source stride (pixel width) to get from one set of 4 inputs to the next
+      int ss = inputs;
+      // Transform into input coefficients per pixel
+      //    c0 c1 c2 c3 c4 c5 c6 c7 c8 ... c0 c1 c2 c3 c4 c5 c6 c7 c8 ... c0 c1 c2 c3 c4 c5 c6 c7 c8 ...
       //
-      //    0,0          0,1        ...    7,7
-      //   c0 c1 c2 c3  c0 c1 c2 c2 ...  c0 c1 c2 c3
-      //   c4 c5 c6 c7  c4 c5 c6 c7 ...  c4 c5 c7 c7
-      //   c8 ....
-      //  
+      // Do this by gathering 4 components at a time for all pixels, transforming to rows in scrach buffer,
+      //  then transforming the cols of the scratch buffer over the top of the original source
+      //
       for(int inputIdx=0; inputIdx<inputs; inputIdx+=4)
       {
          const float *src0 = src + inputIdx;
-         float *blockBase = sBuf + 8*8*inputIdx;
-         float *out0 = blockBase;
+         float *out0 = scratch;
+
          // Transorm 4 channels to 4 channels of wonigrad coeffs
          // Tranform rows to buffer
          for(int i=0;i<8;i++)
          {
             TRANS_WINO( src0+0, src0+ss, src0+2*ss, src0+3*ss, src0+4*ss, src0+5*ss, src0+6*ss, src0+7*ss, \
                         out0+0, out0+4,  out0+8,    out0+12,   out0+16,   out0+20,   out0+24,   out0+28 );
-            // Next input column
+            // Next input row
             src0 += inputs*8;
-            // Next output column
-            out0 += 8*4;
+            // Next output row
+            out0 += 32;
          }
 
-         // Transform buffer columns in-situ
-         float *ioPtr = blockBase;
+         // Transform scratch buffer columns and store result over the original source
+         const float *col0 = scratch;
+         float *dest0 = src + inputIdx;
          for(int i=0;i<8;i++)
          {
-            TRANS_WINO( ioPtr+0, ioPtr+32,  ioPtr+64, ioPtr+96, ioPtr+128, ioPtr+160, ioPtr+192, ioPtr+224,
-                        ioPtr+0, ioPtr+32,  ioPtr+64, ioPtr+96, ioPtr+128, ioPtr+160, ioPtr+192, ioPtr+224 );
-            // Next 4 coeffs
-            ioPtr+=4;
+            TRANS_WINO( col0+0, col0+32,  col0+64, col0+96, col0+128, col0+160, col0+192, col0+224,
+                        dest0+0, dest0+ss, dest0+2*ss, dest0+3*ss, dest0+4*ss, dest0+5*ss, dest0+6*ss, dest0+7*ss );
+            // Next column of 4 coeffs
+            col0+=4;
+            // Next destination row
+            dest0 += inputs*8;
          }
       }
 
-      // TODO - store in output arrangement
-
-      // sBuf:   0,0          0,1        ...    7,7
-      // i0:3  c0 c1 c2 c3  c0 c1 c2 c3 ...  c0 c1 c2 c3     (8*8*4 floats)
-      // i4:7  c4 c5 c6 c7  c4 c5 c6 c7 ...  c4 c5 c7 c7
-      // i8:.  c8 ....
-      //
-      // for cN = total number of inputs
-
-
-      // Each output does an element-wise multiplication with its weights and these co-efficients,
-      // then accumulates over input channels at the same x,y and then inverse transforms in the x,y plane
-
-
-      // weights are something like blocks of 8x8x4 winograd coeffs
       /*
-       W 0:3   0,0                     0,1                 ...  7,7
-       w0: i0 i1 i2 i3             w0: i4 i5 i6 i7
-          w1: i0 i1 i2 i3           w1: i4 i5 i6 i7
-             w2: i0 i1 i2 i3          w2: i4 i5 i6 i7
-                w3: i0 i1 i2 i3         w3: i4 i5 i6 i7
-
-       W 4:7   0,0                     0,1                 ...  7,7
-
-       ...
+      const float *dbg = src;
+      for(int o=0;o<4;o+=4)
+      {
+         printf("out %d\n",o);
+         for(int px=0;px<64;px++)
+         {
+            printf(" t %d:", px);
+            for(int i=0;i<inputs;i++)
+               printf(" %g", *dbg++);
+            printf("\n");
+         }
+      }
       */
 
+      // Src values have now been converted to winograd coeffs in-situ
+      //   src: c0 c1 c2 c3 c4 c5 c6 c7 c8 ... c0 c1 c2 c3 c4 c5 c6 c7 c8 ... c0 c1 c2 c3 c4 c5 c6 c7 c8 ...
+
+      // For each output, o, we want transformed To = Sum_i w_oi ci
+      //
+      // Perform this sum for each pixel, 4 outputs at a time and store the result in the 8*8*4  scratch buffer
+      //  then inverse-transform into the destination buffer.
+      //
 
 
-      // Accumulate four output winograd coeffs at a time for each x,y
       float *w = (float *)transformWeights;
-      float *outCh = oBuf;
-
-      for(int pixel=0;pixel<64;pixel++)
+      for(int o=0; o<outputs;o+=4)
       {
-         const float *srcTxy = sBuf + pixel*4;
-         for(int o=0; o<outputs;o+=4)
+         float *out = scratch;
+         const float *s = src;
+
+         for(int pixel=0;pixel<64;pixel++)
          {
             float32x4_t sumO0 = Zero4f32;
             float32x4_t sumO1 = sumO0;
@@ -1048,54 +1029,82 @@ public:
             float32x4_t sumO3 = sumO0;
             for(int i=0;i<inputs;i+=4)
             {
-               float32x4_t src = Load4f32(srcTxy+i*8*8);
+               float32x4_t src = Load4f32(s);
                sumO0 = Add4f32( Mul4f32(src, Load4f32(w   ) ), sumO0 );
                sumO1 = Add4f32( Mul4f32(src, Load4f32(w+4 ) ), sumO1 );
                sumO2 = Add4f32( Mul4f32(src, Load4f32(w+8 ) ), sumO2 );
                sumO3 = Add4f32( Mul4f32(src, Load4f32(w+12) ), sumO3 );
                w+=16;
+               s+=4;
             }
 
             SumRows4x4f32(sumO0, sumO1, sumO2, sumO3);
-            Store4f32( outCh+o, sumO0 );
+            Store4f32( out, sumO0 );
+            out += 4;
          }
-         outCh += outputs;
-      }
 
+         // Inverse-winograd 4-coeffs into scratch buffer
 
-      // Inverse-winograd output channel coeff-slabs
-      for(int o=0; o<outputs;o+=4)
-      {
-         float *r0 = oBuf + o*8*8;
-         float *r1 = sBuf;
-         // compact rows...
+         float *rowSrc = scratch;
+         float *rowDest = scratch;
+         // compact rows in-situ
          for(int i=0;i<8;i++)
          {
-            TRANS_WINO_INV(r0+0, r0+4,  r0+8,    r0+12,   r0+16,   r0+20,   r0+24,   r0+28, \
-                           r1+0, r1+4,  r1+8,    r1+12,   r1+16,   r1+20 );
-            r0+= 32;
-            r1+=24;
+            TRANS_WINO_INV(rowSrc+0, rowSrc+4,  rowSrc+8,    rowSrc+12,   rowSrc+16,   rowSrc+20,   rowSrc+24,   rowSrc+28, \
+                           rowDest+0, rowDest+4,  rowDest+8,    rowDest+12,   rowDest+16,   rowDest+20 );
+            rowSrc+= 32;
+            rowDest+=24;
          }
 
-         // compact cols...
-         float *c = sBuf;
+         // compact cols 
+         float *c = scratch;
          for(int i=0;i<xCount;i++)
          {
             TRANS_WINO_INV(c, c+24, c+48, c+72, c+96, c+120, c+144, c+168, \
                            c, c+24, c+48, c+72, c+96, c+120 );
             c+=4;
          }
-         // Activate and bias ...
-         float *src = sBuf;
+
+         // Activate and bias from scratch buffer to output
          float32x4_t zero = Zero4f32;
          float32x4_t biasVal = Load4f32(biasPtr + o);
-         float *out = dest + o;
-         for(int oy=0; oy<yCount; oy++)
+
+         float *unactive = scratch;
+         float *d = dest + o;
+
+         if (activation==actRelu)
          {
-            for(int ox=0; ox<xCount;ox++)
-               Store4f32( out + ox*outputs, Max4f32( Add4f32( Load4f32( src+ox*4 ), biasVal), zero ) );
-            src += 24;
-            out += outputs*destW;
+            for(int oy=0; oy<yCount; oy++)
+            {
+               for(int ox=0; ox<xCount;ox++)
+                  Store4f32( d + ox*outputs, Max4f32( Add4f32( Load4f32( unactive+ox*4 ), biasVal), zero ) );
+               unactive += 24;
+               d += outputs*destW;
+            }
+         }
+         else if (activation==actLeaky)
+         {
+            float32x4_t alpha = Const4f32(0.1f);
+            for(int oy=0; oy<yCount; oy++)
+            {
+               for(int ox=0; ox<xCount;ox++)
+               {
+                  float32x4_t val = Add4f32( Load4f32( unactive+ox*4 ), biasVal);
+                  Store4f32( d + ox*outputs, Max4f32( val, Mul4f32(val,alpha) ) );
+               }
+               unactive += 24;
+               d += outputs*destW;
+            }
+         }
+         else
+         {
+            for(int oy=0; oy<yCount; oy++)
+            {
+               for(int ox=0; ox<xCount;ox++)
+                  Store4f32( d + ox*outputs, Add4f32( Load4f32( unactive+ox*4 ), biasVal ) );
+               unactive += 24;
+               d += outputs*destW;
+            }
          }
       }
    }
@@ -1165,7 +1174,7 @@ public:
 
          runTile( srcBuffers[threadId], sOut + (outY*destW + outX)*outputs,
                     std::min(outX+6,destW)-outX, std::min(outY+6,destH)-outY,
-                    srcTransBuffers[threadId], outputTransBuffers[threadId] );
+                    scratchBuffer[threadId]);
       }
    }
 

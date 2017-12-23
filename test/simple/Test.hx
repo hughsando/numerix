@@ -47,16 +47,24 @@ class Test
       var conv2D = new Conv2D(cfg,input);
       model.addLayer( conv2D );
 
-      var weight = Nx.zeros( [4,3,3,4] );
-      weight.setAt(16, 1);
+      var inDim = 8;
+      var outDim = 8;
+      var weight = Nx.zeros( [outDim,3,3,inDim] );
+      for(o in 0...outDim)
+         weight.setAt(inDim*(3+1)+ o*3*3*inDim, (o+1));
+
+      //weight.setAt(16+3*3*4 + 1, 1);
+      //weight.setAt(16+3*3*4*2 + 2, 1);
+      //weight.setAt(16+3*3*4*3 + 3, 1);
       //for(i in 0...4*4*3*3)
       //   weight.setAt(i,i);
 
       conv2D.setWeights( [weight] );
 
-      var input = Nx.zeros( [3,3,4] );
-      for(i in 0...3*3*4)
-         input.setAt(i, i);
+      var input = Nx.zeros( [3,3,inDim] );
+      input.setAt(inDim*(3+1), 1);
+      //for(i in 0...3*3*inDim)
+      //   input.setAt(i, i);
       input.print();
       var res = model.run(input);
       trace(res);
