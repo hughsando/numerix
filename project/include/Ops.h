@@ -125,6 +125,8 @@ struct psimd_f32
    inline psimd_f32 &operator*=(const psimd_f32 &o) { val = Mul4f32(val,o.val); return *this;  }
    inline psimd_f32 &operator-=(const psimd_f32 &o) { val = Sub4f32(val,o.val); return *this;  }
    //inline psimd_f32 operator-() const { return _mm_xor_ps(val, Const4f32(-0.f));  }
+   
+   inline float operator[](int lane) { return LaneF32(val, lane); }
 };
 inline psimd_f32 psimd_splat_f32(float c) { return Const4f32(c); }
 inline void psimd_f32_store(float *outPtr, const psimd_f32 &inVal) { Store4f32(outPtr, inVal.val); }

@@ -41,34 +41,58 @@ class Test
    {
       Model.enableGpu(false);
 
-      var model = new Model();
-      var input = model.makeInputLayer();
-      var cfg = { activation:'linear', kernelSize:[3,3], filters:4, padding:'same' };
-      var conv2D = new Conv2D(cfg,input);
-      model.addLayer( conv2D );
+     for(size in 1...9)
+     {
+      for(inputs in 1...4)
+         for(outputs in 1...4)
+         {
+            var inCount = inputs*4;
+            var outCount = outputs*4;
+            var res = [];
 
-      var inDim = 8;
-      var outDim = 8;
-      var weight = Nx.zeros( [outDim,3,3,inDim] );
-      for(o in 0...outDim)
-         weight.setAt(inDim*(3+1)+ o*3*3*inDim, (o+1));
+            var weight = Nx.zeros( [outCount,3,3,inCount] );
+            //for(i in 0...weight.elementCount)
+            //   weight.setAt(i, Math.random()-0.5 );
+            weight[ (3+2)*inCount ] = 1;
 
-      //weight.setAt(16+3*3*4 + 1, 1);
-      //weight.setAt(16+3*3*4*2 + 2, 1);
-      //weight.setAt(16+3*3*4*3 + 3, 1);
-      //for(i in 0...4*4*3*3)
-      //   weight.setAt(i,i);
+            var input = Nx.zeros( [size,size,inCount] );
+            for(i in 0...input.elementCount)
+               input[i] = Math.random()-0.5;
 
-      conv2D.setWeights( [weight] );
+            for(act in ['leaky', 'linear', 'relu'])
+            {
+               for(go in 0...2)
+               {
+                  var cfg = { activation:act, kernelSize:[3,3], filters:outCount, padding:'same',
+                              allowTransform: go==1 };
 
-      var input = Nx.zeros( [3,3,inDim] );
-      input.setAt(inDim*(3+1), 1);
-      //for(i in 0...3*3*inDim)
-      //   input.setAt(i, i);
-      input.print();
-      var res = model.run(input);
-      trace(res);
-      res.print();
+                  var model = new Model();
+                  var inputLayer = model.makeInputLayer();
+                  var conv2D = new Conv2D(cfg,inputLayer);
+                  model.addLayer( conv2D );
+
+                  conv2D.setWeights( [weight] );
+
+                  res[go] = model.run(input);
+               }
+
+               var ok = true;
+               for(i in 0...res[0].elementCount)
+                  if ( Math.abs(res[0][i]-res[1][i]) > 0.001 )
+                  {
+                     Sys.println("  err " + i + ":" + res[0][i] + "/" + res[1][i] );
+                     ok = false;
+                     Sys.println("no trans");
+                     res[0].print();
+                     Sys.println("trans");
+                     res[1].print();
+                     Sys.println('$size: $inCount $outCount $act ' + res[0].shape + " " + (ok?"ok":"bad"));
+                     Sys.exit(-1);
+                  }
+               Sys.println('$inCount $outCount $act ' + res[0].shape + " " + (ok?"ok":"bad"));
+            }
+         }
+      }
    }
 }
 

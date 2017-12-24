@@ -607,7 +607,7 @@ public:
 };
 
 
-//#define NUMERIX_WINOGRAD
+#define NUMERIX_WINOGRAD
 #ifdef NUMERIX_WINOGRAD
 class Conv2DWinograd : public Conv2DBase
 {
@@ -623,7 +623,7 @@ public:
           Tensor *inWeights, Tensor *inBias)
       : Conv2DBase(inStrideY, inStrideX, inActivation, inPadding,  inWeights, 0, inBias)
    {
-      printf("winograd!\n");
+      //printf("winograd!\n");
       rebuildWeights();
    }
 
@@ -687,12 +687,12 @@ public:
          w2 *= minus_2_over_9;
 
          //const psimd_f32 rcp_90 = psimd_splat_f32( 0x1.6C16C2p-7f);
-         const psimd_f32 rcp_90 = psimd_splat_f32( 0.01111111111111 );
+         const psimd_f32 rcp_90 = psimd_splat_f32( 0.01111111111111f );
          w3 *= rcp_90;
          w4 *= rcp_90;
 
          //const psimd_f32 rcp_180 = psimd_splat_f32( 0x1.6C16C2p-8f);
-         const psimd_f32 rcp_180 = psimd_splat_f32( 0.00555555555556);
+         const psimd_f32 rcp_180 = psimd_splat_f32( 0.00555555555556f);
          w5 *= rcp_180;
          w6 *= rcp_180;
       }
@@ -874,7 +874,7 @@ public:
          psimd_f32_store( o4, wd3 - wd4 ); \
          psimd_f32_store( o5, wd5 + wd6 ); \
          psimd_f32_store( o6, wd5 - wd6 ); \
-         psimd_f32_store( o7, wd2 ); \
+         psimd_f32_store( o7, wd7 ); \
       }
 
 
@@ -979,14 +979,15 @@ public:
          // Transform scratch buffer columns and store result over the original source
          const float *col0 = scratch;
          float *dest0 = src + inputIdx;
+         int sy = inputs*8; // step to next input row
          for(int i=0;i<8;i++)
          {
             TRANS_WINO( col0+0, col0+32,  col0+64, col0+96, col0+128, col0+160, col0+192, col0+224,
-                        dest0+0, dest0+ss, dest0+2*ss, dest0+3*ss, dest0+4*ss, dest0+5*ss, dest0+6*ss, dest0+7*ss );
+                        dest0+0, dest0+sy, dest0+2*sy, dest0+3*sy, dest0+4*sy, dest0+5*sy, dest0+6*sy, dest0+7*sy );
             // Next column of 4 coeffs
             col0+=4;
             // Next destination row
-            dest0 += inputs*8;
+            dest0 += inputs;
          }
       }
 
@@ -1016,6 +1017,8 @@ public:
 
 
       float *w = (float *)transformWeights;
+      int sixteens = inputs>>4;
+      int fours = (inputs - (sixteens<<4))>>2;
       for(int o=0; o<outputs;o+=4)
       {
          float *out = scratch;
@@ -1027,16 +1030,48 @@ public:
             float32x4_t sumO1 = sumO0;
             float32x4_t sumO2 = sumO0;
             float32x4_t sumO3 = sumO0;
-            for(int i=0;i<inputs;i+=4)
+
+
+            for(int i=0;i<fours;i++)
             {
                float32x4_t src = Load4f32(s);
+               s+=4;
                sumO0 = Add4f32( Mul4f32(src, Load4f32(w   ) ), sumO0 );
                sumO1 = Add4f32( Mul4f32(src, Load4f32(w+4 ) ), sumO1 );
                sumO2 = Add4f32( Mul4f32(src, Load4f32(w+8 ) ), sumO2 );
                sumO3 = Add4f32( Mul4f32(src, Load4f32(w+12) ), sumO3 );
                w+=16;
-               s+=4;
             }
+
+            for(int i=0;i<sixteens;i++)
+            {
+               float32x4_t src0 = Load4f32(s);
+               sumO0 = Add4f32( Mul4f32(src0, Load4f32(w   ) ), sumO0 );
+               sumO1 = Add4f32( Mul4f32(src0, Load4f32(w+4 ) ), sumO1 );
+               sumO2 = Add4f32( Mul4f32(src0, Load4f32(w+8 ) ), sumO2 );
+               sumO3 = Add4f32( Mul4f32(src0, Load4f32(w+12) ), sumO3 );
+
+               float32x4_t src1 = Load4f32(s+4);
+               sumO0 = Add4f32( Mul4f32(src1, Load4f32(w+16) ), sumO0 );
+               sumO1 = Add4f32( Mul4f32(src1, Load4f32(w+20) ), sumO1 );
+               sumO2 = Add4f32( Mul4f32(src1, Load4f32(w+24) ), sumO2 );
+               sumO3 = Add4f32( Mul4f32(src1, Load4f32(w+28) ), sumO3 );
+
+               float32x4_t src2 = Load4f32(s+8);
+               sumO0 = Add4f32( Mul4f32(src2, Load4f32(w+32) ), sumO0 );
+               sumO1 = Add4f32( Mul4f32(src2, Load4f32(w+36) ), sumO1 );
+               sumO2 = Add4f32( Mul4f32(src2, Load4f32(w+40) ), sumO2 );
+               sumO3 = Add4f32( Mul4f32(src2, Load4f32(w+44) ), sumO3 );
+
+               float32x4_t src3 = Load4f32(s+12);
+               s+=16;
+               sumO0 = Add4f32( Mul4f32(src3, Load4f32(w+48) ), sumO0 );
+               sumO1 = Add4f32( Mul4f32(src3, Load4f32(w+52) ), sumO1 );
+               sumO2 = Add4f32( Mul4f32(src3, Load4f32(w+56) ), sumO2 );
+               sumO3 = Add4f32( Mul4f32(src3, Load4f32(w+60) ), sumO3 );
+               w+=64;
+            }
+
 
             SumRows4x4f32(sumO0, sumO1, sumO2, sumO3);
             Store4f32( out, sumO0 );
@@ -1170,7 +1205,23 @@ public:
             }
          }
          if (sy1<syEnd)
+         {
             memset(buf, 0, (syEnd-sy1)*inputs*8*sizeof(float));
+         }
+
+         /*
+         const float *s = srcBuffers[threadId];
+         for(int y=0;y<8;y++)
+         {
+            printf("%d ]",y);
+            for(int x=0;x<8;x++)
+            {
+               printf("(%g,%g,%g,%g) ", s[0],s[1],s[2],s[3]);
+               s+=4;
+            }
+            printf("\n");
+         }
+         */
 
          runTile( srcBuffers[threadId], sOut + (outY*destW + outX)*outputs,
                     std::min(outX+6,destW)-outX, std::min(outY+6,destH)-outY,
@@ -1188,12 +1239,13 @@ public:
 
 Layer *Layer::createConv2D(int strideY, int strideX,
                     Activation activation, Padding padding,
-                    Tensor *weights, Tensor *pweights, Tensor *bias)
+                    Tensor *weights, Tensor *pweights, Tensor *bias,
+                    bool inAllowTransform)
 {
    CShape filter = weights->shape;
 
    #ifdef NUMERIX_WINOGRAD
-   if (filter.size()==4 && (filter[0]&3)==0 && filter[1]==3 && filter[2]==3 && (filter[3]&3)==0 &&
+   if (inAllowTransform && filter.size()==4 && (filter[0]&3)==0 && filter[1]==3 && filter[2]==3 && (filter[3]&3)==0 &&
        pweights==0 )
       return new Conv2DWinograd(strideY, strideX, activation, padding, weights, bias);
    #endif

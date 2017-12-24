@@ -607,7 +607,7 @@ value allocLayer(Layer *inLayer)
    return result;
 }
 
-value layCreateConv2D(value inStrides, int inActivation, int inPadding, value inWeights, value inPWeights, value inBias)
+value layCreateConv2D(value inStrides, int inActivation, int inPadding, value inWeights, value inPWeights, value inBias, bool inAllowTransform)
 {
    TO_TENSOR_NAME(inWeights, weights);
    if (!weights)
@@ -636,11 +636,11 @@ value layCreateConv2D(value inStrides, int inActivation, int inPadding, value in
       layer = gpuCreateConv2D(sx,sy, activation, padding, weights, bias);
    else
    #endif
-   layer = Layer::createConv2D(sx, sy, activation, padding, weights, pweights, bias);
+   layer = Layer::createConv2D(sx, sy, activation, padding, weights, pweights, bias, inAllowTransform);
 
    return allocLayer(layer);
 }
-DEFINE_PRIME6(layCreateConv2D);
+DEFINE_PRIME7(layCreateConv2D);
 
 
 

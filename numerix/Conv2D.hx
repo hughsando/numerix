@@ -3,6 +3,7 @@ package numerix;
 class Conv2D extends Layer
 {
    static var conv2DId = 0;
+   public static var defaultAllowTransform = true;
 
    public var kernelSize(default,null):Array<Int>;
    public var dilation(default,null):Array<Int>;
@@ -13,6 +14,7 @@ class Conv2D extends Layer
    public var padding(default,null):Int;
    public var weights(default,null):Tensor;
    public var bias(default,null):Tensor;
+   public var allowTransform(default,null):Bool;
 
    public var scales(default,null):Tensor;
    public var means(default,null):Tensor;
@@ -31,6 +33,10 @@ class Conv2D extends Layer
       strides = config.strides;
       filters = config.filters;
       useBias = config.useBias;
+      if (config.allowTransform==null)
+         allowTransform = defaultAllowTransform;
+      else
+         allowTransform = config.allowTransform;
 
       var act:String = config.activation;
       if (act=="linear" || act=="" || act==null)
@@ -71,7 +77,7 @@ class Conv2D extends Layer
       bias = inWeights[1];
       release();
 
-      handle = layCreateConv2D(strides, activation, padding, weights, null, bias);
+      handle = layCreateConv2D(strides, activation, padding, weights, null, bias, allowTransform);
       if (scales!=null)
          layConv2DSetNorm(handle, scales, means, vars);
    }
@@ -81,7 +87,7 @@ class Conv2D extends Layer
 
 
 
-   static var layCreateConv2D = Loader.load("layCreateConv2D","oiioooo");
+   static var layCreateConv2D = Loader.load("layCreateConv2D","oiiooobo");
    static var layConv2DSetNorm = Loader.load("layConv2DSetNorm","oooov");
 
 

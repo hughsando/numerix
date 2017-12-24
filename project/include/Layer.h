@@ -56,7 +56,8 @@ public:
 
    static Layer *createConv2D(int inStrideY, int inStrideX,
                               Activation activation, Padding padding,
-                              Tensor *weights, Tensor *pweights, Tensor *bias);
+                              Tensor *weights, Tensor *pweights, Tensor *bias,
+                              bool inAllowTransform);
 
    static Layer *createMaxPool(int inSizeX, int inSizeY,
                                int inStrideY, int inStrideX,

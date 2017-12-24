@@ -56,6 +56,13 @@ abstract Tensor(Dynamic)
       return tdAt(this, inIndex);
    }
 
+   @:op([])
+   public function set(inIndex:Int,inValue:Float):Void
+   {
+      tdSetAt(this, inIndex,inValue,1);
+   }
+
+
    public function setAt(inIndex:Int,inValue:Float,inCount=1):Void
    {
       tdSetAt(this, inIndex,inValue,inCount);
