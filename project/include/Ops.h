@@ -34,6 +34,7 @@ typedef float AlignedFloat __attribute__((aligned(sizeof(float32x4_t))));
 #define Const4f32(c) vdupq_n_f32(c)
 #define Max4f32(a,b) vmaxq_f32(a,b)
 #define Store4f32(ptr, value)  vst1q_f32( (AlignedFloat *) (ptr) , (value) )
+#define LaneF32(val, lane)  vgetq_lane_f32( val , lane )
 
 inline float Accumulate4f32(float32x4_t v)
 {

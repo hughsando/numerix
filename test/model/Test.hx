@@ -22,6 +22,9 @@ class Test
       if (cpu)
          numerix.Model.enableGpu(false);
 
+      if (args.remove("-notrans"))
+         numerix.Conv2D.defaultAllowTransform = false;
+
       var modelname = args.shift();
       if (modelname==null)
       {

@@ -25,8 +25,6 @@ class Main extends Sprite
    {
       var modelName = "";
 
-      trace(mvOpen(0));
-
       var args = Sys.args();
       mirror = args.remove("-mirror") || args.remove("-m");
       if (args.length>0)
@@ -198,7 +196,6 @@ class Main extends Sprite
       }
    }
 
-   static var mvOpen = numerix.Loader.load("moviGetDeviceName","io");
 }
 
 

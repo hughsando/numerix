@@ -35,6 +35,11 @@ class Movidius extends Layer
       handle = layCreateMovidius(device, data, [outputHeight,outputWidth,outputChannels] );
    }
 
+   public static function getDeviceName(index:Int = 0)
+   {
+      return moviGetDeviceName(index);
+   }
+
 
    override public function toString() return 'Movidius($graphName)';
 
