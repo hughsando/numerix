@@ -28,6 +28,7 @@ class Model extends numerix.Model
    var paramStack:Array<Params>;
    var reorgLayer:Reorg = null;
    var filename:String;
+   var weightName:String;
 
    public function new(inFilename:String, removeReorg = false)
    {
@@ -68,26 +69,27 @@ class Model extends numerix.Model
       try {
          weights = sys.io.File.read(weightName);
          weights.bigEndian = false;
+         var major = weights.readInt32();
+         var minor = weights.readInt32();
+         var revision = weights.readInt32();
+         //println('version: $major.$minor.$revision');
+         if (major*10+minor>=2)
+         {
+            // Skip 64
+            weights.readInt32();
+            weights.readInt32();
+         }
+         else
+         {
+            var seen = weights.readInt32();
+         }
+         transpose = (major > 1000) || (minor > 1000);
       }
       catch(e:Dynamic)
       {
-         throw "Could not open associated weights file '"+weightName+"'";
+         //throw "Could not open associated weights file '"+weightName+"'";
       }
-      var major = weights.readInt32();
-      var minor = weights.readInt32();
-      var revision = weights.readInt32();
-      //println('version: $major.$minor.$revision');
-      if (major*10+minor>=2)
-      {
-         // Skip 64
-         weights.readInt32();
-         weights.readInt32();
-      }
-      else
-      {
-         var seen = weights.readInt32();
-      }
-      transpose = (major > 1000) || (minor > 1000);
+
 
       paramStack = [];
       var current:Params = null;
@@ -99,7 +101,8 @@ class Model extends numerix.Model
             layers.push(current.layer);
       }
 
-      weights.close();
+      if (weights!=null)
+         weights.close();
 
       if (removeReorg && reorgLayer!=null )
       {
@@ -113,6 +116,12 @@ class Model extends numerix.Model
          }
       }
       outputLayer = current.layer;
+   }
+
+   function checkData(w)
+   {
+      if (w==null)
+         throw "Could not open associated weights file '"+weightName+"'";
    }
 
    function createLayer(file:haxe.io.Input, config:Dynamic, params:Params) : Params
@@ -145,6 +154,7 @@ class Model extends numerix.Model
             //println('Convolutional $w,$h,$c');
 
             var buffer = Bytes.alloc(n*4);
+            checkData(file);
             file.readBytes(buffer,0,n*4);
             var bias = Tensor.fromBytes(buffer,Nx.float32,[n]);
 
@@ -236,6 +246,7 @@ class Model extends numerix.Model
 
          case "ncs" :
             var graphDir = haxe.io.Path.directory(filename);
+            if (graphDir=="") graphDir = ".";
 
             var ncs = new Movidius(config, params.layer, graphDir);
             return new Params(ncs.outputWidth, ncs.outputHeight, ncs.outputChannels, ncs);

@@ -109,9 +109,9 @@ public:
       if (retCode != MVNC_OK)
          TensorThrow("Movidius - could not load tensor");
 
-      void* resultData16;
-      void* userParam;
-      unsigned int lenResultData;
+      void* resultData16 = 0;
+      void* userParam = 0;
+      unsigned int lenResultData = 0;
 
       retCode = mvncGetResult(graphHandle, &resultData16, &lenResultData, &userParam);
       if (retCode != MVNC_OK)
@@ -125,9 +125,9 @@ public:
          TensorThrow(buf);
       }
 
-      fp16tofloat( (float *)inBuffer->cpuWrite(), (const u8 *)resultData16, resultCount );
+      fp16tofloat( (float *)result->cpuWrite(), (const u8 *)resultData16, resultCount );
 
-      return inBuffer;
+      return result;
    }
 
 };

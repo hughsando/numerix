@@ -47,12 +47,39 @@ class Detector
      } );
    }
 
+   public function runModelSync(src:Tensor, onComplete:Array<Box>->Float->Void )
+   {
+      if (error!=null)
+         onComplete(null,0);
+
+      try
+      {
+         if (model==null)
+         {
+            //Sys.println("waiting for model...");
+            onComplete(null,0);
+            return;
+         }
+         var t0 = haxe.Timer.stamp();
+         model.run(src);
+         var t = haxe.Timer.stamp() - t0;
+         var boxes = model.outputLayer.getBoxes();
+         onComplete(boxes,t);
+      }
+      catch(e:Dynamic)
+      {
+         trace("Error " + haxe.CallStack.exceptionStack().join("\n") );
+         error = e;
+         onComplete(null,0);
+      }
+   }
+
+
    function threadLoop(modelname)
    {
       try
       {
          model = numerix.Model.load(modelname);
-         trace("Loaded");
          while(true)
          {
             var job = Thread.readMessage(true);

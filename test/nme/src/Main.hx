@@ -20,6 +20,8 @@ class Main extends Sprite
    var labelFormat:TextFormat;
    var colours:Array<Int>;
    var mirror:Bool;
+   var sync:Bool;
+   var cpu:Bool;
 
    public function new()
    {
@@ -27,6 +29,11 @@ class Main extends Sprite
 
       var args = Sys.args();
       mirror = args.remove("-mirror") || args.remove("-m");
+      sync = args.remove("-sync");
+      cpu = args.remove("-cpu");
+      if (cpu)
+         numerix.Model.enableGpu(false);
+
       if (args.length>0)
          modelName = args[0];
       else if (Sys.getEnv("MODEL")!=null)
@@ -191,7 +198,10 @@ class Main extends Sprite
             camera.bitmapData.getFloats32( bmpTensor.data, 0, 0, PixelFormat.pfRGB, trans );
 
             detectorBusy = true;
-            detector.runModelAsync(bmpTensor, onDetection );
+            if (sync)
+               detector.runModelSync(bmpTensor, onDetection );
+            else
+               detector.runModelAsync(bmpTensor, onDetection );
          }
       }
    }
