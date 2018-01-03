@@ -1,8 +1,6 @@
 <xml>
    <!-- <set name="static_link" value="1" /> -->
    <include name="${HXCPP}/toolchain/haxe-target.xml" />
-   <set name="CUDA_PATH" value="${CUDA_SDK}" if="CUDA_SDK" unless="CUDA_PATH" />
-
    <set name="NX_GPU" value="1" unless="rpi" />
    <set name="NX_CUDA" value="1" unless="rpi" />
 
@@ -11,10 +9,6 @@
      <compilerflag value="-DNX_GPU" if="NX_GPU" />
      <compilerflag value="-DNX_CUDA" if="NX_CUDA" />
      <compilerflag value="-DNUMERIX_SIMD" />
-     <section if="NX_CUDA-" >
-        <compilerflag value="-I${CUDA_PATH}/include" />
-        <compilerflag value="-I${CUDA_PATH}/cudnn/cuda/include" />
-     </section>
      <compilerflag value="-mfpu=neon" if="HXCPP_ARMV7||HXCPP_ARM64" />
      <section if="rpi" >
         <compilerflag value="-mfpu=neon-vfpv4" />
@@ -83,24 +77,6 @@
       <files id="nnpack" if="nnpack" />
       <outdir name="../ndll/${BINDIR}" />
       <ext value=".ndll" />
-
-      <section if="NX_CUDA-" >
-         <libpath name="${CUDA_PATH}/lib/x64/" />
-         <libpath name="${CUDA_PATH}/cudnn/cuda/lib/x64" />
-         <libpath name="${CUDA_PATH}/lib/stubs" />
-         <libpath name="${CUDA_PATH}/lib" />
-      </section>
-      <section if="linux" unless="rpi" >
-         <lib name="-lcuda" />
-         <lib name="-lcudart" />
-         <lib name="-lcudnn" />
-      </section>
-
-      <section unless="linux" if="NX_CUDA-" >
-         <lib base="cuda" />
-         <lib base="cudart" />
-         <lib base="cudnn" />
-      </section>
 
       <lib name="-lpthread" if="linux" unless="static_link" />
    </target>
