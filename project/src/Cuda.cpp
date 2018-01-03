@@ -1,17 +1,95 @@
 #include <Tensor.h>
 #include <Layer.h>
 
-#include <cuda_runtime.h>
-#include <cublas_v2.h>
-#include <cudnn.h>
+#include <numerix_cuda/cuda_runtime.h>
+#include <numerix_cuda/cudnn.h>
 
 #include <NxThread.h>
 
+#include <DynamicLoad.h>
+
+// TODO - use runtime info
 #if CUDNN_VERSION < 3000
   #define OLD_CUDNN
 #else
   #define NEW_CUDNN
 #endif
+
+#ifdef HX_WINDOWS
+DynamicLibrary cudaLib("cudart64_90.dll");
+DynamicLibrary cudnnLib("cudnn64_7.dll");
+#else
+DynamicLibrary cudaLib("cudart.so");
+DynamicLibrary cudnnLib("cudnn.so");
+#endif
+
+
+DynamicFunction0(cudaLib, CUDARTAPI, cudaError_t, (cudaError_t)-1, cudaGetLastError)
+DynamicFunction1(cudaLib, CUDARTAPI, const char*,0, cudaGetErrorString,cudaError_t)
+DynamicFunction2(cudaLib, CUDARTAPI, cudaError_t, (cudaError_t)-1,  cudaGetDeviceProperties,struct cudaDeviceProp *, int)
+DynamicFunction1(cudaLib, CUDARTAPI, cudaError_t, (cudaError_t)-1,  cudaGetDevice, int *)
+DynamicFunction2(cudaLib, CUDARTAPI, cudaError_t, (cudaError_t)-1,  cudaMalloc, void **,size_t)
+DynamicFunction1(cudaLib, CUDARTAPI, cudaError_t, (cudaError_t)-1,  cudaFree, void *)
+DynamicFunction4(cudaLib, CUDARTAPI, cudaError_t, (cudaError_t)-1,  cudaMemcpy, void *, const void *, size_t , enum cudaMemcpyKind)
+
+
+
+DynamicFunction1(cudnnLib, CUDNNWINAPI, const char*,0, cudnnGetErrorString,cudnnStatus_t)
+DynamicFunction1(cudnnLib, CUDNNWINAPI, cudnnStatus_t, (cudnnStatus_t)-1, cudnnCreate,cudnnHandle_t *)
+DynamicFunction1(cudnnLib, CUDNNWINAPI, cudnnStatus_t, (cudnnStatus_t)-1, cudnnCreateTensorDescriptor,cudnnTensorDescriptor_t *)
+DynamicFunction1(cudnnLib, CUDNNWINAPI, cudnnStatus_t, (cudnnStatus_t)-1, cudnnCreateFilterDescriptor,cudnnFilterDescriptor_t *)
+DynamicFunction1(cudnnLib, CUDNNWINAPI, cudnnStatus_t, (cudnnStatus_t)-1, cudnnCreateConvolutionDescriptor,cudnnConvolutionDescriptor_t *)
+DynamicFunction1(cudnnLib, CUDNNWINAPI, cudnnStatus_t, (cudnnStatus_t)-1, cudnnCreatePoolingDescriptor,cudnnPoolingDescriptor_t *)
+DynamicFunction1(cudnnLib, CUDNNWINAPI, cudnnStatus_t, (cudnnStatus_t)-1, cudnnCreateActivationDescriptor,cudnnActivationDescriptor_t *)
+
+
+DynamicFunction1(cudnnLib, CUDNNWINAPI, cudnnStatus_t, (cudnnStatus_t)-1, cudnnDestroyTensorDescriptor,cudnnTensorDescriptor_t )
+DynamicFunction1(cudnnLib, CUDNNWINAPI, cudnnStatus_t, (cudnnStatus_t)-1, cudnnDestroyFilterDescriptor,cudnnFilterDescriptor_t)
+DynamicFunction1(cudnnLib, CUDNNWINAPI, cudnnStatus_t, (cudnnStatus_t)-1, cudnnDestroyConvolutionDescriptor,cudnnConvolutionDescriptor_t)
+DynamicFunction1(cudnnLib, CUDNNWINAPI, cudnnStatus_t, (cudnnStatus_t)-1, cudnnDestroyPoolingDescriptor,cudnnPoolingDescriptor_t)
+DynamicFunction1(cudnnLib, CUDNNWINAPI, cudnnStatus_t, (cudnnStatus_t)-1, cudnnDestroyActivationDescriptor,cudnnActivationDescriptor_t)
+
+DynamicFunction7(cudnnLib, CUDNNWINAPI, cudnnStatus_t, (cudnnStatus_t)-1, cudnnSetTensor4dDescriptor,cudnnTensorDescriptor_t, cudnnTensorFormat_t, cudnnDataType_t, int, int ,int, int);
+
+DynamicFunction7(cudnnLib, CUDNNWINAPI, cudnnStatus_t, (cudnnStatus_t)-1, cudnnSetFilter4dDescriptor, cudnnFilterDescriptor_t, cudnnDataType_t, cudnnTensorFormat_t, int, int , int , int)
+
+DynamicFunction9(cudnnLib, CUDNNWINAPI, cudnnStatus_t, (cudnnStatus_t)-1, cudnnSetConvolution2dDescriptor, cudnnConvolutionDescriptor_t, int, int, int, int, int, int, cudnnConvolutionMode_t, cudnnDataType_t)
+
+
+DynamicFunction9(cudnnLib, CUDNNWINAPI, cudnnStatus_t, (cudnnStatus_t)-1, cudnnSetPooling2dDescriptor, cudnnPoolingDescriptor_t, cudnnPoolingMode_t, cudnnNanPropagation_t, int, int, int, int, int, int)
+
+   
+DynamicFunction4(cudnnLib, CUDNNWINAPI, cudnnStatus_t, (cudnnStatus_t)-1, cudnnSetActivationDescriptor, cudnnActivationDescriptor_t, cudnnActivationMode_t, cudnnNanPropagation_t, double)
+
+
+#ifdef OLD_CUDNN
+DynamicFunction8(cudnnLib, CUDNNWINAPI, cudnnStatus_t, (cudnnStatus_t)-1, cudnnAddTensor,cudnnHandle_t,int, const void *, const cudnnTensorDescriptor_t, const void *, const void *, cudnnTensorDescriptor_t , void *)
+#else
+
+DynamicFunction7(cudnnLib, CUDNNWINAPI, cudnnStatus_t, (cudnnStatus_t)-1,  cudnnAddTensor,cudnnHandle_t, const void *, const cudnnTensorDescriptor_t, const void *, const void *, cudnnTensorDescriptor_t, void *)
+#endif
+
+DynamicFunction8(cudnnLib, CUDNNWINAPI, cudnnStatus_t, (cudnnStatus_t)-1, cudnnGetConvolutionForwardAlgorithm, cudnnHandle_t, const cudnnTensorDescriptor_t, const cudnnFilterDescriptor_t, const cudnnConvolutionDescriptor_t, const cudnnTensorDescriptor_t, cudnnConvolutionFwdPreference_t, size_t, cudnnConvolutionFwdAlgo_t *)
+
+
+DynamicFunction7(cudnnLib, CUDNNWINAPI, cudnnStatus_t, (cudnnStatus_t)-1, cudnnGetConvolutionForwardWorkspaceSize, cudnnHandle_t, const cudnnTensorDescriptor_t, const cudnnFilterDescriptor_t, const cudnnConvolutionDescriptor_t, const cudnnTensorDescriptor_t, cudnnConvolutionFwdAlgo_t, size_t *)
+
+
+DynamicFunction13(cudnnLib, CUDNNWINAPI, cudnnStatus_t, (cudnnStatus_t)-1, cudnnConvolutionForward, cudnnHandle_t, const void *, const cudnnTensorDescriptor_t, const void *, const cudnnFilterDescriptor_t, const void *, const cudnnConvolutionDescriptor_t, cudnnConvolutionFwdAlgo_t, void *, size_t, const void *, const cudnnTensorDescriptor_t, void *)
+
+
+DynamicFunction9(cudnnLib, CUDNNWINAPI, cudnnStatus_t, (cudnnStatus_t)-1, cudnnSoftmaxForward, cudnnHandle_t, cudnnSoftmaxAlgorithm_t, cudnnSoftmaxMode_t, const void *, const cudnnTensorDescriptor_t, const void *, const void *, const cudnnTensorDescriptor_t, void *)
+
+
+DynamicFunction8(cudnnLib, CUDNNWINAPI, cudnnStatus_t, (cudnnStatus_t)-1, cudnnPoolingForward, cudnnHandle_t, const cudnnPoolingDescriptor_t, const void *, const cudnnTensorDescriptor_t, const void *, const void *, const cudnnTensorDescriptor_t, void *)
+   
+
+DynamicFunction8(cudnnLib, CUDNNWINAPI, cudnnStatus_t, (cudnnStatus_t)-1, cudnnActivationForward, cudnnHandle_t, cudnnActivationDescriptor_t, const void *, const cudnnTensorDescriptor_t, const void *, const void *, const cudnnTensorDescriptor_t, void *)
+
+
+
+
+
 
 namespace numerix
 {
@@ -309,6 +387,8 @@ public:
       {
          // Bias according to preference - no need to re-order
          cudnnCheck( cudnnSetTensor4dDescriptor(biasDesc, preferredFormat, CUDNN_DATA_FLOAT, 1, outputs, 1, 1) );
+
+
 
          beta = 1;
          cudnnAddTensor( cudnnHandle,

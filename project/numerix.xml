@@ -11,7 +11,7 @@
      <compilerflag value="-DNX_GPU" if="NX_GPU" />
      <compilerflag value="-DNX_CUDA" if="NX_CUDA" />
      <compilerflag value="-DNUMERIX_SIMD" />
-     <section if="NX_CUDA" >
+     <section if="NX_CUDA-" >
         <compilerflag value="-I${CUDA_PATH}/include" />
         <compilerflag value="-I${CUDA_PATH}/cudnn/cuda/include" />
      </section>
@@ -34,6 +34,7 @@
      <file name="src/TensorData.cpp" />
      <file name="src/Ops.cpp" />
      <file name="src/NxThread.cpp" />
+     <file name="src/DynamicLoad.cpp" />
      <file name="src/layers/Conv2D.cpp" />
      <file name="src/layers/MaxPool.cpp" />
      <file name="src/layers/Layer.cpp" />
@@ -75,20 +76,6 @@
       <file name="convolution-output.c" />
       <file name="convolution-inference.c" />
 
-      <file name="psimd/2d-winograd-8x8-3x3.cpp" />
-      <file name="psimd/fft-real.cpp" />
-      <file name="psimd/winograd-f6k3.cpp" />
-      <file name="psimd/softmax.cpp" />
-      <file name="psimd/relu.cpp" />
-      <file name="psimd/fft-soa.cpp" />
-      <file name="psimd/fft-dualreal.cpp" />
-      <!--
-      <file name="psimd/fft-aos.cpp" />
-      <file name="psimd/exp.cpp" />
-      <file name="psimd/2d-fourier-8x8.cpp" />
-      <file name="psimd/2d-fourier-16x16.cpp" />
-      -->
-
    </files>
 
    <target id="default" tool="linker" toolid="dll" output="numerix" >
@@ -97,7 +84,7 @@
       <outdir name="../ndll/${BINDIR}" />
       <ext value=".ndll" />
 
-      <section if="NX_CUDA" >
+      <section if="NX_CUDA-" >
          <libpath name="${CUDA_PATH}/lib/x64/" />
          <libpath name="${CUDA_PATH}/cudnn/cuda/lib/x64" />
          <libpath name="${CUDA_PATH}/lib/stubs" />
@@ -109,7 +96,7 @@
          <lib name="-lcudnn" />
       </section>
 
-      <section unless="linux" if="NX_CUDA" >
+      <section unless="linux" if="NX_CUDA-" >
          <lib base="cuda" />
          <lib base="cudart" />
          <lib base="cudnn" />
