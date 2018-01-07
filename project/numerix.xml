@@ -47,34 +47,9 @@
 
    </files>
 
-   <files id="nnpack" dir="src/nnpack" >
-      <compilerflag value="-DNNP_INFERENCE_ONLY" />
-      <compilerflag value="-Iinclude" />
-      <compilerflag value="-I${HXCPP}/include" />
-      <compilerflag value="-Iinclude/fakepthread" if="windows" />
-      <compilerflag value="-Isrc/nnpack" />
-      <compilerflag value="-mfpu=neon" if="HXCPP_ARMV7||HXCPP_ARM64" />
-      <section if="rpi" >
-         <compilerflag value="-mfpu=neon-vfpv4" />
-         <compilerflag value="-mfloat-abi=hard" />
-         <compilerflag value="-mcpu=cortex-a7" />
-         <compilerflag value="-fPIC" />
-      </section>
-
-      <file name="softmax-output.c" />
-      <file name="relu-output.c" />
-      <file name="pooling-output.c" />
-      <file name="init.c" />
-      <file name="fully-connected-output.c" />
-      <file name="fully-connected-inference.c" />
-      <file name="convolution-output.c" />
-      <file name="convolution-inference.c" />
-
-   </files>
 
    <target id="default" tool="linker" toolid="dll" output="numerix" >
       <files id="numerix" />
-      <files id="nnpack" if="nnpack" />
       <outdir name="../ndll/${BINDIR}" />
       <ext value=".ndll" />
 
