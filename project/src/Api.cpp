@@ -699,7 +699,7 @@ value layCreateMaxPool(value inSize, value inStrides, int inPadding)
    Layer *layer = 0;
    Padding padding = (Padding)inPadding;
    #ifdef NX_OPENCL
-   if (false && OclContext::hasCurrent())
+   if (OclContext::hasCurrent())
       layer = oclCreateMaxPool(sx, sy, stepX, stepY, padding);
    else
    #endif

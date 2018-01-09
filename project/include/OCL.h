@@ -3,7 +3,8 @@
 
 #include <string>
 #include <vector>
-#include <Tensor.h>
+
+struct _cl_mem;
 
 namespace numerix
 {
@@ -28,6 +29,17 @@ class Layer;
 Layer *oclCreateMaxPool(int inSizeX, int inSizeY,
                         int inStrideY, int inStrideX,
                         Padding padding);
+
+
+typedef _cl_mem OclData;
+
+
+OclData *oclAlloc(int size);
+void oclFree(OclData *inBuffer);
+
+void oclDownload(unsigned char *buffer, const OclData *inData, int n);
+void oclUpload(OclData *buffer, const unsigned char *inData, int n);
+
 
 class OclContext
 {

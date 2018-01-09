@@ -22,6 +22,9 @@ DynamicFunction6(openclLib, CL_API_CALL, cl_context, 0, clCreateContext, const c
 DynamicFunction5(openclLib, CL_API_CALL, cl_int, 0, clGetDeviceInfo, cl_device_id, cl_device_info, size_t, void *, size_t *)
 DynamicFunction1(openclLib, CL_API_CALL, cl_int, 0, clReleaseCommandQueue, cl_command_queue)
 DynamicFunction1(openclLib, CL_API_CALL, cl_int, 0, clReleaseContext, cl_context)
+DynamicFunction1(openclLib, CL_API_CALL, cl_int, 0, clReleaseMemObject, cl_mem)
+
+DynamicFunction5(openclLib, CL_API_CALL, cl_mem, 0, clCreateBuffer, cl_context, cl_mem_flags, size_t, void *, cl_int *)
 
 
 
@@ -47,6 +50,7 @@ bool OclContext::hasCurrent() { return gOclContext; }
 
 class OpenCLContext : public OclContext
 {
+public:
    int refCount;
 
    cl_platform_id            platform;
@@ -54,7 +58,6 @@ class OpenCLContext : public OclContext
    cl_context                context;
    cl_command_queue          queue0;
 
-public:
    OpenCLContext(void *inPlatform, OclDeviceList &inDevices)
    {
       refCount = 1;
@@ -77,6 +80,8 @@ public:
 
 
       queue0 = clCreateCommandQueue(context, devices[0], 0, &error);
+
+      setCurrent(this);
    }
 
    ~OpenCLContext()
@@ -97,6 +102,35 @@ public:
    }
 
 };
+
+
+
+
+OclData *oclAlloc(int size)
+{
+   OpenCLContext *ctx = (OpenCLContext *)gOclContext;
+   if (!ctx)
+      TensorThrow("oclAlloc - no current ocl context");
+
+   cl_int err = 0;
+   cl_mem buffer = clCreateBuffer( ctx->context, CL_MEM_READ_WRITE, size, 0, &err );
+
+   return buffer;
+}
+
+void oclFree(OclData *inBuffer)
+{
+   clReleaseMemObject(inBuffer);
+}
+
+void oclDownload(unsigned char *buffer, const OclData *inData, int n)
+{
+}
+
+void oclUpload(OclData *buffer, const unsigned char *inData, int n)
+{
+}
+
 
 
 OclContext *OclContext::create(void *inPlatform, OclDeviceList &inDevices)
