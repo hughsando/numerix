@@ -892,7 +892,7 @@ DEFINE_PRIME3(layCreateMovidius);
 value oclGetPlatforms()
 {
    #ifdef NX_OPENCL
-   OclPlatformList platforms = oclGetPlaforms();
+   OclPlatformList platforms = oclGetPlatformList();
 
    int n = platforms.size();
    value result = alloc_array(n);

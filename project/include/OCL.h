@@ -15,7 +15,8 @@ struct OclProp
 typedef std::vector<OclProp> OclProps;
 typedef std::vector<void *> OclDeviceList;
 typedef std::vector<void *> OclPlatformList;
-OclPlatformList oclGetPlaforms();
+
+OclPlatformList oclGetPlatformList();
 void oclGetPlatformProps(void *inPlatform, OclProps &outProps);
 OclDeviceList oclGetPlatformDevices(void *inPlatform);
 void oclGetDeviceProps(void *inDevice, OclProps &outProps, int &outComputeUnits);

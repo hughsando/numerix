@@ -4,15 +4,8 @@
    <set name="NX_GPU" value="1" unless="rpi" />
    <set name="NX_CUDA" value="1" unless="rpi" />
 
-   <section if="NX_OPENCL">
-      <set name="OPENCL_SDK" value="${INTELOCLSDKROOT}" if="INTELOCLSDKROOT" unless="OPENCL_SDK" />
-      <set name="OCL_ARCH" value="x86" unless="HXCPP_M64" />
-      <set name="OCL_ARCH" value="x64" if="HXCPP_M64" />
-   </section>
-
    <files id="numerix" >
      <compilerflag value="-Iinclude" />
-     <compilerflag value="-I${OPENCL_SDK}/include" if="NX_OPENCL" />
      <compilerflag value="-DNX_GPU" if="NX_GPU" />
      <compilerflag value="-DNX_CUDA" if="NX_CUDA" />
      <compilerflag value="-DNX_OPENCL" if="NX_OPENCL" />
@@ -63,8 +56,6 @@
       <outdir name="../ndll/${BINDIR}" />
       <ext value=".ndll" />
 
-      <libpath name="${OPENCL_SDK}/lib/${OCL_ARCH}" if="NX_OPENCL" />
-      <lib name="OpenCL.lib" if="NX_OPENCL" />
       <lib name="-lpthread" if="linux" unless="static_link" />
    </target>
 

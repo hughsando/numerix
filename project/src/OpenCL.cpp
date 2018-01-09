@@ -3,6 +3,27 @@
 #include <stdlib.h>
 #include <OCL.h>
 #include <Tensor.h>
+#include <DynamicLoad.h>
+
+
+#ifdef HX_WINDOWS
+DynamicLibrary openclLib("OpenCL.dll");
+#else
+#endif
+
+
+DynamicFunction3(openclLib, CL_API_CALL, cl_int, 0, clGetPlatformIDs, cl_uint, cl_platform_id *,cl_uint *)
+DynamicFunction5(openclLib, CL_API_CALL, cl_int, 0, clGetPlatformInfo, cl_platform_id, cl_platform_info, size_t, void *, size_t *)
+DynamicFunction5(openclLib, CL_API_CALL, cl_int, 0, clGetDeviceIDs, cl_platform_id, cl_device_type, cl_uint, cl_device_id *, cl_uint *)
+DynamicFunction4(openclLib, CL_API_CALL, cl_command_queue, 0, clCreateCommandQueue, cl_context, cl_device_id, cl_command_queue_properties,cl_int *)
+typedef void (CL_CALLBACK *ContextCallback)(const char *, const void *, size_t, void *);
+DynamicFunction6(openclLib, CL_API_CALL, cl_context, 0, clCreateContext, const cl_context_properties *, cl_uint, const cl_device_id *, ContextCallback, void *, cl_int *)
+DynamicFunction5(openclLib, CL_API_CALL, cl_int, 0, clGetDeviceInfo, cl_device_id, cl_device_info, size_t, void *, size_t *)
+DynamicFunction1(openclLib, CL_API_CALL, cl_int, 0, clReleaseCommandQueue, cl_command_queue)
+DynamicFunction1(openclLib, CL_API_CALL, cl_int, 0, clReleaseContext, cl_context)
+
+
+
 
 namespace numerix
 {
@@ -84,7 +105,7 @@ OclContext *OclContext::create(void *inPlatform, OclDeviceList &inDevices)
 
 
 
-OclPlatformList oclGetPlaforms()
+OclPlatformList oclGetPlatformList()
 {
    cl_uint platformCount = 0;
    clGetPlatformIDs(0, 0, &platformCount);
