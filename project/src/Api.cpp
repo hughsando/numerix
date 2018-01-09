@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <Tensor.h>
 #include <Layer.h>
+#include <OCL.h>
 
 #ifdef NX_MOVIDIUS
 #include "mvnc.h"
@@ -19,6 +20,9 @@ namespace numerix
 vkind dataKind;
 vkind tensorKind;
 vkind layerKind;
+vkind oclDeviceKind;
+vkind oclPlatformKind;
+vkind oclContextKind;
 
 bool enableGpu = true;
 
@@ -36,12 +40,16 @@ static int _id_w;
 static int _id_h;
 static int _id_prob;
 static int _id_classId;
+static int _id_id;
 
 extern "C" void InitIDs()
 {
    kind_share(&dataKind,"data");
    kind_share(&tensorKind,"Tensor");
    kind_share(&layerKind,"Layer");
+   kind_share(&oclDeviceKind,"oclDevice");
+   kind_share(&oclPlatformKind,"oclPlatform");
+   kind_share(&oclContextKind,"oclContext");
 
    _id_name = val_id("name");
    _id_type = val_id("type");
@@ -56,6 +64,7 @@ extern "C" void InitIDs()
    _id_h = val_id("h");
    _id_classId = val_id("classId");
    _id_prob = val_id("prob");
+   _id_id = val_id("id");
 }
 
 
@@ -878,5 +887,124 @@ value layCreateMovidius(HxString devName, value inGraphDef, value inOutputShape)
    #endif
 }
 DEFINE_PRIME3(layCreateMovidius);
+
+
+value oclGetPlatforms()
+{
+   #ifdef NX_OPENCL
+   OclPlatformList platforms = oclGetPlaforms();
+
+   int n = platforms.size();
+   value result = alloc_array(n);
+   for(int p=0;p<n;p++)
+   {
+      value platform = alloc_empty_object();
+
+      alloc_field( platform, _id_id, alloc_abstract(oclPlatformKind, platforms[p] ) );
+      OclProps props;
+      oclGetPlatformProps(platforms[p], props);
+      for(int i=0;i<props.size();i++)
+         alloc_field( platform, val_id( props[i].key.c_str() ), alloc_string( props[i].value.c_str() ) );
+
+      OclDeviceList devices = oclGetPlatformDevices(platforms[p]);
+      value deviceArray = alloc_array( devices.size() );
+      for(int i=0;i<devices.size();i++)
+      {
+         value device = alloc_empty_object();
+
+         OclProps props;
+         int computeUnits = 0;
+         oclGetDeviceProps( devices[i], props, computeUnits);
+         for(int i=0;i<props.size();i++)
+            alloc_field( device, val_id( props[i].key.c_str() ), alloc_string( props[i].value.c_str() ) );
+
+         alloc_field( device, val_id("computeUnits"), alloc_int(computeUnits) );
+         alloc_field( device, _id_id, alloc_abstract(oclDeviceKind, devices[i] ) );
+
+         val_array_set_i(deviceArray,i,device);
+      }
+      alloc_field(platform, val_id("devices"), deviceArray);
+
+      val_array_set_i(result, p, platform);
+   }
+   return result;
+   #else
+   return alloc_array(0);
+   #endif
+}
+DEFINE_PRIME0(oclGetPlatforms);
+
+
+#define TO_OCL_CONTEXT \
+   if (val_kind(inOclContext)!=oclContextKind) val_throw(alloc_string("object not a ocl context")); \
+   OclContext *context = (OclContext *)val_data(inOclContext);
+
+#define TO_PLATFORM \
+   if (val_kind(inPlatform)!=oclPlatformKind) val_throw(alloc_string("object not a ocl platform")); \
+   void *platform = val_data(inPlatform);
+
+#define TO_DEVICES \
+   int n = val_array_size(inDevices); \
+   OclDeviceList devices(n); \
+   for(int i=0;i<n;i++) \
+   { \
+      value device = val_array_i(inDevices,i); \
+      if (val_kind(device)!=oclDeviceKind) \
+         TensorThrow("object not a device"); \
+      devices[i] = val_data(device); \
+   }
+
+
+void releaseOclContext(value inOclContext)
+{
+   TO_OCL_CONTEXT
+
+   if (context)
+      context->decRef();
+}
+
+
+value oclCreateContext(value inPlatform, value inDevices)
+{
+   #ifdef NX_OPENCL
+
+   TO_PLATFORM
+
+   TO_DEVICES
+
+   void *ctx = OclContext::create(platform, devices);
+   if (!ctx)
+      TensorThrow("Could not create OpenCL context");
+
+   value result = alloc_abstract( oclContextKind, ctx );
+   val_gc(result, releaseOclContext );
+   return result;
+
+   #else
+   TensorThrow("Opencl - not supported");
+   return alloc_null();
+   #endif
+}
+
+DEFINE_PRIME2(oclCreateContext);
+
+
+void oclSetCurrent(value inOclContext)
+{
+   #ifdef NX_OPENCL
+   if (val_is_null(inOclContext))
+      OclContext::setCurrent(0);
+   else
+   {
+      TO_OCL_CONTEXT
+      OclContext::setCurrent(context);
+   }
+   #else
+   TensorThrow("Opencl - not supported");
+   #endif
+}
+
+DEFINE_PRIME1v(oclSetCurrent);
+
 
 } // end namespace numerix

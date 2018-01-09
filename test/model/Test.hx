@@ -22,6 +22,45 @@ class Test
       if (cpu)
          numerix.Model.enableGpu(false);
 
+      for(a in args)
+      {
+         if (a.startsWith("-opencl"))
+         {
+            args.remove(a);
+            var parts = a.split("=");
+            var platforms = numerix.opencl.ClCtx.platforms;
+            if (parts.length!=2)
+            {
+               println("use -opencl=#.#, choose # from:");
+               var pid = 0;
+               for(p in platforms)
+               {
+                  println( " " + pid + "] " + p.name );
+                  var did = 0;
+                  for(d in p.devices)
+                  {
+                     println( "    " + pid + "." + did + "] " + d.name + "(" + d.type + "x" + d.computeUnits + ")" );
+                     did ++;
+                  }
+
+                  pid++;
+               }
+               Sys.exit(0);
+            }
+
+            var val = parts[1];
+            parts = val.split(".");
+            var id = Std.parseInt(parts[0]);
+            var platform = platforms[id];
+            Sys.println("Using opencl platform " + platform.name);
+            var devices = null;
+            if (parts.length==2)
+               devices = [ platform.devices[ Std.parseInt(parts[1]) ] ];
+            var ctx = new numerix.opencl.ClCtx(platform,devices);
+            trace( ctx );
+         }
+      }
+
       if (args.remove("-notrans"))
          numerix.Conv2D.defaultAllowTransform = false;
 
@@ -43,12 +82,14 @@ class Test
          val = Tensor.fromBytes(bytes,Nx.float32, [3, model.height, model.width] );
          val = val.reorder([1,2,0],true);
       }
+      #if nme
       else if (bmpname!=null)
       {
          //var scaling = NmeTools.TRANS_STD;
          var scaling = NmeTools.TRANS_UNIT_SCALE;
          val = NmeTools.loadImageF32( bmpname, scaling );
       }
+      #end
 
       if (val!=null)
       {
@@ -69,8 +110,10 @@ class Test
          println( result.min + "..." + result.max );
          Io.writeFile("result.nx", result);
 
+         #if nme
          if (result.channels==3)
             NmeTools.saveImageF32(result, "result.png", NmeTools.TRANS_UNIT_SCALE );
+         #end
       }
    }
 }
