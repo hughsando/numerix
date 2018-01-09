@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include <Tensor.h>
 
 namespace numerix
 {
@@ -21,6 +22,12 @@ void oclGetPlatformProps(void *inPlatform, OclProps &outProps);
 OclDeviceList oclGetPlatformDevices(void *inPlatform);
 void oclGetDeviceProps(void *inDevice, OclProps &outProps, int &outComputeUnits);
 
+
+class Layer;
+
+Layer *oclCreateMaxPool(int inSizeX, int inSizeY,
+                        int inStrideY, int inStrideX,
+                        Padding padding);
 
 class OclContext
 {

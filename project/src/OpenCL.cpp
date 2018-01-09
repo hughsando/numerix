@@ -1,8 +1,9 @@
 #include <CL/cl.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <OCL.h>
 #include <Tensor.h>
+#include <Layer.h>
+#include <OCL.h>
 #include <DynamicLoad.h>
 
 
@@ -207,6 +208,84 @@ void oclGetDeviceProps(void *inDevice, OclProps &outProps, int &outComputeUnits)
 
    outComputeUnits = maxComputeUnits;
 }
+
+
+
+
+
+
+class OpenCLMaxPool : public Layer
+{
+   int        filterY;
+   int        filterX;
+   int        strideX;
+   int        strideY;
+
+   Padding    padding;
+   int        padX;
+   int        padY;
+
+public:
+   OpenCLMaxPool(int inSizeX, int inSizeY,
+           int inStepX, int inStepY,
+           Padding inPadding )
+   {
+      filterX = inSizeX;
+      filterY = inSizeY;
+      strideX = inStepX;
+      strideY = inStepY;
+      padding = inPadding;
+
+      padX = padding==padValid ? 0 : ( (filterX-1)/2 );
+      padY = padding==padValid ? 0 : ( (filterY-1)/2 );
+   }
+
+   ~OpenCLMaxPool()
+   {
+   }
+
+
+   virtual Tensor *run(Tensor *inSrc0, Tensor *inBuffer)
+   {
+      if (inSrc0->type != Float32)
+         TensorThrow("OpenCLMaxPool only supports Float32 tensors");
+
+      CShape &sin = inSrc0->shape;
+      if (sin.size()!=3)
+         TensorThrow("OpenCLMaxPool only supports H*W*C tensors");
+
+      int srcH = sin[0];
+      int srcW = sin[1];
+      int channels = sin[2];
+
+      int destW = (srcW + 2*padX - filterX) / strideX + 1;
+      int destH = (srcH + 2*padY - filterY) / strideY + 1;
+
+      bool match = false;
+      if (inBuffer && inBuffer->shape.size()==3 && inBuffer->type==Float32)
+      {
+         CShape &s = inBuffer->shape;
+         match = s[0]==destH && s[1]==destW && s[2]==channels;
+      }
+      Tensor *result = inBuffer;
+      if (!match)
+         result = new Tensor( Float32, Shape3(destH, destW, channels ) );
+
+
+      
+      return result;
+   }
+};
+
+Layer *oclCreateMaxPool(int sizeX, int sizeY,
+                        int stepX, int stepY,
+                        Padding padding )
+{
+   return new OpenCLMaxPool(sizeX, sizeY, stepX, stepY, padding);
+}
+
+
+
 
 
 

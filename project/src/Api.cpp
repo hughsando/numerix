@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <Tensor.h>
 #include <Layer.h>
+
 #include <OCL.h>
 
 #ifdef NX_MOVIDIUS
@@ -697,11 +698,18 @@ value layCreateMaxPool(value inSize, value inStrides, int inPadding)
 
    Layer *layer = 0;
    Padding padding = (Padding)inPadding;
+   #ifdef NX_OPENCL
+   if (false && OclContext::hasCurrent())
+      layer = oclCreateMaxPool(sx, sy, stepX, stepY, padding);
+   else
+   #endif
+
    #ifdef NX_GPU
    if (enableGpu && gpuInit())
       layer = gpuCreateMaxPool(sx, sy, stepX, stepY, padding);
    else
    #endif
+
        layer = Layer::createMaxPool(sx, sy, stepX, stepY, padding);
 
    return allocLayer(layer);
