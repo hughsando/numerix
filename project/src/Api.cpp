@@ -701,15 +701,14 @@ value layCreateMaxPool(value inSize, value inStrides, int inPadding)
    #ifdef NX_OPENCL
    if (OclContext::hasCurrent())
       layer = oclCreateMaxPool(sx, sy, stepX, stepY, padding);
-   else
    #endif
 
    #ifdef NX_GPU
-   if (enableGpu && gpuInit())
+   if (!layer && enableGpu && gpuInit())
       layer = gpuCreateMaxPool(sx, sy, stepX, stepY, padding);
-   else
    #endif
 
+   if (!layer)
        layer = Layer::createMaxPool(sx, sy, stepX, stepY, padding);
 
    return allocLayer(layer);

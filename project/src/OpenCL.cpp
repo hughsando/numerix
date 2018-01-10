@@ -26,6 +26,7 @@ DynamicFunction1(openclLib, CL_API_CALL, cl_int, 0, clReleaseMemObject, cl_mem)
 
 DynamicFunction5(openclLib, CL_API_CALL, cl_mem, 0, clCreateBuffer, cl_context, cl_mem_flags, size_t, void *, cl_int *)
 
+DynamicFunction9(openclLib, CL_API_CALL, cl_int, 0, clEnqueueWriteBuffer, cl_command_queue, cl_mem, cl_bool, size_t, size_t, const void *, cl_uint, const cl_event *, cl_event *)
 
 
 
@@ -129,6 +130,11 @@ void oclDownload(unsigned char *buffer, const OclData *inData, int n)
 
 void oclUpload(OclData *buffer, const unsigned char *inData, int n)
 {
+   OpenCLContext *ctx = (OpenCLContext *)gOclContext;
+   if (!ctx)
+      TensorThrow("oclUpload - no current ocl context");
+
+   clEnqueueWriteBuffer(ctx->queue0, buffer, CL_TRUE, 0, n, inData, 0, NULL, NULL);
 }
 
 
@@ -306,7 +312,7 @@ public:
          result = new Tensor( Float32, Shape3(destH, destW, channels ) );
 
 
-      
+
       return result;
    }
 };
