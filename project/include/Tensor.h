@@ -239,7 +239,7 @@ class TensorData
       if (!ocl)
          ocl = oclAlloc(size);
 
-      #ifdef NX_GPU
+      #ifdef NX_O
       if (updateOcl && !oclValid && !cpuValid && cpuValid)
       {
          TensorThrow("Todo GPU -> OCL");

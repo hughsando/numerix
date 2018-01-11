@@ -5,6 +5,7 @@
 #include <Layer.h>
 #include <OCL.h>
 #include <DynamicLoad.h>
+#include <map>
 
 
 #ifdef HX_WINDOWS
@@ -19,19 +20,40 @@ DynamicFunction5(openclLib, CL_API_CALL, cl_int, 0, clGetDeviceIDs, cl_platform_
 DynamicFunction4(openclLib, CL_API_CALL, cl_command_queue, 0, clCreateCommandQueue, cl_context, cl_device_id, cl_command_queue_properties,cl_int *)
 typedef void (CL_CALLBACK *ContextCallback)(const char *, const void *, size_t, void *);
 DynamicFunction6(openclLib, CL_API_CALL, cl_context, 0, clCreateContext, const cl_context_properties *, cl_uint, const cl_device_id *, ContextCallback, void *, cl_int *)
-DynamicFunction5(openclLib, CL_API_CALL, cl_int, 0, clGetDeviceInfo, cl_device_id, cl_device_info, size_t, void *, size_t *)
-DynamicFunction1(openclLib, CL_API_CALL, cl_int, 0, clReleaseCommandQueue, cl_command_queue)
-DynamicFunction1(openclLib, CL_API_CALL, cl_int, 0, clReleaseContext, cl_context)
-DynamicFunction1(openclLib, CL_API_CALL, cl_int, 0, clReleaseMemObject, cl_mem)
+DynamicFunction5(openclLib, CL_API_CALL, cl_int, -99, clGetDeviceInfo, cl_device_id, cl_device_info, size_t, void *, size_t *)
+DynamicFunction1(openclLib, CL_API_CALL, cl_int, -99, clReleaseCommandQueue, cl_command_queue)
+DynamicFunction1(openclLib, CL_API_CALL, cl_int, -99, clReleaseContext, cl_context)
+DynamicFunction1(openclLib, CL_API_CALL, cl_int, -99, clReleaseMemObject, cl_mem)
+DynamicFunction1(openclLib, CL_API_CALL, cl_int, -99, clReleaseProgram, cl_program)
+DynamicFunction1(openclLib, CL_API_CALL, cl_int, -99, clReleaseKernel, cl_kernel)
+DynamicFunction1(openclLib, CL_API_CALL, cl_int, -99, clFinish, cl_command_queue)
 
 DynamicFunction5(openclLib, CL_API_CALL, cl_mem, 0, clCreateBuffer, cl_context, cl_mem_flags, size_t, void *, cl_int *)
 
 DynamicFunction9(openclLib, CL_API_CALL, cl_int, 0, clEnqueueWriteBuffer, cl_command_queue, cl_mem, cl_bool, size_t, size_t, const void *, cl_uint, const cl_event *, cl_event *)
 
 
+typedef void (CL_CALLBACK *BuildCallback)(cl_program, void *);
+DynamicFunction6(openclLib, CL_API_CALL, cl_int, -1, clBuildProgram, cl_program, cl_uint, const cl_device_id *, const char *, BuildCallback, void *)
+DynamicFunction3(openclLib, CL_API_CALL, cl_kernel, 0, clCreateKernel, cl_program, const char *, cl_int *)
+DynamicFunction5(openclLib, CL_API_CALL, cl_program, 0, clCreateProgramWithSource, cl_context, cl_uint, const char **, const size_t *, cl_int *)
+DynamicFunction9(openclLib, CL_API_CALL, cl_int, -99, clEnqueueReadBuffer, cl_command_queue, cl_mem, cl_bool, size_t, size_t, void *, cl_uint, const cl_event *, cl_event *)
+DynamicFunction4(openclLib, CL_API_CALL, cl_int, -99, clSetKernelArg, cl_kernel, cl_uint, size_t, const void *)
+DynamicFunction9(openclLib, CL_API_CALL, cl_int, -99, clEnqueueNDRangeKernel, cl_command_queue, cl_kernel, cl_uint, const size_t *, const size_t *, const size_t *, cl_uint, const cl_event *, cl_event *)
+
+
+DynamicFunction6(openclLib, CL_API_CALL, cl_int, -99, clGetProgramBuildInfo, cl_program, cl_device_id, cl_program_build_info, size_t, void *, size_t *);
+
 
 namespace numerix
 {
+
+enum ProgramKey
+{
+   progMaxPool,
+};
+
+
 
 OclContext *gOclContext = 0;
 
@@ -48,6 +70,27 @@ void OclContext::setCurrent(OclContext *inContext)
 bool OclContext::hasCurrent() { return gOclContext; }
 
 
+struct ProgramCache
+{
+   cl_program program;
+   cl_kernel  kernel;
+
+   ProgramCache()
+   {
+      program = 0;
+      kernel = 0;
+   }
+   ProgramCache(const ProgramCache &p) : program(p.program), kernel(p.kernel) { }
+   void operator=(const ProgramCache &p) { program = p.program; kernel=p.kernel; }
+
+   void destroy()
+   {
+      if (kernel)
+         clReleaseKernel(  kernel );
+      if (program)
+         clReleaseProgram( program );
+   }
+};
 
 class OpenCLContext : public OclContext
 {
@@ -58,6 +101,10 @@ public:
    std::vector<cl_device_id> devices;
    cl_context                context;
    cl_command_queue          queue0;
+
+
+   typedef std::map<ProgramKey, ProgramCache> ProgramMap;
+   ProgramMap programMap;
 
    OpenCLContext(void *inPlatform, OclDeviceList &inDevices)
    {
@@ -75,20 +122,37 @@ public:
       };
 
       cl_int error = 0;
-      context = clCreateContext( contextProperties, devices.size(), &devices[0], 0, 0, &error );
-      if (!context)
+      context = clCreateContext( contextProperties, devices.size(), &devices[0], SOnCLInfo, this, &error );
+      if (!context || error)
          TensorThrow("Could not create OpenCL Context");
 
 
       queue0 = clCreateCommandQueue(context, devices[0], 0, &error);
+      if (!queue0 || error)
+         TensorThrow("Could not create OpenCL command queue");
 
       setCurrent(this);
    }
 
    ~OpenCLContext()
    {
-      clReleaseCommandQueue( queue0 );
-      clReleaseContext( context );
+      for(ProgramMap::iterator i=programMap.begin();i!=programMap.end();++i)
+         i->second.destroy();
+
+      if (queue0)
+         clReleaseCommandQueue( queue0 );
+      if (context)
+         clReleaseContext( context );
+   }
+
+   static void SOnCLInfo(const char *errinfo, const void *private_info, size_t cb, void *user_data)
+   {
+      ((OpenCLContext *)user_data)->onCLInfo(errinfo, private_info, cb);
+   }
+
+   void onCLInfo(const char *errinfo, const void *private_info, size_t cb)
+   {
+      printf("############################## onCLInfo -> %s\n", errinfo);
    }
 
    void incRef()
@@ -102,6 +166,53 @@ public:
          delete this;
    }
 
+   void makeKernel(ProgramKey inKey, const char *inProgram, const char *inFunction, cl_program &outProg, cl_kernel &outKernel)
+   {
+      ProgramCache &programCache = programMap[inKey];
+
+      if (!programCache.program)
+      {
+         cl_int err = 0;
+         cl_program prog = clCreateProgramWithSource(context, 1, (const char **) &inProgram, 0, &err);
+         if (err || !prog)
+         {
+            printf("Error in clCreateProgramWithSource : %d\n", err);
+            TensorThrow("clCreateProgramWithSource - error");
+         }
+
+         err = clBuildProgram(prog, 1, &devices[0], 0, 0, 0);
+         if (err)
+         {
+            printf("Error clBuildProgram : %d\n", err);
+
+            size_t size = 0;
+            clGetProgramBuildInfo(prog, devices[0], CL_PROGRAM_BUILD_LOG, 0, 0, &size);
+            if (size>0)
+            {
+               std::vector<char> buffer(size+1);
+               clGetProgramBuildInfo(prog, devices[0], CL_PROGRAM_BUILD_LOG, size, &buffer[0], 0);
+               printf("  : %s\n", &buffer[0]);
+            }
+
+            TensorThrow("clBuildProgram - error");
+         }
+
+
+         err = 0;
+         cl_kernel kernel = clCreateKernel(prog, inFunction, &err);
+         if (err || !kernel)
+         {
+            printf("Error clCreateKernel : %d\n", err);
+            TensorThrow("clCreateKernel - error");
+         }
+
+         programCache.program = prog;
+         programCache.kernel = kernel;
+      }
+
+      outProg = programCache.program;
+      outKernel = programCache.kernel;
+   }
 };
 
 
@@ -115,18 +226,33 @@ OclData *oclAlloc(int size)
 
    cl_int err = 0;
    cl_mem buffer = clCreateBuffer( ctx->context, CL_MEM_READ_WRITE, size, 0, &err );
+   if (err)
+      TensorThrow("oclAlloc - could not create buffer");
 
    return buffer;
 }
 
 void oclFree(OclData *inBuffer)
 {
-   clReleaseMemObject(inBuffer);
+   printf("Release mem %p\n", inBuffer);
+   if (clReleaseMemObject(inBuffer))
+      TensorThrow("oclFree - could not clReleaseMemObject");
 }
 
 void oclDownload(unsigned char *buffer, const OclData *inData, int n)
 {
+   OpenCLContext *ctx = (OpenCLContext *)gOclContext;
+   if (!ctx)
+      TensorThrow("oclAlloc - no current ocl context");
+
+    //if (clFinish(ctx->queue0))
+    //   TensorThrow("oclDownload - error finishing");
+ 
+    // Read the results from the device
+    if (clEnqueueReadBuffer(ctx->queue0, (cl_mem)inData, CL_TRUE, 0, n, buffer, 0, 0, 0 ))
+       TensorThrow("oclDownload - could not clEnqueueReadBuffer");
 }
+
 
 void oclUpload(OclData *buffer, const unsigned char *inData, int n)
 {
@@ -134,7 +260,13 @@ void oclUpload(OclData *buffer, const unsigned char *inData, int n)
    if (!ctx)
       TensorThrow("oclUpload - no current ocl context");
 
-   clEnqueueWriteBuffer(ctx->queue0, buffer, CL_TRUE, 0, n, inData, 0, NULL, NULL);
+   bool blocking = false;
+   cl_int err =  clEnqueueWriteBuffer(ctx->queue0, buffer, blocking, 0, n, inData, 0, NULL, NULL);
+   if (err)
+   {
+      printf("Error in clEnqueueWriteBuffer %d\n", err);
+      TensorThrow("oclUpload - could not clEnqueueWriteBuffer");
+   }
 }
 
 
@@ -253,6 +385,35 @@ void oclGetDeviceProps(void *inDevice, OclProps &outProps, int &outComputeUnits)
 
 
 
+static const char *oclMaxPoolProg = 
+"__kernel void MaxPool(const __global float* src, __global float* dest, const int destW, const int destH, const int features, const int srcLastX, int const srcLastY, const int srcShift) {\n"
+    "const int x = get_global_id(0);\n"
+    "const int y = get_global_id(1);\n"
+
+    "const int srcStride = (destW<<srcShift)*features;\n"
+    "const int srcY = y<<srcShift;\n"
+    "const int srcX = x<<srcShift;\n"
+    "const int dy = srcY<srcLastY ? srcStride : 0;\n"
+    "const int dx = srcX<srcLastX ? features : 0;\n"
+
+    "const int o0 = srcY*srcStride + srcX*features;\n"
+    "const int o1 = o0+dx;\n"
+    "const int o2 = o0+dy;\n"
+    "const int o3 = o2+dx;\n"
+    "const int dOff = (y*destW+x)*features;\n"
+    "for(int f=0;f<features;f++) {\n"
+       "float m0 = src[o0+f];\n"
+       "float m1 = src[o1+f];\n"
+       "float ma = m0>m1 ? m0 : m1;\n"
+       "m0 = src[o2+f];\n"
+       "m1 = src[o3+f];\n"
+       "float mb = m0>m1 ? m0 : m1;\n"
+       "dest[dOff+f] = ma>mb ? ma:mb;\n"
+    "}\n"
+"}"
+;
+
+
 
 class OpenCLMaxPool : public Layer
 {
@@ -264,6 +425,12 @@ class OpenCLMaxPool : public Layer
    Padding    padding;
    int        padX;
    int        padY;
+
+   bool       odd;
+
+   cl_program program;
+   cl_kernel  kernel;
+
 
 public:
    OpenCLMaxPool(int inSizeX, int inSizeY,
@@ -278,10 +445,20 @@ public:
 
       padX = padding==padValid ? 0 : ( (filterX-1)/2 );
       padY = padding==padValid ? 0 : ( (filterY-1)/2 );
+
+      OpenCLContext *ctx = (OpenCLContext *)gOclContext;
+      if (!ctx)
+         TensorThrow("OpenCLMaxPool - no current ocl context");
+
+      ctx->makeKernel(progMaxPool, oclMaxPoolProg,"MaxPool",program,kernel);
    }
 
    ~OpenCLMaxPool()
    {
+      if (kernel)
+         clReleaseKernel(kernel);
+      if (program)
+         clReleaseProgram(program);
    }
 
 
@@ -298,8 +475,20 @@ public:
       int srcW = sin[1];
       int channels = sin[2];
 
-      int destW = (srcW + 2*padX - filterX) / strideX + 1;
-      int destH = (srcH + 2*padY - filterY) / strideY + 1;
+
+      int destW = 0;
+      int destH = 0;
+      if (padding==padSame)
+      {
+         destW = (srcW+strideX-1)/strideX;
+         destH = (srcH+strideY-1)/strideY;
+      }
+      else // padValid
+      {
+         destW = (srcW-filterX+1 + strideX-1)/strideX;
+         destH = (srcH-filterY+1 + strideY-1)/strideY;
+      }
+
 
       bool match = false;
       if (inBuffer && inBuffer->shape.size()==3 && inBuffer->type==Float32)
@@ -311,8 +500,44 @@ public:
       if (!match)
          result = new Tensor( Float32, Shape3(destH, destW, channels ) );
 
+      OpenCLContext *ctx = (OpenCLContext *)gOclContext;
 
+      const OclData *src = inSrc0->oclRead();
 
+      OclData *dest = result->oclWrite();
+
+      cl_int err = 0;
+      err |= clSetKernelArg(kernel, 0, sizeof(cl_mem), &src);
+      err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &dest);
+      err |= clSetKernelArg(kernel, 2, sizeof(int), &destW);
+      err |= clSetKernelArg(kernel, 3, sizeof(int), &destH);
+      err |= clSetKernelArg(kernel, 4, sizeof(int), &channels);
+
+      int srcLastX = srcW-1;
+      int srcLastY = srcH-1;
+      err |= clSetKernelArg(kernel, 5, sizeof(int), &srcLastX);
+      err |= clSetKernelArg(kernel, 6, sizeof(int), &srcLastY);
+      int srcShift = strideX==1 ? 0 : 1;
+      err |= clSetKernelArg(kernel, 7, sizeof(int), &srcShift);
+
+      if (err)
+      {
+         printf("Error setting kernal arg %d\n", err);
+         TensorThrow("OpenCLMaxPool - error setting args");
+      }
+
+      if (!ctx)
+         TensorThrow("OpenCLMaxPool - no current ocl context");
+
+      int items = destW*destH;
+      size_t globalSize[2] = { (size_t)destW, (size_t)destH };
+ 
+      cl_uint work_dim = 2;
+      err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, 0/*Work offset*/, globalSize, 0, 0, NULL, NULL);
+      if (err)
+         TensorThrow("OpenCLMaxPool - could not clEnqueueNDRangeKernel");
+
+      const u8 *data = result->cpuRead();
       return result;
    }
 };

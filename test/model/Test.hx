@@ -21,6 +21,7 @@ class Test
       var cpu = args.remove("-cpu");
       if (cpu)
          numerix.Model.enableGpu(false);
+      var doTime = !args.remove("-notime");
 
       for(a in args)
       {
@@ -99,10 +100,13 @@ class Test
          var t0 = haxe.Timer.stamp();
          var result = model.run(val);
          println("Warmup Time : " + Std.int((haxe.Timer.stamp()-t0)*1000) + "ms");
-         var t0 = haxe.Timer.stamp();
-         for(go in 0...10)
-            result = model.run(val);
-         println("Time 10: " + Std.int((haxe.Timer.stamp()-t0)*100) + "ms");
+         if (doTime)
+         {
+            var t0 = haxe.Timer.stamp();
+            for(go in 0...10)
+               result = model.run(val);
+            println("Time 10: " + Std.int((haxe.Timer.stamp()-t0)*100) + "ms");
+         }
 
          var boxes = model.outputLayer.getBoxes();
          trace(boxes);
