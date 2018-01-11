@@ -26,9 +26,18 @@ void oclGetDeviceProps(void *inDevice, OclProps &outProps, int &outComputeUnits)
 
 class Layer;
 
+Layer *oclCreateConv2D(int inStrideY, int inStrideX,
+                       Activation activation, Padding padding,
+                       Tensor *weights, Tensor *bias);
+
 Layer *oclCreateMaxPool(int inSizeX, int inSizeY,
-                        int inStrideY, int inStrideX,
-                        Padding padding);
+                       int inStrideY, int inStrideX,
+                       Padding padding);
+
+Layer *oclCreateConcat();
+
+Layer *oclCreateYolo(const std::vector<float> &inAnchors,int inBoxCount, int inClassCount, float inThresh);
+
 
 
 typedef _cl_mem OclData;

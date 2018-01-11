@@ -51,6 +51,7 @@ namespace numerix
 enum ProgramKey
 {
    progMaxPool,
+   progConv2DBase,
 };
 
 
@@ -166,11 +167,11 @@ public:
          delete this;
    }
 
-   void makeKernel(ProgramKey inKey, const char *inProgram, const char *inFunction, cl_program &outProg, cl_kernel &outKernel)
+   cl_kernel makeKernel(ProgramKey inKey, const char *inProgram, const char *inFunction)
    {
       ProgramCache &programCache = programMap[inKey];
 
-      if (!programCache.program)
+      if (!programCache.kernel)
       {
          cl_int err = 0;
          cl_program prog = clCreateProgramWithSource(context, 1, (const char **) &inProgram, 0, &err);
@@ -206,12 +207,10 @@ public:
             TensorThrow("clCreateKernel - error");
          }
 
-         programCache.program = prog;
          programCache.kernel = kernel;
       }
 
-      outProg = programCache.program;
-      outKernel = programCache.kernel;
+      return programCache.kernel;
    }
 };
 
@@ -245,8 +244,8 @@ void oclDownload(unsigned char *buffer, const OclData *inData, int n)
    if (!ctx)
       TensorThrow("oclAlloc - no current ocl context");
 
-    //if (clFinish(ctx->queue0))
-    //   TensorThrow("oclDownload - error finishing");
+    if (clFinish(ctx->queue0))
+       TensorThrow("oclDownload - error finishing");
  
     // Read the results from the device
     if (clEnqueueReadBuffer(ctx->queue0, (cl_mem)inData, CL_TRUE, 0, n, buffer, 0, 0, 0 ))
@@ -428,7 +427,6 @@ class OpenCLMaxPool : public Layer
 
    bool       odd;
 
-   cl_program program;
    cl_kernel  kernel;
 
 
@@ -450,15 +448,11 @@ public:
       if (!ctx)
          TensorThrow("OpenCLMaxPool - no current ocl context");
 
-      ctx->makeKernel(progMaxPool, oclMaxPoolProg,"MaxPool",program,kernel);
+      kernel = ctx->makeKernel(progMaxPool, oclMaxPoolProg,"MaxPool");
    }
 
    ~OpenCLMaxPool()
    {
-      if (kernel)
-         clReleaseKernel(kernel);
-      if (program)
-         clReleaseProgram(program);
    }
 
 
@@ -529,7 +523,6 @@ public:
       if (!ctx)
          TensorThrow("OpenCLMaxPool - no current ocl context");
 
-      int items = destW*destH;
       size_t globalSize[2] = { (size_t)destW, (size_t)destH };
  
       cl_uint work_dim = 2;
@@ -537,10 +530,11 @@ public:
       if (err)
          TensorThrow("OpenCLMaxPool - could not clEnqueueNDRangeKernel");
 
-      const u8 *data = result->cpuRead();
       return result;
    }
 };
+
+
 
 Layer *oclCreateMaxPool(int sizeX, int sizeY,
                         int stepX, int stepY,
@@ -548,6 +542,142 @@ Layer *oclCreateMaxPool(int sizeX, int sizeY,
 {
    return new OpenCLMaxPool(sizeX, sizeY, stepX, stepY, padding);
 }
+
+
+
+
+static const char *oclConv2DProg0 = 
+"__kernel void Conv2D(const __global float* inSrc, const __global float *inWeights, const __global float *inBias, const int srcW, const int srcH, const int inChannels, const int dMin, const int dMax, __global float *outDest, const int outChannels) {\n"
+    "const int x = get_global_id(0);\n"
+    "const int y = get_global_id(1);\n"
+    "const int srcStride = srcW*inChannels;\n"
+    "const int destStride = srcW*outChannels;\n"
+    ""
+    "const __global float *w = inWeights;\n"
+    "__global float *dest = outDest + y*destStride + outChannels*x;\n"
+    "for(int o=0;o<outChannels;o++) {\n"
+       "float sum=inBias[o];\n"
+       "for(int dy=dMin; dy<dMax; dy++) {\n"
+          "int sy = y+dy;\n"
+          "if (sy>=0 && sy<srcH) {\n"
+             "for(int dx=dMin; dx<dMax; dx++) {\n"
+                 "int sx = x+dx;\n"
+                 "if (sx>=0 && sx<srcW) {\n"
+                    "const __global float *src = inSrc + sy*srcStride + inChannels*sx;\n"
+                    "for(int i=0;i<inChannels;i++)\n"
+                        "sum += src[i] * *w++;\n"
+                 "}\n"
+                 "else {  w+=inChannels; }\n"
+             "}\n"
+          "} else {\n"
+             "w += inChannels * (dMax-dMin);\n"
+          "}\n"
+       "}\n"
+;
+
+static const char *oclConv2DProg1 = 
+    "}"
+"}";
+
+
+
+class OpenCLConv2D : public Conv2DBase
+{
+   int padX;
+   int padY;
+
+   cl_kernel kernel;
+
+public:
+   OpenCLConv2D(int inStrideY, int inStrideX,
+          Activation inActivation, Padding inPadding,
+          Tensor *inWeights, Tensor *inBias)
+      : Conv2DBase(inStrideY, inStrideX, inActivation, inPadding,  inWeights, 0, inBias)
+   {
+      int key = progConv2DBase;
+      std::string prog = oclConv2DProg0;
+
+      switch(inActivation)
+      {
+         case actRelu:
+            prog += "dest[o] = sum<0 ? 0.0f : sum;";
+            key |= 0x100;
+            break;
+         case actLeaky:
+            prog += "dest[o] = sum<0 ? sum*0.1f : sum;";
+            key |= 0x200;
+            break;
+
+         default:
+            prog += "dest[o] = sum;";
+            break;
+      }
+
+      prog += oclConv2DProg1;
+
+      OpenCLContext *ctx = (OpenCLContext *)gOclContext;
+      if (!ctx)
+         TensorThrow("OpenCLConv2D - no current ocl context");
+      kernel = ctx->makeKernel((ProgramKey)key, prog.c_str(),"Conv2D");
+   }
+
+   ~OpenCLConv2D()
+   {
+
+   }
+
+
+   void doRun(Tensor *input, Tensor *output)
+   {
+      CShape sin = input->shape;
+
+      const OclData *src = input->oclRead();
+      const OclData *w = weights->oclRead();
+      const OclData *b = bias->oclRead();
+      OclData *dest = output->oclWrite();
+
+      cl_int err = 0;
+      err |= clSetKernelArg(kernel, 0, sizeof(cl_mem), &src);
+      err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &w);
+      err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &b);
+      err |= clSetKernelArg(kernel, 3, sizeof(cl_int), &srcW);
+      err |= clSetKernelArg(kernel, 4, sizeof(cl_int), &srcH);
+      err |= clSetKernelArg(kernel, 5, sizeof(cl_int), &inputs);
+      int dmin = -filterX/2;
+      int dmax = filterX+dmin;
+      err |= clSetKernelArg(kernel, 6, sizeof(cl_int), &dmin);
+      err |= clSetKernelArg(kernel, 7, sizeof(cl_int), &dmax);
+
+      err |= clSetKernelArg(kernel, 8, sizeof(cl_mem), &dest);
+      err |= clSetKernelArg(kernel, 9, sizeof(cl_int), &outputs);
+
+      if (err)
+      {
+         printf("Error setting kernal arg %d\n", err);
+         TensorThrow("OpenCLConv2D - error setting args");
+      }
+
+      OpenCLContext *ctx = (OpenCLContext *)gOclContext;
+      if (!ctx)
+         TensorThrow("OpenCLConv2D - no current ocl context");
+
+      size_t globalSize[2] = { (size_t)destW, (size_t)destH };
+ 
+      cl_uint work_dim = 2;
+      err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, 0/*Work offset*/, globalSize, 0, 0, NULL, NULL);
+      if (err)
+         TensorThrow("OpenCLConv2D - could not clEnqueueNDRangeKernel");
+   }
+};
+
+Layer *oclCreateConv2D(int inStrideY, int inStrideX,
+                       Activation activation, Padding padding,
+                       Tensor *weights, Tensor *bias)
+{
+   return new OpenCLConv2D(inStrideY, inStrideX, activation, padding, weights, bias);
+}
+
+
 
 
 
