@@ -109,7 +109,8 @@ class Test
          }
 
          var boxes = model.outputLayer.getBoxes();
-         trace(boxes);
+         for(box in boxes)
+            println(box.className + ":" + box.prob + "  " + box.w + "x" + box.h);
          println( result );
          println( result.min + "..." + result.max );
          Io.writeFile("result.nx", result);

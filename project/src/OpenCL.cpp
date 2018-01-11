@@ -52,6 +52,10 @@ enum ProgramKey
 {
    progMaxPool,
    progConv2DBase,
+   progConv2D1x1Base,
+   progConv2D_Middle,
+   progConv2D_3x3Edge,
+   progConv2DUnpack,
 };
 
 
@@ -103,6 +107,7 @@ public:
    cl_context                context;
    cl_command_queue          queue0;
 
+   cl_ulong                  localMemory;
 
    typedef std::map<ProgramKey, ProgramCache> ProgramMap;
    ProgramMap programMap;
@@ -131,6 +136,10 @@ public:
       queue0 = clCreateCommandQueue(context, devices[0], 0, &error);
       if (!queue0 || error)
          TensorThrow("Could not create OpenCL command queue");
+
+      localMemory = 0;
+      clGetDeviceInfo(devices[0], CL_DEVICE_LOCAL_MEM_SIZE, sizeof(cl_ulong), &localMemory, 0);
+      //printf("Local memory :==================== %d\n", (int)localMemory );
 
       setCurrent(this);
    }
@@ -167,8 +176,9 @@ public:
          delete this;
    }
 
-   cl_kernel makeKernel(ProgramKey inKey, const char *inProgram, const char *inFunction)
+   cl_kernel makeKernel(ProgramKey inKey, const char *inProgram, const char *inFunction, const char *buildOptions)
    {
+      //printf("makeKernel %s\n", buildOptions);
       ProgramCache &programCache = programMap[inKey];
 
       if (!programCache.kernel)
@@ -181,7 +191,7 @@ public:
             TensorThrow("clCreateProgramWithSource - error");
          }
 
-         err = clBuildProgram(prog, 1, &devices[0], 0, 0, 0);
+         err = clBuildProgram(prog, 1, &devices[0], buildOptions, 0, 0);
          if (err)
          {
             printf("Error clBuildProgram : %d\n", err);
@@ -448,7 +458,7 @@ public:
       if (!ctx)
          TensorThrow("OpenCLMaxPool - no current ocl context");
 
-      kernel = ctx->makeKernel(progMaxPool, oclMaxPoolProg,"MaxPool");
+      kernel = ctx->makeKernel(progMaxPool, oclMaxPoolProg,"MaxPool", 0);
    }
 
    ~OpenCLMaxPool()
@@ -546,15 +556,20 @@ Layer *oclCreateMaxPool(int sizeX, int sizeY,
 
 
 
-static const char *oclConv2DProg0 = 
-"__kernel void Conv2D(const __global float* inSrc, const __global float *inWeights, const __global float *inBias, const int srcW, const int srcH, const int inChannels, const int dMin, const int dMax, __global float *outDest, const int outChannels) {\n"
+static const char *oclConv2DProg = 
+"__kernel void Conv2D(const __global float* src, const __global float *weights, const __global float *inBias, const int srcW, const int srcH, const int inChannels, __global float *dest, const int outChannels, const int dMin, const int dMax ) {\n"
+    "#ifdef EDGES\n"
+    "const int id = get_global_id(0);\n"
+    "const int x = id<srcW*2 ? id%srcW : id<srcW*2+srcH-2 ? 0 : srcW-1;\n"
+    "const int y = id<srcW ? 0 : id<srcW*2 ? srcH-1 : ((id-srcW*2)%(srcH-2)) +1;\n"
+    "#else\n"
     "const int x = get_global_id(0);\n"
     "const int y = get_global_id(1);\n"
+    "#endif\n"
     "const int srcStride = srcW*inChannels;\n"
-    "const int destStride = srcW*outChannels;\n"
     ""
-    "const __global float *w = inWeights;\n"
-    "__global float *dest = outDest + y*destStride + outChannels*x;\n"
+    "int weightOff = 0;\n"
+    "int destOff = (y*srcW+x) * outChannels;\n"
     "for(int o=0;o<outChannels;o++) {\n"
        "float sum=inBias[o];\n"
        "for(int dy=dMin; dy<dMax; dy++) {\n"
@@ -563,30 +578,115 @@ static const char *oclConv2DProg0 =
              "for(int dx=dMin; dx<dMax; dx++) {\n"
                  "int sx = x+dx;\n"
                  "if (sx>=0 && sx<srcW) {\n"
-                    "const __global float *src = inSrc + sy*srcStride + inChannels*sx;\n"
+                    "int srcOff = sy*srcStride + inChannels*sx;\n"
                     "for(int i=0;i<inChannels;i++)\n"
-                        "sum += src[i] * *w++;\n"
+                        "sum += src[srcOff+i] * weights[weightOff+i];\n"
                  "}\n"
-                 "else {  w+=inChannels; }\n"
+                 "weightOff+=inChannels;\n"
              "}\n"
           "} else {\n"
-             "w += inChannels * (dMax-dMin);\n"
+             "weightOff += inChannels * (dMax-dMin);\n"
           "}\n"
        "}\n"
-;
-
-static const char *oclConv2DProg1 = 
+    "dest[destOff+o] = ACTIVATION(sum);"
     "}"
 "}";
 
 
 
+static const char *oclConv2DUnpackProg = 
+"__kernel void Conv2D(const __global float* src, const __global float *weights, const __global float *inBias, const int srcW, const int srcH, const int inChannels, __global float *dest, const int outChannels, const int dMin, const int dMax ) {\n"
+    "const int x = get_global_id(0);\n"
+    "const int y = get_global_id(1);\n"
+
+    "float unpackBuf[BUFFER];"
+    "int   pos=0;"
+    "const int srcStride = srcW*inChannels;\n"
+
+    "for(int dy=dMin; dy<dMax; dy++) {\n"
+       "int sy = y+dy;\n"
+       "if (sy>=0 && sy<srcH) {\n"
+          "for(int dx=dMin; dx<dMax; dx++) {\n"
+              "int sx = x+dx;\n"
+              "if (sx>=0 && sx<srcW) {\n"
+                 "int srcOff = sy*srcStride + inChannels*sx;\n"
+                 "for(int i=0;i<inChannels;i++)\n"
+                     "unpackBuf[pos+i] = src[srcOff+i];\n"
+               "}\n"
+               "pos+=inChannels;"
+          "}\n"
+       "} else {\n"
+          "const int rowLen = (dMax-dMin)*inChannels;\n"
+          "for(int i=0; i<rowLen; i++)\n"
+             "unpackBuf[pos+i] = 0.0f;\n"
+          "pos += rowLen;\n"
+       "}\n"
+    "}\n"
+
+    "int destOff = (y*srcW+x) * outChannels;\n"
+    "int woff = 0;\n"
+    "for(int o=0;o<outChannels;o++) {\n"
+       "float sum=inBias[o];\n"
+       "for(int i=0;i<BUFFER;i++)\n"
+       "  sum += unpackBuf[i] * weights[woff + i];\n"
+       "woff += BUFFER;\n"
+       "dest[destOff+o] = ACTIVATION(sum);\n"
+    "}"
+
+
+"}";
+
+static const char *oclConv2DProgMiddle = 
+"__kernel void Conv2D(const __global float* src, const __global float *weights, const __global float *inBias, const int srcW, const int srcH, const int inChannels, __global float *dest, const int outChannels, const int dMin, const int dMax ) {\n"
+    "const int x = get_global_id(0)-dMin;\n"
+    "const int y = get_global_id(1)-dMin;\n"
+    "const int srcStride = srcW*inChannels;\n"
+    "const int row = inChannels*(dMax-dMin);\n"
+    ""
+    "int weightOff = 0;\n"
+    "int destOff = (y*srcW+x) * outChannels;\n"
+    "const int off0 = (y+dMin)*srcStride + (x+dMin)*inChannels;\n"
+    "for(int o=0;o<outChannels;o++) {\n"
+       "float sum=inBias[o];\n"
+       "int srcOff = off0;\n"
+       "for(int dy=dMin; dy<dMax; dy++) {\n"
+          "for(int i=0;i<row;i++)\n"
+               "sum += src[srcOff+i] * weights[weightOff+i];\n"
+          "srcOff += srcStride;\n"
+          "weightOff+=row;\n"
+       "}\n"
+    "dest[destOff+o] = ACTIVATION(sum);"
+    "}"
+"}";
+
+
+static const char *oclConv2D1x1 = 
+"__kernel void Conv2D(const __global float* inSrc, const __global float *inWeights, const __global float *inBias, const int srcW, const int srcH, const int inChannels, __global float *dest, const int outChannels) {\n"
+    "const int x = get_global_id(0);\n"
+    "const int y = get_global_id(1);\n"
+    "const int srcStride = srcW*inChannels;\n"
+    "const int destStride = srcW*outChannels;\n"
+    ""
+    "int woff = 0;\n"
+    "int destOff = y*destStride + outChannels*x;\n"
+    "int srcOff = y*srcStride + inChannels*x;\n"
+    "for(int o=0;o<outChannels;o++) {\n"
+       "float sum=inBias[o];\n"
+       "for(int i=0;i<inChannels;i++)\n"
+           "sum += inSrc[srcOff+i] * inWeights[woff+i];\n"
+       "woff+=inChannels;\n"
+    "dest[destOff+o] = ACTIVATION(sum);\n"
+    "}"
+"}";
+
 class OpenCLConv2D : public Conv2DBase
 {
    int padX;
    int padY;
+   bool useDmaxDMin;
 
    cl_kernel kernel;
+   cl_kernel kernelEdge;
 
 public:
    OpenCLConv2D(int inStrideY, int inStrideX,
@@ -594,31 +694,9 @@ public:
           Tensor *inWeights, Tensor *inBias)
       : Conv2DBase(inStrideY, inStrideX, inActivation, inPadding,  inWeights, 0, inBias)
    {
-      int key = progConv2DBase;
-      std::string prog = oclConv2DProg0;
-
-      switch(inActivation)
-      {
-         case actRelu:
-            prog += "dest[o] = sum<0 ? 0.0f : sum;";
-            key |= 0x100;
-            break;
-         case actLeaky:
-            prog += "dest[o] = sum<0 ? sum*0.1f : sum;";
-            key |= 0x200;
-            break;
-
-         default:
-            prog += "dest[o] = sum;";
-            break;
-      }
-
-      prog += oclConv2DProg1;
-
-      OpenCLContext *ctx = (OpenCLContext *)gOclContext;
-      if (!ctx)
-         TensorThrow("OpenCLConv2D - no current ocl context");
-      kernel = ctx->makeKernel((ProgramKey)key, prog.c_str(),"Conv2D");
+      kernel = 0;
+      kernelEdge = 0;
+      useDmaxDMin = true;
    }
 
    ~OpenCLConv2D()
@@ -626,9 +704,68 @@ public:
 
    }
 
+   void initKernel()
+   {
+      int key = 0;
+      std::string buildOptions;
+
+      switch(activation)
+      {
+         case actRelu:
+            buildOptions += "-D ACTIVATION(x)=(x<0?0.0f:x)";
+            key |= 0x100;
+            break;
+         case actLeaky:
+            buildOptions += "-D ACTIVATION(x)=(x<0?0.1f*x:x)";
+            key |= 0x200;
+            break;
+
+         default:
+            buildOptions += "-D ACTIVATION(x)=(x)";
+            break;
+      }
+
+      OpenCLContext *ctx = (OpenCLContext *)gOclContext;
+      if (!ctx)
+         TensorThrow("OpenCLConv2D - no current ocl context");
+
+
+      useDmaxDMin = true;
+      // Does not seem to work on intel CPU
+      if ( !is1x1 && (filterX*filterY)*inputs*4 < ctx->localMemory - 100 )
+      {
+         int buffer = (filterX*filterY) * inputs;
+         key |= progConv2DUnpack | (buffer * 0x1000);
+
+         char arg[1000];
+         sprintf(arg," -D BUFFER=%d",buffer);
+         buildOptions += arg;
+
+         kernel = ctx->makeKernel((ProgramKey)key, oclConv2DUnpackProg,"Conv2D", buildOptions.c_str());
+      }
+      // Slow in Nvidia
+      else if ( false && filterX==3 && filterY==3 )
+      {
+         kernel = ctx->makeKernel((ProgramKey)(key|progConv2D_Middle), oclConv2DProgMiddle,"Conv2D", buildOptions.c_str());
+
+         kernelEdge = ctx->makeKernel((ProgramKey)(key|progConv2D_3x3Edge), oclConv2DProg,"Conv2D", (buildOptions + " -D EDGES=1").c_str());
+      }
+      else
+      {
+         key |= is1x1? progConv2D1x1Base : progConv2DBase;
+         const char *prog = is1x1 ? oclConv2D1x1 : oclConv2DProg;
+
+         useDmaxDMin = !is1x1;
+         kernel = ctx->makeKernel((ProgramKey)key, prog,"Conv2D", buildOptions.c_str());
+      }
+   }
+
 
    void doRun(Tensor *input, Tensor *output)
    {
+      if (!kernel)
+         initKernel();
+
       CShape sin = input->shape;
 
       const OclData *src = input->oclRead();
@@ -636,37 +773,56 @@ public:
       const OclData *b = bias->oclRead();
       OclData *dest = output->oclWrite();
 
-      cl_int err = 0;
-      err |= clSetKernelArg(kernel, 0, sizeof(cl_mem), &src);
-      err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &w);
-      err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &b);
-      err |= clSetKernelArg(kernel, 3, sizeof(cl_int), &srcW);
-      err |= clSetKernelArg(kernel, 4, sizeof(cl_int), &srcH);
-      err |= clSetKernelArg(kernel, 5, sizeof(cl_int), &inputs);
-      int dmin = -filterX/2;
-      int dmax = filterX+dmin;
-      err |= clSetKernelArg(kernel, 6, sizeof(cl_int), &dmin);
-      err |= clSetKernelArg(kernel, 7, sizeof(cl_int), &dmax);
-
-      err |= clSetKernelArg(kernel, 8, sizeof(cl_mem), &dest);
-      err |= clSetKernelArg(kernel, 9, sizeof(cl_int), &outputs);
-
-      if (err)
-      {
-         printf("Error setting kernal arg %d\n", err);
-         TensorThrow("OpenCLConv2D - error setting args");
-      }
-
       OpenCLContext *ctx = (OpenCLContext *)gOclContext;
       if (!ctx)
          TensorThrow("OpenCLConv2D - no current ocl context");
 
-      size_t globalSize[2] = { (size_t)destW, (size_t)destH };
- 
-      cl_uint work_dim = 2;
-      err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, 0/*Work offset*/, globalSize, 0, 0, NULL, NULL);
-      if (err)
-         TensorThrow("OpenCLConv2D - could not clEnqueueNDRangeKernel");
+      int kernels = kernelEdge ? 2 : 1;
+      for(int k=0; k< kernels; k++)
+      {
+         cl_kernel kern = k==0 ? kernel : kernelEdge;
+
+         cl_int err = 0;
+         err |= clSetKernelArg(kern, 0, sizeof(cl_mem), &src);
+         err |= clSetKernelArg(kern, 1, sizeof(cl_mem), &w);
+         err |= clSetKernelArg(kern, 2, sizeof(cl_mem), &b);
+         err |= clSetKernelArg(kern, 3, sizeof(cl_int), &srcW);
+         err |= clSetKernelArg(kern, 4, sizeof(cl_int), &srcH);
+         err |= clSetKernelArg(kern, 5, sizeof(cl_int), &inputs);
+         err |= clSetKernelArg(kern, 6, sizeof(cl_mem), &dest);
+         err |= clSetKernelArg(kern, 7, sizeof(cl_int), &outputs);
+
+         if (useDmaxDMin)
+         {
+            int dmin = -filterX/2;
+            int dmax = filterX+dmin;
+            err |= clSetKernelArg(kern, 8, sizeof(cl_int), &dmin);
+            err |= clSetKernelArg(kern, 9, sizeof(cl_int), &dmax);
+         }
+
+         if (err)
+         {
+            printf("Error setting kernal arg %d\n", err);
+            TensorThrow("OpenCLConv2D - error setting args");
+         }
+
+         if (k==0)
+         {
+            int offset = kernelEdge ? 2 : 0;
+            size_t globalSize[2] = { (size_t)(destW-offset), (size_t)(destH-offset) };
+            cl_uint work_dim = 2;
+            err = clEnqueueNDRangeKernel(ctx->queue0, kern, work_dim, 0/*Work offset*/, globalSize, 0, 0, NULL, NULL);
+         }
+         else
+         {
+            size_t globalSize[1] = { (size_t)(destW*2+destH*2-4) };
+            cl_uint work_dim = 1;
+            err = clEnqueueNDRangeKernel(ctx->queue0, kern, work_dim, 0/*Work offset*/, globalSize, 0, 0, NULL, NULL);
+         }
+
+         if (err)
+            TensorThrow("OpenCLConv2D - could not clEnqueueNDRangeKernel");
+      }
    }
 };
 
