@@ -756,7 +756,7 @@ public:
          groupCount = (destW*destH + pixelsPerGroup-1) / pixelsPerGroup;
          */
 
-         int groupCount = ctx->computeUnits;
+         int groupCount = ctx->computeUnits * 8;
          //printf("ideal groupCount %d\n",groupCount);
          //printf("pixelsPerGroup = %d\n", destW*destH/groupCount );
 

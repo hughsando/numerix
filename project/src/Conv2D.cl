@@ -3,8 +3,6 @@
 #define PIX 32
 #define OUT 32
 
-#define CHANEL_GROUPS  (inputs/SRC)
-
 
 __kernel void Conv2D(const __global float* src, const __global float *weights, const __global float *bias, const int srcW, const int srcH, const int inputs, __global float *dest, const int outputs)
 {
@@ -17,21 +15,19 @@ __kernel void Conv2D(const __global float* src, const __global float *weights, c
    const int pixId = get_local_id(0) / PIX;
    const int chanId = get_local_id(0) % PIX;
 
-   int srcStride = srcW * inputs;
-
-   for(int pixBase=pix0; pixBase<maxPix; pixBase+=PIX)
+   for( ; pix0<maxPix; pix0+=PIX)
    {
-      // Calculate src offset and range for pixels in this thread
-      int pix = pixBase + pixId;
-      int py = pix / srcH; // todo - fast version?
-      int px = pix - py*srcH;
+      // Calculate src offset and range for pixel in this thread
+      int pix = pix0 + pixId;
+      int py = pix / srcW; // todo - fast version?
+      int px = pix - py*srcW;
 
       for(int oBase=0;oBase<outputs;oBase+=OUT)
       {
-
          __local float outputSum[PIX][OUT];
          // Initialize outputSum
-         outputSum[pixId][chanId] = bias[chanId];
+         outputSum[pixId][chanId] = bias[oBase+chanId];
+         barrier(CLK_LOCAL_MEM_FENCE);
 
          int weightBase = oBase * inputs * 9;
          for(int sy=0; sy<3; sy++)
@@ -41,24 +37,23 @@ __kernel void Conv2D(const __global float* src, const __global float *weights, c
             {
                int valid = (sx>0|px>0) &
                            (sy>0|py>0) &
-                           (sx<srcW|px<(srcW-1)) &
-                           (sy<srcH|py<(srcH-1)) &
+                           (sx<2|px<(srcW-1)) &
+                           (sy<2|py<(srcH-1)) &
                            (pix<maxPix);
-               for(int ch = 0; ch < CHANEL_GROUPS; ch++)
+               for(int ch0 = 0; ch0 < inputs; ch0+=SRC)
                {
                   __local float srcBuf[PIX][SRC];
                   __local float wBuf[OUT][SRC];
 
                   // Fill Src ...
-                  srcBuf[pixId][chanId] = valid ? src[ srcBase + chanId ] : 0.0f;
+                  srcBuf[pixId][chanId] = valid ? src[ srcBase + ch0 + chanId ] : 0.0f;
 
                   // Fill weights ...
                   //  w = out0:  s0 s1 s2 s3 .... s31
                   //      out2:  s0 s1 s2 s3 .... s31
                   //        ...
                   //      outN:  s0 s1 s2 s3 .... s31
-                  wBuf[pixId][chanId] = valid ? weights[ weightBase + pixId*inputs*9 + chanId ] : 0.0f;
-                  //wBuf[pixId][chanId] = pixId* chanId;
+                  wBuf[pixId][chanId] = weights[ weightBase + pixId*inputs*9 + chanId ];
 
                   barrier(CLK_LOCAL_MEM_FENCE);
 
@@ -78,7 +73,9 @@ __kernel void Conv2D(const __global float* src, const __global float *weights, c
          }
 
          if (pix < maxPix)
-            dest[(py*srcW + px)*outputs + oBase+chanId] = outputSum[pixId][chanId];
+            dest[(py*srcW + px)*outputs + oBase+chanId] = ACTIVATION( outputSum[pixId][chanId] );
+
+         barrier(CLK_LOCAL_MEM_FENCE);
       }
    }
 }
