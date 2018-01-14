@@ -40,6 +40,7 @@
      <file name="src/Cuda.cpp" if="NX_CUDA"  />
 
      <file name="src/OpenCL.cpp" if="NX_OPENCL"  />
+     <file name="src/Conv2D.cl" embedName="openclConv2D_cl" if="NX_OPENCL"  />
 
      <section if="linux||rpi" >
         <compilerflag value="-Isrc/movidius" />
