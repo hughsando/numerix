@@ -28,12 +28,12 @@ __kernel void Conv2D(const __global float* src, const __global float *weights, c
 
       for(int oBase=0;oBase<outputs;oBase+=OUT)
       {
-         int weightBase = oBase * inputs * outputs;
 
          __local float outputSum[PIX][OUT];
          // Initialize outputSum
          outputSum[pixId][chanId] = bias[chanId];
 
+         int weightBase = oBase * inputs * 9;
          for(int sy=0; sy<3; sy++)
          {
             int srcBase = ((py+(sy-1))*srcW + px - 1) *inputs;
@@ -43,21 +43,22 @@ __kernel void Conv2D(const __global float* src, const __global float *weights, c
                            (sy>0|py>0) &
                            (sx<srcW|px<(srcW-1)) &
                            (sy<srcH|py<(srcH-1)) &
-                           (pixId<maxPix);
+                           (pix<maxPix);
                for(int ch = 0; ch < CHANEL_GROUPS; ch++)
                {
                   __local float srcBuf[PIX][SRC];
                   __local float wBuf[OUT][SRC];
 
                   // Fill Src ...
-                  srcBuf[pixId][chanId] = valid ? 0.0f : src[ srcBase + chanId ];
+                  srcBuf[pixId][chanId] = valid ? src[ srcBase + chanId ] : 0.0f;
 
                   // Fill weights ...
                   //  w = out0:  s0 s1 s2 s3 .... s31
                   //      out2:  s0 s1 s2 s3 .... s31
                   //        ...
                   //      outN:  s0 s1 s2 s3 .... s31
-                  wBuf[pixId][chanId] = weights[ weightBase + pixId*inputs + chanId ];
+                  wBuf[pixId][chanId] = valid ? weights[ weightBase + pixId*inputs*9 + chanId ] : 0.0f;
+                  //wBuf[pixId][chanId] = pixId* chanId;
 
                   barrier(CLK_LOCAL_MEM_FENCE);
 
@@ -65,17 +66,18 @@ __kernel void Conv2D(const __global float* src, const __global float *weights, c
 
                   // chanId == outId
                   float sum = outputSum[pixId][chanId];
-                  for(int s=0;s<SRC;s++)
+                  for(int s =0; s < SRC; s ++)
                      sum += srcBuf[pixId][s] * wBuf[chanId][s];
 
                   outputSum[pixId][chanId] = sum;
+
                   barrier(CLK_LOCAL_MEM_FENCE);
                }
                srcBase += inputs;
             }
          }
 
-         if (pixId<maxPix)
+         if (pix < maxPix)
             dest[(py*srcW + px)*outputs + oBase+chanId] = outputSum[pixId][chanId];
       }
    }

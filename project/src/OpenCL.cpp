@@ -686,7 +686,7 @@ public:
          TensorThrow("OpenCLConv2D - no current ocl context");
 
 
-      if ( false && filterX==3 && filterY==3 && !(inputs&31) && !(outputs&31) )
+      if ( filterX==3 && filterY==3 && !(inputs&31) && !(outputs&31) )
       {
          useDmaxDMin = false;
          use32x32 = true;
@@ -757,8 +757,8 @@ public:
          */
 
          int groupCount = ctx->computeUnits;
-         printf("ideal groupCount %d\n",groupCount);
-         printf("pixelsPerGroup = %d\n", destW*destH/groupCount );
+         //printf("ideal groupCount %d\n",groupCount);
+         //printf("pixelsPerGroup = %d\n", destW*destH/groupCount );
 
 
          size_t globalSize[1] = { (size_t)(32*32*groupCount) };
@@ -777,6 +777,12 @@ public:
 
       if (err)
          TensorThrow("OpenCLConv2D - could not clEnqueueNDRangeKernel");
+      err = clFinish(ctx->queue0);
+      if (err)
+      {
+         printf("Error in clFinish = %d\n", err);
+         TensorThrow("OpenCLConv2D - Error waiting clFinish");
+      }
    }
 };
 
