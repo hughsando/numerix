@@ -68,6 +68,8 @@ __kernel void Conv2D(const __global float* src, const __global float *weights, c
 #ifdef CONV2D_3x3
 
 
+#define OVEC 32
+
 #ifdef INTEL
 inline float dotRow(const __global float *src, const __global float *w, int n)
 {
@@ -93,28 +95,32 @@ inline float dotRow(const __global float *src, const __global float *w, int n)
 __kernel void Conv2D(const __global float* src, const __global float *weights, const __global float *bias, const int width, const int height, __global float *dest)
 {
    #ifdef INTEL
-   const int row = get_global_id(0);
+   const int tid = get_local_id(0);
+   const int row = get_global_id(1);
 
-   __global float *s0 = row>0 ? src + (row-1)*INPUTS*width : 0;
-   __global float *s1 =  src + (row)*INPUTS*width;
-   __global float *s2 = row<height-1 ? src + (row+1)*INPUTS*width : 0;
+   const __global float *s0 = row>0 ? src + (row-1)*INPUTS*width : 0;
+   const __global float *s1 =  src + (row)*INPUTS*width;
+   const __global float *s2 = row<height-1 ? src + (row+1)*INPUTS*width: 0;
 
    __global float *out = dest + row*OUTPUTS*width;
 
 
+
    // First pixel...
-   const __global float *w0 = weights + INPUTS;
-   for(int o=0;o<OUTPUTS;o++)
+   const __global float *w0 = weights + INPUTS + tid*INPUTS*9;
+
+   for(int o=0;o<OUTPUTS;o+=OVEC)
    {
-      float sum = bias[o];
+      float sum = bias[o+tid];
       if (s0)
          sum += dotRow( s0, w0, INPUTS*2 );
       sum += dotRow( s1, w0 + INPUTS*3, INPUTS*2 );
       if (s2)
          sum += dotRow( s2, w0 + INPUTS*6, INPUTS*2 );
-      w0 += INPUTS*9;
 
-      out[o] = ACTIVATION(sum);
+      w0 += INPUTS*9*OVEC;
+
+      out[o+tid] = ACTIVATION(sum);
    }
    out += OUTPUTS;
 
@@ -123,16 +129,16 @@ __kernel void Conv2D(const __global float* src, const __global float *weights, c
    {
       for(int x=1;x<width-1;x++)
       {
-         w0 = weights;
-         for(int o=0;o<OUTPUTS;o++)
+         w0 = weights + tid*INPUTS*9;
+         for(int o=0;o<OUTPUTS;o+=OVEC)
          {
-            float sum = bias[o] +
-               dotRow( s0, w0, INPUTS*3 ) +
-               dotRow( s1, w0+INPUTS*3 , INPUTS*3 ) +
+            float sum = bias[o+tid] +
+               dotRow( s0, w0,  INPUTS*3 ) +
+               dotRow( s1, w0 + INPUTS*3, INPUTS*3 ) +
                dotRow( s2, w0 + INPUTS*6, INPUTS*3 );
 
-            w0 += INPUTS*9;
-            out[o] = ACTIVATION(sum);
+            w0 += INPUTS*9*OVEC;
+            out[o+tid] = ACTIVATION(sum);
          }
 
          out += OUTPUTS;
@@ -145,18 +151,19 @@ __kernel void Conv2D(const __global float* src, const __global float *weights, c
    {
       for(int x=1;x<width-1;x++)
       {
-         w0 = weights;
-         for(int o=0;o<OUTPUTS;o++)
+         w0 = weights + tid*INPUTS*9;
+         for(int o=0;o<OUTPUTS;o+=OVEC)
          {
-            float sum = bias[o];
+            float sum = bias[o+tid];
             if (s0)
                sum += dotRow( s0, w0, INPUTS*3 );
             sum += dotRow( s1, w0+INPUTS*3 , INPUTS*3 );
             if (s2)
                sum += dotRow( s2, w0 + INPUTS*6, INPUTS*3 );
-            w0 += INPUTS*9;
 
-            out[o] = ACTIVATION(sum);
+            w0 += INPUTS*9*OVEC;
+
+            out[o+tid] = ACTIVATION(sum);
          }
 
          out += OUTPUTS;
@@ -167,18 +174,18 @@ __kernel void Conv2D(const __global float* src, const __global float *weights, c
    }
 
    // last pixel
-   w0 = weights;
-   for(int o=0;o<OUTPUTS;o++)
+   w0 = weights + tid*INPUTS*9;
+   for(int o=0;o<OUTPUTS;o+=OVEC)
    {
-      float sum = bias[o];
+      float sum = bias[o+tid];
       if (s0)
          sum += dotRow( s0, w0, INPUTS*2 );
       sum += dotRow( s1, w0 + INPUTS*3, INPUTS*2 );
       if (s2)
          sum += dotRow( s2, w0 + INPUTS*6, INPUTS*2 );
-      w0 += INPUTS*9;
+      w0 += INPUTS*9*OVEC;
 
-      out[o] = ACTIVATION(sum);
+      out[o+tid] = ACTIVATION(sum);
    }
 
 

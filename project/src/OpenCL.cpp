@@ -202,6 +202,7 @@ public:
       inOps += inMethod;
       if (isIntel)
          inOps += " -DINTEL";
+      inOps += " -Werror";
       const char *buildOptions = inOps.c_str();
 
       unsigned int hash = 0;
@@ -699,19 +700,21 @@ public:
 
       if (useTiled3x3)
       {
-         cl_uint work_dim = 1;
          size_t *work_offset = 0;
 
          if (ctx->isIntel)
          {
             int groupCount = srcH;
-            size_t globalSize[1] = { (size_t)groupCount };
-            size_t localSize[1] = {  1 };
+            cl_uint work_dim = 2;
+            int ovec = 32;
+            size_t globalSize[2] = { (size_t)ovec,  (size_t)groupCount  };
+            size_t localSize[2] = {  (size_t)ovec, 1 };
             err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, work_offset, globalSize, localSize, 0, NULL, NULL);
 
          }
          else
          {
+            cl_uint work_dim = 1;
             int groupCount = ctx->computeUnits;
             size_t globalSize[1] = { (size_t)(32*32*groupCount) };
             size_t localSize[1] = { (size_t)(32*32) };
