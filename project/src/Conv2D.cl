@@ -90,6 +90,27 @@ inline float dotRow(const __global float *src, const __global float *w, int n)
    }
    return sum;
 }
+
+inline float dotRowLocal(const __local float *src, const __global float *w, int n)
+{
+   float sum = 0;
+   int eights = n>>3;
+   for(int i=0;i<eights;i++)
+   {
+      sum+= src[0]*w[0] +
+            src[1]*w[1] +
+            src[2]*w[2] +
+            src[3]*w[3] +
+            src[4]*w[4] +
+            src[5]*w[5] +
+            src[6]*w[6] +
+            src[7]*w[7];
+      src+=8;
+      w+=8;
+   }
+   return sum;
+}
+
 #endif
 
 __kernel void Conv2D(const __global float* src, const __global float *weights, const __global float *bias, const int width, const int height, __global float *dest)
@@ -130,6 +151,29 @@ __kernel void Conv2D(const __global float* src, const __global float *weights, c
       for(int x=1;x<width-1;x++)
       {
          w0 = weights + tid*INPUTS*9;
+
+         #if (INPUTS<=256)
+
+         __local float srcBuf[INPUTS*9];
+         for(int i=0;i<INPUTS*3;i+=OVEC)
+         {
+            srcBuf[i+tid] = s0[i+tid];
+            srcBuf[i+tid+INPUTS*3] = s1[i+tid];
+            srcBuf[i+tid+INPUTS*6] = s2[i+tid];
+         }
+         barrier(CLK_LOCAL_MEM_FENCE);
+
+         for(int o=0;o<OUTPUTS;o+=OVEC)
+         {
+            float sum = bias[o+tid] + dotRowLocal( srcBuf, w0,  INPUTS*9 );
+            w0 += INPUTS*9*OVEC;
+            out[o+tid] = ACTIVATION(sum);
+         }
+         barrier(CLK_LOCAL_MEM_FENCE);
+
+
+         #else
+
          for(int o=0;o<OUTPUTS;o+=OVEC)
          {
             float sum = bias[o+tid] +
@@ -140,6 +184,7 @@ __kernel void Conv2D(const __global float* src, const __global float *weights, c
             w0 += INPUTS*9*OVEC;
             out[o+tid] = ACTIVATION(sum);
          }
+         #endif
 
          out += OUTPUTS;
          s0+=INPUTS;
