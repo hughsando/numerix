@@ -6,6 +6,7 @@
 #include <OCL.h>
 #include <DynamicLoad.h>
 #include <map>
+#include <ctype.h>
 
 extern const char *openclConv2D_cl;
 
@@ -107,11 +108,12 @@ public:
    std::vector<cl_device_id> devices;
    cl_context                context;
    cl_command_queue          queue0;
+   bool                      isIntel;
 
    cl_ulong                  localMemory;
    cl_ulong                  computeUnits;
 
-   typedef std::map<ProgramKey, ProgramCache> ProgramMap;
+   typedef std::map<unsigned int, ProgramCache> ProgramMap;
    ProgramMap programMap;
 
    OpenCLContext(void *inPlatform, OclDeviceList &inDevices)
@@ -133,6 +135,14 @@ public:
       context = clCreateContext( contextProperties, devices.size(), &devices[0], SOnCLInfo, this, &error );
       if (!context || error)
          TensorThrow("Could not create OpenCL Context");
+
+
+      char buf[1024];
+      clGetPlatformInfo(platform, CL_PLATFORM_VENDOR, 1024, buf, 0);
+      for(int i=0;i<5;i++)
+         buf[i] = tolower(buf[i]);
+      buf[5]='\0';
+      isIntel = std::string(buf)=="intel";
 
 
       queue0 = clCreateCommandQueue(context, devices[0], 0, &error);
@@ -186,10 +196,20 @@ public:
          delete this;
    }
 
-   cl_kernel makeKernel(ProgramKey inKey, const char *inProgram, const char *inFunction, const char *buildOptions)
+   cl_kernel makeKernel(const char *inMethod, const char *inProgram, const char *inFunction, std::string inOps = "")
    {
-      //printf("makeKernel %s\n", buildOptions);
-      ProgramCache &programCache = programMap[inKey];
+      inOps += " -D ";
+      inOps += inMethod;
+      if (isIntel)
+         inOps += " -DINTEL";
+      const char *buildOptions = inOps.c_str();
+
+      unsigned int hash = 0;
+      for(int i=0;buildOptions[i];i++)
+         hash = hash*223 + ((const unsigned char *)buildOptions)[i];
+
+      printf("makeKernel %s\n", buildOptions);
+      ProgramCache &programCache = programMap[hash];
 
       if (!programCache.kernel)
       {
@@ -478,7 +498,7 @@ public:
       if (!ctx)
          TensorThrow("OpenCLMaxPool - no current ocl context");
 
-      kernel = ctx->makeKernel(progMaxPool, oclMaxPoolProg,"MaxPool", 0);
+      kernel = ctx->makeKernel("MAX_POOL", oclMaxPoolProg,"MaxPool");
    }
 
    ~OpenCLMaxPool()
@@ -576,73 +596,14 @@ Layer *oclCreateMaxPool(int sizeX, int sizeY,
 
 
 
-static const char *oclConv2DProg = 
-"__kernel void Conv2D(const __global float* src, const __global float *weights, const __global float *inBias, const int srcW, const int srcH, const int inChannels, __global float *dest, const int outChannels, const int dMin, const int dMax ) {\n"
-    "#ifdef EDGES\n"
-    "const int id = get_global_id(0);\n"
-    "const int x = id<srcW*2 ? id%srcW : id<srcW*2+srcH-2 ? 0 : srcW-1;\n"
-    "const int y = id<srcW ? 0 : id<srcW*2 ? srcH-1 : ((id-srcW*2)%(srcH-2)) +1;\n"
-    "#else\n"
-    "const int x = get_global_id(0);\n"
-    "const int y = get_global_id(1);\n"
-    "#endif\n"
-    "const int srcStride = srcW*inChannels;\n"
-    ""
-    "if (x<srcW && y<srcH) {\n"
-    "int weightOff = 0;\n"
-    "int destOff = (y*srcW+x) * outChannels;\n"
-    "for(int o=0;o<outChannels;o++) {\n"
-       "float sum=inBias[o];\n"
-       "for(int dy=dMin; dy<dMax; dy++) {\n"
-          "int sy = y+dy;\n"
-          "if (sy>=0 && sy<srcH) {\n"
-             "for(int dx=dMin; dx<dMax; dx++) {\n"
-                 "int sx = x+dx;\n"
-                 "if (sx>=0 && sx<srcW) {\n"
-                    "int srcOff = sy*srcStride + inChannels*sx;\n"
-                    "for(int i=0;i<inChannels;i++)\n"
-                        "sum += src[srcOff+i] * weights[weightOff+i];\n"
-                 "}\n"
-                 "weightOff+=inChannels;\n"
-             "}\n"
-          "} else {\n"
-             "weightOff += inChannels * (dMax-dMin);\n"
-          "}\n"
-       "}\n"
-    "dest[destOff+o] = ACTIVATION(sum);\n"
-    "}\n"
-   "}\n"
-"}";
-
-
-
-
-static const char *oclConv2D1x1 = 
-"__kernel void Conv2D(const __global float* inSrc, const __global float *inWeights, const __global float *inBias, const int srcW, const int srcH, const int inChannels, __global float *dest, const int outChannels) {\n"
-    "const int x = get_global_id(0);\n"
-    "const int y = get_global_id(1);\n"
-    "const int srcStride = srcW*inChannels;\n"
-    "const int destStride = srcW*outChannels;\n"
-    ""
-    "int woff = 0;\n"
-    "int destOff = y*destStride + outChannels*x;\n"
-    "int srcOff = y*srcStride + inChannels*x;\n"
-    "for(int o=0;o<outChannels;o++) {\n"
-       "float sum=inBias[o];\n"
-       "for(int i=0;i<inChannels;i++)\n"
-           "sum += inSrc[srcOff+i] * inWeights[woff+i];\n"
-       "woff+=inChannels;\n"
-    "dest[destOff+o] = ACTIVATION(sum);\n"
-    "}"
-"}";
 
 class OpenCLConv2D : public Conv2DBase
 {
    int padX;
    int padY;
-   bool useDmaxDMin;
-   bool use32x32;
+   bool useTiled3x3;
    cl_kernel kernel;
+   Shape kernelShape;
 
 public:
    OpenCLConv2D(int inStrideY, int inStrideX,
@@ -651,8 +612,8 @@ public:
       : Conv2DBase(inStrideY, inStrideX, inActivation, inPadding,  inWeights, 0, inBias)
    {
       kernel = 0;
-      useDmaxDMin = true;
-      use32x32 = false;
+      useTiled3x3 = false;
+
    }
 
    ~OpenCLConv2D()
@@ -662,52 +623,54 @@ public:
 
    void initKernel()
    {
-      int key = 0;
       std::string buildOptions;
 
       switch(activation)
       {
          case actRelu:
             buildOptions += "-D ACTIVATION(x)=(x<0?0.0f:x)";
-            key |= 0x100;
             break;
          case actLeaky:
             buildOptions += "-D ACTIVATION(x)=(x<0?0.1f*x:x)";
-            key |= 0x200;
             break;
 
          default:
             buildOptions += "-D ACTIVATION(x)=(x)";
             break;
       }
+      char argBuf[1000];
+      sprintf(argBuf," -D INPUTS=%d -D OUTPUTS=%d -D FX=%d -D FY=%d",inputs,outputs,filterX,filterY);
+      buildOptions += argBuf;
 
       OpenCLContext *ctx = (OpenCLContext *)gOclContext;
       if (!ctx)
          TensorThrow("OpenCLConv2D - no current ocl context");
 
-
       if ( filterX==3 && filterY==3 && !(inputs&31) && !(outputs&31) )
       {
-         useDmaxDMin = false;
-         use32x32 = true;
-         kernel = ctx->makeKernel((ProgramKey)(key|progConv2D_3x3_32), openclConv2D_cl,"Conv2D", buildOptions.c_str());
+         useTiled3x3 = true;
+         kernel = ctx->makeKernel("CONV2D_3x3", openclConv2D_cl,"Conv2D", buildOptions);
       }
       else
       {
-         key |= is1x1? progConv2D1x1Base : progConv2DBase;
-         const char *prog = is1x1 ? oclConv2D1x1 : oclConv2DProg;
+         const char *func = is1x1 ? "CONV2D_1x1" : "CONV2D_SIMPLE";
 
-         use32x32 = false;
-         useDmaxDMin = !is1x1;
-         kernel = ctx->makeKernel((ProgramKey)key, prog,"Conv2D", buildOptions.c_str());
+         useTiled3x3 = false;
+         kernel = ctx->makeKernel(func, openclConv2D_cl, "Conv2D", buildOptions);
       }
    }
 
 
    void doRun(Tensor *input, Tensor *output)
    {
+      if (kernel && kernelShape!=input->shape)
+         kernel = 0;
+
       if (!kernel)
+      {
+         kernelShape = input->shape;
          initKernel();
+      }
 
       CShape sin = input->shape;
 
@@ -726,17 +689,7 @@ public:
       err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &b);
       err |= clSetKernelArg(kernel, 3, sizeof(cl_int), &srcW);
       err |= clSetKernelArg(kernel, 4, sizeof(cl_int), &srcH);
-      err |= clSetKernelArg(kernel, 5, sizeof(cl_int), &inputs);
-      err |= clSetKernelArg(kernel, 6, sizeof(cl_mem), &dest);
-      err |= clSetKernelArg(kernel, 7, sizeof(cl_int), &outputs);
-
-      if (useDmaxDMin)
-      {
-         int dmin = -filterX/2;
-         int dmax = filterX+dmin;
-         err |= clSetKernelArg(kernel, 8, sizeof(cl_int), &dmin);
-         err |= clSetKernelArg(kernel, 9, sizeof(cl_int), &dmax);
-      }
+      err |= clSetKernelArg(kernel, 5, sizeof(cl_mem), &dest);
 
       if (err)
       {
@@ -744,28 +697,26 @@ public:
          TensorThrow("OpenCLConv2D - error setting args");
       }
 
-      if (use32x32)
+      if (useTiled3x3)
       {
-         /*
-         int groupCount  = ctx->computeUnits * 8;
-         printf("ideal groupCount %d\n",groupCount);
-         int pixelsPerGroup = groupCount<1 ? 32 : (destW*destH/groupCount) & ~31;
-         printf("-> pixelsPerGroup = %d\n", pixelsPerGroup);
-         if (pixelsPerGroup==0)
-            pixelsPerGroup = 32;
-         groupCount = (destW*destH + pixelsPerGroup-1) / pixelsPerGroup;
-         */
-
-         int groupCount = ctx->computeUnits * 8;
-         //printf("ideal groupCount %d\n",groupCount);
-         //printf("pixelsPerGroup = %d\n", destW*destH/groupCount );
-
-
-         size_t globalSize[1] = { (size_t)(32*32*groupCount) };
-         size_t localSize[1] = { (size_t)(32*32) };
          cl_uint work_dim = 1;
          size_t *work_offset = 0;
-         err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, work_offset, globalSize, localSize, 0, NULL, NULL);
+
+         if (ctx->isIntel)
+         {
+            int groupCount = srcH;
+            size_t globalSize[1] = { (size_t)groupCount };
+            size_t localSize[1] = {  1 };
+            err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, work_offset, globalSize, localSize, 0, NULL, NULL);
+
+         }
+         else
+         {
+            int groupCount = ctx->computeUnits;
+            size_t globalSize[1] = { (size_t)(32*32*groupCount) };
+            size_t localSize[1] = { (size_t)(32*32) };
+            err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, work_offset, globalSize, localSize, 0, NULL, NULL);
+         }
       }
       else
       {
