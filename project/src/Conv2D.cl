@@ -71,24 +71,18 @@ __kernel void Conv2D(const __global float* src, const __global float *weights, c
 #define OVEC 32
 
 #ifdef INTEL
-inline float dotRow(const __global float *src, const __global float *w, int n)
+inline float dotRow(const __global float *src, const __global float *weight, int n)
 {
-   float sum = 0;
+   float8 sum8 = (float8)(0.0f);
+   const __global float8 *s8 = (const __global float8 *)src;
+   const __global float8 *w8 = (const __global float8 *)weight;
    int eights = n>>3;
    for(int i=0;i<eights;i++)
-   {
-      sum+= src[0]*w[0] +
-            src[1]*w[1] +
-            src[2]*w[2] +
-            src[3]*w[3] +
-            src[4]*w[4] +
-            src[5]*w[5] +
-            src[6]*w[6] +
-            src[7]*w[7];
-      src+=8;
-      w+=8;
-   }
-   return sum;
+      sum8 = mad(s8[i], w8[i], sum8);
+
+   float4 sum4 = sum8.s0123 + sum8.s4567;
+   float2 sum2 = sum4.s01 + sum4.s23;
+   return sum2.s0 + sum2.s1;
 }
 
 inline float dotRowLocal(const __local float *src, const __global float *w, int n)
@@ -152,7 +146,7 @@ __kernel void Conv2D(const __global float* src, const __global float *weights, c
       {
          w0 = weights + tid*INPUTS*9;
 
-         #if (INPUTS<=256)
+         #if 0
 
          __local float srcBuf[INPUTS*9];
          for(int i=0;i<INPUTS*3;i+=OVEC)
@@ -163,9 +157,10 @@ __kernel void Conv2D(const __global float* src, const __global float *weights, c
          }
          barrier(CLK_LOCAL_MEM_FENCE);
 
+         w0 = weights;
          for(int o=0;o<OUTPUTS;o+=OVEC)
          {
-            float sum = bias[o+tid] + dotRowLocal( srcBuf, w0,  INPUTS*9 );
+            float sum = bias[o+tid] + dotRowLocal( srcBuf, w0 + tid*INPUTS*9,  INPUTS*9 );
             w0 += INPUTS*9*OVEC;
             out[o+tid] = ACTIVATION(sum);
          }
