@@ -135,240 +135,193 @@ inline float dotRowLocal(const __local float *src, const __global float *w, int 
 
 #endif
 
+#define INPUTS4 (INPUTS/4)
+
+
+inline void processTiles(const bool IsX0, const int MaxPix,
+   const __global float* s0,
+   const __global float* s1,
+   const __global float* s2,
+   const __global float *weights,
+   const __global float *bias,
+   __global float *out)
+{
+   float4 zero = 0.0f;
+
+   // tid = threadId (0...OVEC) used to do OVEC outputs at the same time
+   const int tid = get_local_id(0);
+
+
+   // float4 seem to be fast that float8 on hardware
+   for(int o=0;o<OUTPUTS;o+= THREADS*2 )
+   {
+      // Each thread handles 6 horizontal outputs for 1 output
+      float4 sum00 = { bias[o+tid*2], 0.0f, 0.0f, 0.0f };
+      float4 sum01 = sum00;
+      float4 sum02 = sum00;
+      float4 sum03 = sum00;
+      float4 sum04 = sum00;
+      float4 sum05 = sum00;
+      float4 sum10 = { bias[o+tid*2+1], 0.0f, 0.0f, 0.0f };
+      float4 sum11 = sum10;
+      float4 sum12 = sum10;
+      float4 sum13 = sum10;
+      float4 sum14 = sum10;
+      float4 sum15 = sum10;
+
+      for(int line=0;line<3;line++)
+      {
+         __global const float4 *s4 = (__global const float4 *)(line==0 ? s0 : line==1 ? s1 : s2 );
+         if (!s4) continue;
+
+         // Each thread is running a different output
+         const __global float4 *w4 = (const __global float4 *)( weights + (o+tid*2)*INPUTS*9 + line*INPUTS*3 );
+
+         for(int sx=0; sx<INPUTS4 ; sx++, s4++)
+         {
+            #define GetSrcOffset(Pixel) (Pixel<MaxPix) ?  s4[ Pixel*INPUTS4 ] : zero;
+
+            float4 weight00 = w4[0];
+            float4 weight01 = w4[INPUTS4];
+            float4 weight02 = w4[INPUTS4*2];
+
+            float4 srcA = (IsX0) ? zero : s4[-INPUTS4];
+            float4 srcB = s4[0];
+            float4 srcC = GetSrcOffset(1);
+
+            float4 weight10 = w4[INPUTS4*9];
+            float4 weight11 = w4[INPUTS4*10];
+            float4 weight12 = w4[INPUTS4*11];
+            w4++;
+
+            sum00 = mad(weight00, srcA, sum00 );
+            sum00 = mad(weight01, srcB, sum00 );
+            sum00 = mad(weight02, srcC, sum00 );
+
+            sum10 = mad(weight10, srcA, sum10 );
+            sum10 = mad(weight11, srcB, sum10 );
+            sum10 = mad(weight12, srcC, sum10 );
+
+            srcA = GetSrcOffset(2);
+            sum01 = mad(weight00, srcB, sum01 );
+            sum01 = mad(weight01, srcC, sum01 );
+            sum01 = mad(weight02, srcA, sum01 );
+
+            sum11 = mad(weight10, srcB, sum11 );
+            sum11 = mad(weight11, srcC, sum11 );
+            sum11 = mad(weight12, srcA, sum11 );
+
+            if (MaxPix==1) continue;
+
+            srcB = GetSrcOffset(3);
+            sum02 = mad(weight00, srcC, sum02 );
+            sum02 = mad(weight01, srcA, sum02 );
+            sum02 = mad(weight02, srcB, sum02 );
+
+            sum12 = mad(weight10, srcC, sum12 );
+            sum12 = mad(weight11, srcA, sum12 );
+            sum12 = mad(weight12, srcB, sum12 );
+
+            if (MaxPix==2) continue;
+            srcC = GetSrcOffset(4);
+            sum03 = mad(weight00, srcA, sum03 );
+            sum03 = mad(weight01, srcB, sum03 );
+            sum03 = mad(weight02, srcC, sum03 );
+
+            sum13 = mad(weight10, srcA, sum13 );
+            sum13 = mad(weight11, srcB, sum13 );
+            sum13 = mad(weight12, srcC, sum13 );
+
+            if (MaxPix==3) continue;
+            srcA = GetSrcOffset(5);
+            sum04 = mad(weight00, srcB, sum04 );
+            sum04 = mad(weight01, srcC, sum04 );
+            sum04 = mad(weight02, srcA, sum04 );
+
+            sum14 = mad(weight10, srcB, sum14 );
+            sum14 = mad(weight11, srcC, sum14 );
+            sum14 = mad(weight12, srcA, sum14 );
+
+            if (MaxPix==4) continue;
+            srcB = GetSrcOffset(6);
+            sum05 = mad(weight00, srcC, sum05 );
+            sum05 = mad(weight01, srcA, sum05 );
+            sum05 = mad(weight02, srcB, sum05 );
+
+            sum15 = mad(weight10, srcC, sum15 );
+            sum15 = mad(weight11, srcA, sum15 );
+            sum15 = mad(weight12, srcB, sum15 );
+         }
+      }
+
+
+      // Write  output for 6 pixels per thread + bias + activation
+
+      float2 f2;
+      float val;
+      #define SAVE(X,Y) \
+         if (X<MaxPix) { \
+         f2 = sum##Y##X.xy + sum##Y##X.zw; \
+         val = f2.x + f2.y; \
+         out[(tid*2)+Y+OUTPUTS*X] = ACTIVATION(val); \
+         }
+
+      SAVE(0,0)
+      SAVE(0,1)
+      SAVE(1,0)
+      SAVE(1,1)
+      SAVE(2,0)
+      SAVE(2,1)
+      SAVE(3,0)
+      SAVE(3,1)
+      SAVE(4,0)
+      SAVE(4,1)
+      SAVE(5,0)
+      SAVE(5,1)
+
+      out += THREADS*2;
+   }
+}
+
+
+
 __kernel void Conv2D(const __global float* src, const __global float *weights, const __global float *bias, const int width, const int height, __global float *dest)
 {
    #ifdef INTEL
    const int tid = get_local_id(0);
    const int row = get_global_id(1);
 
-   const __global float *s0 = row>0 ? src + (row-1)*INPUTS*width : 0;
+   const __global float *s0 = row>0 ? src + (row-1)*INPUTS*width:0;
    const __global float *s1 =  src + (row)*INPUTS*width;
    const __global float *s2 = row<height-1 ? src + (row+1)*INPUTS*width: 0;
 
    __global float *out = dest + row*OUTPUTS*width;
 
-
-
-   // First pixel...
-   const __global float *w0 = weights + INPUTS + tid*INPUTS*9;
-
-   for(int o=0;o<OUTPUTS;o+=OVEC)
+   if (width<7)
    {
-      float sum = bias[o+tid];
-      if (s0)
-         sum += dotRow( s0, w0, INPUTS*2 );
-      sum += dotRow( s1, w0 + INPUTS*3, INPUTS*2 );
-      if (s2)
-         sum += dotRow( s2, w0 + INPUTS*6, INPUTS*2 );
-
-      w0 += INPUTS*9*OVEC;
-
-      out[o+tid] = ACTIVATION(sum);
-   }
-   out += OUTPUTS;
-
-   // Middle pixels...
-   if (s0 && s2)
-   {
-      int x = 1;
-      for(  ;x<width-7;x+=6 )
-      {
-         // tid = threadId (0...OVEC) used to do OVEC outputs at the same time
-         w0 = weights + tid*INPUTS*9;
-
-         // float4 seem to be fast that float8 on hardware
-         #define INPUTS4 (INPUTS/4)
-
-         for(int o=0;o<OUTPUTS;o+= THREADS*2 )
-         {
-            // Each thread handles 6 horizontal outputs for 1 output
-            float4 sum00 = { bias[o+tid*2], 0.0f, 0.0f, 0.0f };
-            float4 sum01 = sum00;
-            float4 sum02 = sum00;
-            float4 sum03 = sum00;
-            float4 sum04 = sum00;
-            float4 sum05 = sum00;
-            float4 sum10 = { bias[o+tid*2+1], 0.0f, 0.0f, 0.0f };
-            float4 sum11 = sum10;
-            float4 sum12 = sum10;
-            float4 sum13 = sum10;
-            float4 sum14 = sum10;
-            float4 sum15 = sum10;
-
-            for(int line=0;line<3;line++)
-            {
-               __global const float4 *s4 = (__global const float4 *)(line==0 ? s0 : line==1 ? s1 : s2 );
-               // Each thread is running a different output
-               const __global float4 *w4 = (const __global float4 *)( weights + (o+tid*2)*INPUTS*9 + line*INPUTS*3 );
-
-               for(int sx=0; sx<INPUTS4 ; sx++)
-               {
-                  #define GetSrcOffset(Pixel) s4[ Pixel*INPUTS4 ];
-
-                  float4 weight00 = w4[0];
-                  float4 weight01 = w4[INPUTS4];
-                  float4 weight02 = w4[INPUTS4*2];
-
-                  float4 srcA = GetSrcOffset(0);
-                  float4 srcB = GetSrcOffset(1);
-                  float4 srcC = GetSrcOffset(2);
-
-                  float4 weight10 = w4[INPUTS4*9];
-                  float4 weight11 = w4[INPUTS4*10];
-                  float4 weight12 = w4[INPUTS4*11];
-                  w4++;
-
-                  sum00 = mad(weight00, srcA, sum00 );
-                  sum00 = mad(weight01, srcB, sum00 );
-                  sum00 = mad(weight02, srcC, sum00 );
-
-                  sum10 = mad(weight10, srcA, sum10 );
-                  sum10 = mad(weight11, srcB, sum10 );
-                  sum10 = mad(weight12, srcC, sum10 );
-
-                  srcA = GetSrcOffset(3);
-                  sum01 = mad(weight00, srcB, sum01 );
-                  sum01 = mad(weight01, srcC, sum01 );
-                  sum01 = mad(weight02, srcA, sum01 );
-
-                  sum11 = mad(weight10, srcB, sum11 );
-                  sum11 = mad(weight11, srcC, sum11 );
-                  sum11 = mad(weight12, srcA, sum11 );
-
-                  srcB = GetSrcOffset(4);
-                  sum02 = mad(weight00, srcC, sum02 );
-                  sum02 = mad(weight01, srcA, sum02 );
-                  sum02 = mad(weight02, srcB, sum02 );
-
-                  sum12 = mad(weight10, srcC, sum12 );
-                  sum12 = mad(weight11, srcA, sum12 );
-                  sum12 = mad(weight12, srcB, sum12 );
-
-                  srcC = GetSrcOffset(5);
-                  sum03 = mad(weight00, srcA, sum03 );
-                  sum03 = mad(weight01, srcB, sum03 );
-                  sum03 = mad(weight02, srcC, sum03 );
-
-                  sum13 = mad(weight10, srcA, sum13 );
-                  sum13 = mad(weight11, srcB, sum13 );
-                  sum13 = mad(weight12, srcC, sum13 );
-
-                  srcA = GetSrcOffset(6);
-                  sum04 = mad(weight00, srcB, sum04 );
-                  sum04 = mad(weight01, srcC, sum04 );
-                  sum04 = mad(weight02, srcA, sum04 );
-
-                  sum14 = mad(weight10, srcB, sum14 );
-                  sum14 = mad(weight11, srcC, sum14 );
-                  sum14 = mad(weight12, srcA, sum14 );
-
-                  srcB = GetSrcOffset(7);
-                  sum05 = mad(weight00, srcC, sum05 );
-                  sum05 = mad(weight01, srcA, sum05 );
-                  sum05 = mad(weight02, srcB, sum05 );
-
-                  sum15 = mad(weight10, srcC, sum15 );
-                  sum15 = mad(weight11, srcA, sum15 );
-                  sum15 = mad(weight12, srcB, sum15 );
-
-                  s4++;
-               }
-            }
-
-            // Write  output for 6 pixels per thread + bias + activation
-
-            float2 f2;
-            float val;
-            #define SAVE(X,Y) \
-               f2 = sum##Y##X.xy + sum##Y##X.zw; \
-               val = f2.x + f2.y; \
-               out[(tid*2)+Y+OUTPUTS*X] = ACTIVATION(val);
-            SAVE(0,0)
-            SAVE(0,1)
-            SAVE(1,0)
-            SAVE(1,1)
-            SAVE(2,0)
-            SAVE(2,1)
-            SAVE(3,0)
-            SAVE(3,1)
-            SAVE(4,0)
-            SAVE(4,1)
-            SAVE(5,0)
-            SAVE(5,1)
-
-            out += THREADS*2;
-         }
-
-
-         out += OUTPUTS*5;
-
-         s0+=INPUTS*6;
-         s1+=INPUTS*6;
-         s2+=INPUTS*6;
-      }
-
-      for(  ;x<width-1;x++ )
-      {
-         w0 = weights + tid*INPUTS*9;
-
-         for(int o=0;o<OUTPUTS;o+=OVEC)
-         {
-            float sum = bias[o+tid] +
-               dotRow( s0, w0,  INPUTS*3 ) +
-               dotRow( s1, w0 + INPUTS*3, INPUTS*3 ) +
-               dotRow( s2, w0 + INPUTS*6, INPUTS*3 );
-
-            w0 += INPUTS*9*OVEC;
-            out[o+tid] = ACTIVATION(sum);
-         }
-
-         out += OUTPUTS;
-         s0+=INPUTS;
-         s1+=INPUTS;
-         s2+=INPUTS;
-      }
+      processTiles(true, width, s0, s1, s2, weights, bias, out);
    }
    else
    {
-      for(int x=1;x<width-1;x++)
+      processTiles(true, 1000, s0, s1, s2, weights, bias, out);
+      out += OUTPUTS*6;
+      if (s0) s0+=INPUTS*6;
+      s1+=INPUTS*6;
+      if (s2) s2+=INPUTS*6;
+
+      int x = 6;
+      for(  ;x+6<width; x+=6 )
       {
-         w0 = weights + tid*INPUTS*9;
-         for(int o=0;o<OUTPUTS;o+=OVEC)
-         {
-            float sum = bias[o+tid];
-            if (s0)
-               sum += dotRow( s0, w0, INPUTS*3 );
-            sum += dotRow( s1, w0+INPUTS*3 , INPUTS*3 );
-            if (s2)
-               sum += dotRow( s2, w0 + INPUTS*6, INPUTS*3 );
+         processTiles(false, 1000, s0, s1, s2, weights, bias, out);
 
-            w0 += INPUTS*9*OVEC;
-
-            out[o+tid] = ACTIVATION(sum);
-         }
-
-         out += OUTPUTS;
-         if (s0) s0+=INPUTS;
-                 s1+=INPUTS;
-         if (s2) s2+=INPUTS;
+         out += OUTPUTS*6;
+         if (s0) s0+=INPUTS*6;
+         s1+=INPUTS*6;
+         if (s2) s2+=INPUTS*6;
       }
+
+      processTiles(false, width-x, s0, s1, s2, weights, bias, out);
    }
-
-   // last pixel
-   w0 = weights + tid*INPUTS*9;
-   for(int o=0;o<OUTPUTS;o+=OVEC)
-   {
-      float sum = bias[o+tid];
-      if (s0)
-         sum += dotRow( s0, w0, INPUTS*2 );
-      sum += dotRow( s1, w0 + INPUTS*3, INPUTS*2 );
-      if (s2)
-         sum += dotRow( s2, w0 + INPUTS*6, INPUTS*2 );
-      w0 += INPUTS*9*OVEC;
-
-      out[o+tid] = ACTIVATION(sum);
-   }
-
 
 
    #else

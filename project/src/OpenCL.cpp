@@ -651,7 +651,7 @@ public:
       if (!ctx)
          TensorThrow("OpenCLConv2D - no current ocl context");
 
-      if ( filterX==3 && filterY==3 && !(inputs&31) && !(outputs&31) )
+      if ( filterX==3 && filterY==3 && !(inputs&3) && !(outputs&31) )
       {
          if ( outputs>=64 && !(outputs&63))
             threads = 32;
