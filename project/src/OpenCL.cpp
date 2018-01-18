@@ -108,7 +108,7 @@ public:
    std::vector<cl_device_id> devices;
    cl_context                context;
    cl_command_queue          queue0;
-   bool                      isIntel;
+   bool                      useIntelMethod;
 
    cl_ulong                  localMemory;
    cl_ulong                  computeUnits;
@@ -142,7 +142,9 @@ public:
       for(int i=0;i<5;i++)
          buf[i] = tolower(buf[i]);
       buf[5]='\0';
-      isIntel = std::string(buf)=="intel";
+      useIntelMethod = std::string(buf)=="intel";
+      // Force on...
+      useIntelMethod = true;
 
 
       queue0 = clCreateCommandQueue(context, devices[0], 0, &error);
@@ -200,7 +202,7 @@ public:
    {
       inOps += " -D ";
       inOps += inMethod;
-      if (isIntel)
+      if (useIntelMethod)
          inOps += " -DINTEL";
       inOps += " -Werror";
       const char *buildOptions = inOps.c_str();
@@ -603,6 +605,7 @@ class OpenCLConv2D : public Conv2DBase
    int padX;
    int padY;
    bool useTiled3x3;
+   int  threads;
    cl_kernel kernel;
    Shape kernelShape;
 
@@ -614,6 +617,7 @@ public:
    {
       kernel = 0;
       useTiled3x3 = false;
+      threads = 16;
 
    }
 
@@ -649,6 +653,10 @@ public:
 
       if ( filterX==3 && filterY==3 && !(inputs&31) && !(outputs&31) )
       {
+         if ( outputs>=64 && !(outputs&63))
+            threads = 32;
+         sprintf(argBuf," -D OVEC=%d", threads);
+         buildOptions += argBuf;
          useTiled3x3 = true;
          kernel = ctx->makeKernel("CONV2D_3x3", openclConv2D_cl,"Conv2D", buildOptions);
       }
@@ -702,13 +710,12 @@ public:
       {
          size_t *work_offset = 0;
 
-         if (ctx->isIntel)
+         if (ctx->useIntelMethod)
          {
             int groupCount = srcH;
             cl_uint work_dim = 2;
-            int ovec = 32;
-            size_t globalSize[2] = { (size_t)ovec,  (size_t)groupCount  };
-            size_t localSize[2] = {  (size_t)ovec, 1 };
+            size_t globalSize[2] = { (size_t)threads,  (size_t)groupCount  };
+            size_t localSize[2] = {  (size_t)threads, 1 };
             err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, work_offset, globalSize, localSize, 0, NULL, NULL);
 
          }
