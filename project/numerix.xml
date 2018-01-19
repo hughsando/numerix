@@ -1,6 +1,8 @@
 <xml>
    <!-- <set name="static_link" value="1" /> -->
    <include name="${HXCPP}/toolchain/haxe-target.xml" />
+   <import name="${haxelib:protobux}/build/libprotobuf.xml" if="NX_CAFFE" />
+
    <set name="NX_GPU" value="1" unless="rpi" />
    <set name="NX_CUDA" value="1" unless="rpi" />
 
@@ -9,6 +11,7 @@
      <compilerflag value="-DNX_GPU" if="NX_GPU" />
      <compilerflag value="-DNX_CUDA" if="NX_CUDA" />
      <compilerflag value="-DNX_OPENCL" if="NX_OPENCL" />
+     <compilerflag value="-DNX_CAFFE" if="NX_CAFFE" />
      <compilerflag value="-DNUMERIX_SIMD" />
      <compilerflag value="-mfpu=neon" if="HXCPP_ARMV7||HXCPP_ARM64" />
      <section if="rpi" >
@@ -23,6 +26,11 @@
      <depend name="include/Ops.h" />
      <depend name="include/NxThread.h" />
      <depend name="include/Layer.h" />
+
+     <section if="NX_CAFFE" >
+        <compilerflag value="-I${haxelib:protobux}/modules/protobuf/src" />
+        <file name="src/caffe/caffe.pb.cc" />
+     </section>
 
      <file name="src/Api.cpp" />
      <file name="src/Tensor.cpp" />
@@ -51,9 +59,9 @@
 
    </files>
 
-
    <target id="default" tool="linker" toolid="dll" output="numerix" >
       <files id="numerix" />
+      <files id="libprotobuf" if="NX_CAFFE" />
       <outdir name="../ndll/${BINDIR}" />
       <ext value=".ndll" />
 
