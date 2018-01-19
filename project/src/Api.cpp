@@ -8,12 +8,18 @@
 
 #include <OCL.h>
 
+#undef min
+#undef max
+#undef STRICT
+
+#ifdef NX_CAFFE
+#include "caffe/caffe.pb.h"
+#endif
+
 #ifdef NX_MOVIDIUS
 #include "mvnc.h"
 #endif
 
-#undef max
-#undef min
 
 namespace numerix
 {
@@ -1021,4 +1027,13 @@ void oclSetCurrent(value inOclContext)
 DEFINE_PRIME1v(oclSetCurrent);
 
 
+void caffeTest()
+{
+   caffe::BlobProto proto;
+}
+
+
+
 } // end namespace numerix
+
+
