@@ -738,12 +738,14 @@ public:
 
       if (err)
          TensorThrow("OpenCLConv2D - could not clEnqueueNDRangeKernel");
+      /*
       err = clFinish(ctx->queue0);
       if (err)
       {
          printf("Error in clFinish = %d\n", err);
          TensorThrow("OpenCLConv2D - Error waiting clFinish");
       }
+      */
    }
 };
 

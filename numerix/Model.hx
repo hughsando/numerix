@@ -76,6 +76,9 @@ class Model
          throw ".h5 files require hxhdf5 lib";
       #end
 
+      if (modelname.endsWith(".caffemodel") || modelname.endsWith(".ptototxt") )
+         return new numerix.caffe.Model(modelname);
+
       if (modelname.endsWith(".cfg"))
          return new numerix.darknet.Model(modelname,true);
 

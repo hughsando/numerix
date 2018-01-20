@@ -14,6 +14,10 @@
 
 #ifdef NX_CAFFE
 #include "caffe/caffe.pb.h"
+#include <fcntl.h>
+#include <io.h>
+#include <google/protobuf/io/coded_stream.h>
+#include <google/protobuf/io/zero_copy_stream_impl.h>
 #endif
 
 #ifdef NX_MOVIDIUS
@@ -1026,12 +1030,176 @@ void oclSetCurrent(value inOclContext)
 
 DEFINE_PRIME1v(oclSetCurrent);
 
-
-void caffeTest()
+template<typename T>
+value make_int_array(T &val)
 {
-   caffe::BlobProto proto;
+   int n = val.size();
+   if (n==0)
+      return alloc_null();
+   value array = alloc_array(n);
+   for(int i=0;i<n;i++)
+      val_array_set_i(array,i, alloc_int((int)val.Get(i)) );
+   return array;
 }
 
+template<typename T>
+value make_string_array(T &val)
+{
+   int n = val.size();
+   if (n==0)
+      return alloc_null();
+   value array = alloc_array(n);
+   for(int i=0;i<n;i++)
+      val_array_set_i(array,i, alloc_string(val.Get(i).c_str()) );
+   return array;
+}
+
+
+value caffeLoad(HxString inName)
+{
+   #ifndef NX_CAFFE
+   TensorThrow("This binary was built without caffe support");
+   return alloc_null();
+   #else
+
+   //printf("Caffe -> %s\n", inName.c_str() );
+
+   caffe::NetParameter net;
+
+
+   #ifdef HX_WINDOWS
+   int fd = open(inName.c_str(), _O_RDONLY | _O_BINARY);
+   #else
+   int fd = open(inName.c_str(), O_RDONLY);
+   #endif
+
+   if (fd<0)
+      TensorThrow("Could not open caffemodel for reading");
+
+   google::protobuf::io::FileInputStream rawstr(fd);
+   google::protobuf::io::CodedInputStream codedstr(&rawstr);
+
+   rawstr.SetCloseOnDelete(true);
+   codedstr.SetTotalBytesLimit(std::numeric_limits<int>::max(),
+                                std::numeric_limits<int>::max() / 2);
+
+   if (!net.ParseFromCodedStream(&codedstr))
+      TensorThrow("Could not parse caffemodel");
+
+   if (net.layers_size()>0)
+      TensorThrow("caffemodel version 1 not supported");
+
+   // printf("Input size %d\n", (int)net.input_shape_size() );
+
+   int n = net.layer_size();
+   value m = alloc_array(0);
+   std::map<std::string,bool> knownTypes;
+   knownTypes["ReLU"] = true;
+   knownTypes["Data"] = true;
+   knownTypes["Accuracy"] = true;
+   knownTypes["Dropout"] = true;
+   knownTypes["Split"] = true;
+   knownTypes["SoftmaxWithLoss"] = true;
+
+   //printf("Layers %d\n", n);
+   for(int i=0;i<n;i++)
+   {
+      auto &layer = net.layer(i);
+      const std::string layer_type = layer.type();
+
+      value lay = alloc_empty_object();
+      alloc_field(lay, _id_type, alloc_string( layer_type.c_str() ) );
+
+      std::string name = layer.name();
+      alloc_field(lay, _id_name, alloc_string(name.c_str()));
+
+      alloc_field(lay, val_id("top"), make_string_array( layer.top() ) );
+      alloc_field(lay, val_id("bottom"), make_string_array( layer.bottom() ) );
+
+
+      int blobs = layer.blobs_size();
+      if (blobs)
+      {
+         value data = alloc_array(blobs);
+         for(int b=0;b<blobs;b++)
+         {
+            auto &blob = layer.blobs(b);
+
+            value o = alloc_empty_object();
+
+            alloc_field(o, val_id("shape"), make_int_array(blob.shape().dim()));
+
+            val_array_set_i(data, b, o);
+         }
+         alloc_field(lay, val_id("data"), data);
+      }
+
+
+      if (knownTypes[layer_type])
+      {
+         // ignore
+      }
+      else if (layer_type=="Convolution")
+      {
+         auto &param = layer.convolution_param();
+         alloc_field(lay, val_id("outputs"), alloc_int(param.num_output()));
+         alloc_field(lay, val_id("pad"), make_int_array(param.pad()));
+         alloc_field(lay, val_id("size"), make_int_array(param.kernel_size()));
+         alloc_field(lay, val_id("stride"), make_int_array(param.stride()));
+         alloc_field(lay, val_id("dilation"), make_int_array(param.dilation()));
+         if (param.has_pad_w())
+            alloc_field(lay, val_id("pad_w"), alloc_int(param.pad_w()));
+         if (param.has_pad_h())
+            alloc_field(lay, val_id("pad_h"), alloc_int(param.pad_h()));
+         if (param.has_kernel_w())
+            alloc_field(lay, val_id("kernel_w"), alloc_int(param.kernel_w()));
+         if (param.has_kernel_h())
+            alloc_field(lay, val_id("kernel_h"), alloc_int(param.kernel_h()));
+         if (param.has_stride_w())
+            alloc_field(lay, val_id("stride_w"), alloc_int(param.stride_w()));
+         if (param.has_stride_h())
+            alloc_field(lay, val_id("stride_h"), alloc_int(param.stride_h()));
+         alloc_field(lay, val_id("axis"), alloc_int(param.axis()));
+      }
+      else if (layer_type=="Pooling")
+      {
+         auto &param = layer.pooling_param();
+         alloc_field(lay, val_id("method"), alloc_int(param.pool()));
+         if (param.has_pad())
+            alloc_field(lay, val_id("pad"), alloc_int(param.pad()));
+         if (param.has_pad_w())
+            alloc_field(lay, val_id("pad_w"), alloc_int(param.pad_w()));
+         if (param.has_pad_h())
+            alloc_field(lay, val_id("pad_h"), alloc_int(param.pad_h()));
+         if (param.has_stride())
+            alloc_field(lay, val_id("stride"), alloc_int(param.stride()));
+         if (param.has_stride_w())
+            alloc_field(lay, val_id("stride_w"), alloc_int(param.stride_w()));
+         if (param.has_stride_h())
+            alloc_field(lay, val_id("stride_h"), alloc_int(param.stride_h()));
+         if (param.has_global_pooling())
+            alloc_field(lay, val_id("global_pooling"), alloc_int(param.global_pooling()));
+      }
+      else if (layer_type=="Concat")
+      {
+         auto &param = layer.concat_param();
+         if (param.has_axis())
+            alloc_field(lay, val_id("axis"), alloc_int(param.axis()));
+      }
+      else
+      {
+         printf("Unknown layer type %s\n", layer_type.c_str() );
+      }
+
+
+      val_array_push(m,  lay);
+   }
+
+   return m;
+   #endif
+}
+
+DEFINE_PRIME1(caffeLoad);
 
 
 } // end namespace numerix
