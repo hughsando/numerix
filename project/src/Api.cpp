@@ -18,6 +18,7 @@
 #include <io.h>
 #include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/io/zero_copy_stream_impl.h>
+#include <google/protobuf/text_format.h>
 #endif
 
 #ifdef NX_MOVIDIUS
@@ -1054,52 +1055,75 @@ value make_string_array(T &val)
    return array;
 }
 
-
-value caffeLoad(HxString inName)
+#ifdef NX_CAFFE
+static void loadCaffeNet(caffe::NetParameter net,value m,bool weightsOnly )
 {
-   #ifndef NX_CAFFE
-   TensorThrow("This binary was built without caffe support");
-   return alloc_null();
-   #else
-
-   //printf("Caffe -> %s\n", inName.c_str() );
-
-   caffe::NetParameter net;
-
-
-   #ifdef HX_WINDOWS
-   int fd = open(inName.c_str(), _O_RDONLY | _O_BINARY);
-   #else
-   int fd = open(inName.c_str(), O_RDONLY);
-   #endif
-
-   if (fd<0)
-      TensorThrow("Could not open caffemodel for reading");
-
-   google::protobuf::io::FileInputStream rawstr(fd);
-   google::protobuf::io::CodedInputStream codedstr(&rawstr);
-
-   rawstr.SetCloseOnDelete(true);
-   codedstr.SetTotalBytesLimit(std::numeric_limits<int>::max(),
-                                std::numeric_limits<int>::max() / 2);
-
-   if (!net.ParseFromCodedStream(&codedstr))
-      TensorThrow("Could not parse caffemodel");
-
-   if (net.layers_size()>0)
-      TensorThrow("caffemodel version 1 not supported");
-
-   // printf("Input size %d\n", (int)net.input_shape_size() );
-
    int n = net.layer_size();
-   value m = alloc_array(0);
+
+   if (weightsOnly)
+   {
+      int srcN = val_array_size(m);
+      if (srcN==0)
+         return;
+      for(int i=0;i<n;i++)
+      {
+         auto &layer = net.layer(i);
+         int blobs = layer.blobs_size();
+         if (blobs)
+         {
+            std::string name = layer.name();
+            value item = 0;
+            for(int j=0;j<srcN;j++)
+            {
+               value test = val_array_i(m,j);
+               if (name==val_string( val_field(test, _id_name) ) )
+               {
+                  item = test;
+                  break;
+               }
+            }
+            if (item==0)
+            {
+               //printf("no match %s\n", name.c_str());
+               continue;
+            }
+
+            for(int b=0;b<blobs;b++)
+            {
+               auto &blob = layer.blobs(b);
+               value weights = alloc_array(0);
+
+               if (blob.data_size() || blob.double_data_size())
+               {
+                  int dims = blob.shape().dim_size();
+                  Shape shape(dims);
+                  for(int d=0;d<dims;d++)
+                     shape[d] = blob.shape().dim(d);
+
+                  int type = blob.data_size() ? Float32 : Float64;
+                  Tensor *tensor = new Tensor(type, shape);
+                  value ten = allocTensor(tensor);
+                  //TODO - setdata
+                  //printf("Made %d\n", dims);
+
+                  val_array_push(weights, ten);
+                  alloc_field(item, val_id("weights"), weights);
+               }
+            }
+         }
+      }
+      return;
+   }
+
+
    std::map<std::string,bool> knownTypes;
    knownTypes["ReLU"] = true;
    knownTypes["Data"] = true;
    knownTypes["Accuracy"] = true;
    knownTypes["Dropout"] = true;
    knownTypes["Split"] = true;
-   knownTypes["SoftmaxWithLoss"] = true;
+   knownTypes["Softmax"] = true;
+   knownTypes["Input"] = true;
 
    //printf("Layers %d\n", n);
    for(int i=0;i<n;i++)
@@ -1120,18 +1144,33 @@ value caffeLoad(HxString inName)
       int blobs = layer.blobs_size();
       if (blobs)
       {
-         value data = alloc_array(blobs);
+         value shapes = alloc_array(blobs);
+         bool hasWeights = false;
+         value weights = alloc_array(0);
          for(int b=0;b<blobs;b++)
          {
             auto &blob = layer.blobs(b);
 
-            value o = alloc_empty_object();
+            val_array_set_i(shapes, b, make_int_array(blob.shape().dim()));
 
-            alloc_field(o, val_id("shape"), make_int_array(blob.shape().dim()));
+            if (blob.data_size() || blob.double_data_size())
+            {
+               int dims = blob.shape().dim_size();
+               Shape shape(dims);
+               for(int d=0;d<dims;d++)
+                  shape[d] = blob.shape().dim(d);
 
-            val_array_set_i(data, b, o);
+               int type = blob.data_size() ? Float32 : Float64;
+               Tensor *tensor = new Tensor(type, shape);
+               value ten = allocTensor(tensor);
+
+               //TODO - setdata
+
+               val_array_push(weights, ten);
+               alloc_field(lay, val_id("weights"), weights);
+            }
          }
-         alloc_field(lay, val_id("data"), data);
+         alloc_field(lay, val_id("shapes"), shapes);
       }
 
 
@@ -1194,12 +1233,83 @@ value caffeLoad(HxString inName)
 
       val_array_push(m,  lay);
    }
+}
+
+#endif
+
+value caffeLoad(HxString txtName, HxString binName)
+{
+   #ifndef NX_CAFFE
+   TensorThrow("This binary was built without caffe support");
+   return alloc_null();
+   #else
+
+   //printf("Caffe -> %s\n", inName.c_str() );
+
+   caffe::NetParameter net;
+   value m = alloc_array(0);
+
+   bool loaded = false;
+   if (txtName.c_str())
+   {
+      #ifdef HX_WINDOWS
+      int fd = open(txtName.c_str(), _O_RDONLY);
+      #else
+      int fd = open(txtName.c_str(), O_RDONLY);
+      #endif
+
+      if (fd>=0)
+      {
+         google::protobuf::io::FileInputStream rawstr(fd);
+         rawstr.SetCloseOnDelete(true);
+
+         if (!google::protobuf::TextFormat::Parse(&rawstr, &net))
+            TensorThrow("Could not parse ptototxt");
+         loadCaffeNet(net,m,false);
+         loaded = true;
+      }
+   }
+   if (binName.c_str())
+   {
+      #ifdef HX_WINDOWS
+      int fd = open(binName.c_str(), _O_RDONLY | _O_BINARY);
+      #else
+      int fd = open(binName.c_str(), O_RDONLY);
+      #endif
+
+      if (fd>=0)
+      {
+         google::protobuf::io::FileInputStream rawstr(fd);
+         google::protobuf::io::CodedInputStream codedstr(&rawstr);
+
+         rawstr.SetCloseOnDelete(true);
+         codedstr.SetTotalBytesLimit(std::numeric_limits<int>::max(),
+                                   std::numeric_limits<int>::max() / 2);
+
+         if (!net.ParseFromCodedStream(&codedstr))
+            TensorThrow("Could not parse caffemodel");
+
+         loadCaffeNet(net,m,loaded);
+         loaded = true;
+      }
+   }
+
+   if (!loaded)
+      TensorThrow("Could not open caffemodel for reading");
+
+
+   if (net.layers_size()>0)
+      TensorThrow("caffemodel version 1 not supported");
+
+   // printf("Input size %d\n", (int)net.input_shape_size() );
+
 
    return m;
    #endif
 }
 
-DEFINE_PRIME1(caffeLoad);
+
+DEFINE_PRIME2(caffeLoad);
 
 
 } // end namespace numerix

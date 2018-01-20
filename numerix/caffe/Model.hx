@@ -5,6 +5,7 @@ import haxe.io.Bytes;
 import numerix.Tensor;
 import numerix.Nx;
 import cpp.NativeMath.idiv;
+using StringTools;
 
 class Params
 {
@@ -22,6 +23,24 @@ class Params
   }
 }
 
+class Node
+{
+   public var inputs:Array<Dynamic>;
+   public var outputs:Array<Dynamic>;
+
+   public function new()
+   {
+      inputs = [];
+      outputs = [];
+   }
+   public function toString()
+   {
+      var inName = inputs.map( function(x) return x.name );
+      var outName = outputs.map( function(x) return x.name );
+      return 'Node($inName,$outName)';
+   }
+}
+
 class Model extends numerix.Model
 {
    var transpose:Bool;
@@ -34,10 +53,58 @@ class Model extends numerix.Model
    {
       super();
 
-      var layers = caffeLoad(inFilename);
-      trace(layers);
+      var binName = "";
+      var txtName = "";
 
-      //outputLayer = current.layer;
+      if (inFilename.endsWith(".prototxt"))
+      {
+         txtName = inFilename;
+         binName = inFilename.substr(0, inFilename.length - ".prototxt".length) + ".caffemodel";
+      }
+      else
+      {
+         binName = inFilename;
+      }
+
+
+      var nodeMap = new Map<String, Node>();
+      function makeNode(name:String)
+      {
+         if (nodeMap.exists(name))
+            return nodeMap.get(name);
+         var node = new Node();
+         nodeMap.set(name,node);
+         return node;
+      }
+
+      var layers:Array<Dynamic> = caffeLoad(txtName, binName);
+      var first:Dynamic = null;
+      for(layer in layers)
+      {
+         var bottom:Array<String> = layer.bottom;
+         if (bottom!=null)
+            for(b in bottom)
+               makeNode(b).outputs.push(layer);
+         else
+            first = layer;
+
+         var top:Array<String> = layer.top;
+         if (top!=null)
+            for(t in top)
+               makeNode(t).inputs.push(layer);
+      }
+
+      println('First $first');
+
+      for(n in nodeMap.keys())
+      {
+         var node = nodeMap.get(n);
+         if (node.outputs.length==0)
+            println('OUT node ' + node);
+         if (node.inputs.length==0)
+            println('IN node ' + node);
+      }
+
    }
 
    /*
@@ -177,7 +244,7 @@ class Model extends numerix.Model
    }
    */
 
-   static var caffeLoad = Loader.load("caffeLoad","so");
+   static var caffeLoad = Loader.load("caffeLoad","sso");
 }
 
 
