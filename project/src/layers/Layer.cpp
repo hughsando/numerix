@@ -7,6 +7,8 @@
 namespace numerix
 {
 
+bool Layer::accurateTimes = false;
+
 float *Layer::allocFloats(int count,bool inZero)
 {
    unsigned char *buffer = TensorData::allocCpuAligned( count*sizeof(float) );

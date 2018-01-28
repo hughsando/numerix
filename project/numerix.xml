@@ -44,6 +44,8 @@
      <file name="src/layers/Concat.cpp" />
      <file name="src/layers/Reorg.cpp" />
      <file name="src/layers/Yolo.cpp" />
+     <file name="src/layers/GlobalPool.cpp" />
+     <file name="src/layers/Softmax.cpp" />
 
      <file name="src/Cuda.cpp" if="NX_CUDA"  />
 

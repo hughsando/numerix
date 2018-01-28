@@ -58,6 +58,7 @@ class Model
    {
       if (inputLayer==null)
          inputLayer = new InputLayer();
+
       return inputLayer;
    }
 

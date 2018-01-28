@@ -52,6 +52,8 @@ class Layer
    std::vector<unsigned char *> buffers;
 
 public:
+   static bool accurateTimes;
+
    typedef unsigned char u8;
 
    static Layer *createConv2D(int inStrideY, int inStrideX,
@@ -64,6 +66,10 @@ public:
                                Padding padding);
 
    static Layer *createConcat();
+
+   static Layer *createGlobalPool();
+
+   static Layer *createSoftmax();
 
    static Layer *createReorg(int inStride);
 
@@ -84,6 +90,8 @@ public:
    virtual void getBoxes(Boxes &outBoxes) { }
 
    virtual void setPadInput() { }
+
+   virtual void setActivation(Activation inActivation) { }
 
    int getNextJob();
 
@@ -144,6 +152,8 @@ public:
    virtual void rebuildWeights() { };
 
    void setNormalization(Tensor *inScales, Tensor *inMeans, Tensor *inVars);
+
+   void setActivation(Activation inActivation) { activation=inActivation; }
 
    void reduceInputs(int inCount);
 

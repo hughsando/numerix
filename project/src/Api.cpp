@@ -686,6 +686,12 @@ void layConv2DSetNorm(value inLayer, value inScales, value inMeans, value inVars
 }
 DEFINE_PRIME4v(layConv2DSetNorm);
 
+void layConv2DSetActication(value inLayer, int inActivation)
+{
+   TO_LAYER
+   layer->setActivation((Activation)inActivation);
+}
+DEFINE_PRIME2v(layConv2DSetActication)
 
 
 value layCreateMaxPool(value inSize, value inStrides, int inPadding)
@@ -735,14 +741,39 @@ DEFINE_PRIME3(layCreateMaxPool);
 
 
 
+value layCreateGlobalPool(bool inAverage)
+{
+   Layer *layer = 0;
+   layer = Layer::createGlobalPool();
+
+   return allocLayer(layer);
+}
+DEFINE_PRIME1(layCreateGlobalPool);
+
+
+value layCreateSoftmax()
+{
+   Layer *layer = 0;
+   layer = Layer::createSoftmax();
+
+   return allocLayer(layer);
+}
+DEFINE_PRIME0(layCreateSoftmax);
+
+
+
 value layCreateConcat()
 {
    Layer *layer = 0;
    #ifdef NX_GPU
-   if ( enableGpu && gpuInit())
+   if ( enableGpu && !layer && gpuInit())
       layer = gpuCreateConcat();
-   else
    #endif
+   #ifdef NX_OPENCL
+   if (!layer && OclContext::hasCurrent())
+      layer = oclCreateConcat( );
+   #endif
+   if (!layer)
       layer = Layer::createConcat();
 
    return allocLayer(layer);
@@ -804,6 +835,13 @@ value layGetBoxes(value inLayer)
    return result;
 }
 DEFINE_PRIME1(layGetBoxes);
+
+void layAccurateTimes(bool inAccurate)
+{
+   Layer::accurateTimes = inAccurate;
+}
+DEFINE_PRIME1v(layAccurateTimes)
+
 
 void laySetPadInput(value inLayer)
 {
@@ -1056,6 +1094,53 @@ value make_string_array(T &val)
 }
 
 #ifdef NX_CAFFE
+
+
+template<typename T>
+static bool fillBlobs(T &layer, value array)
+{
+   bool result = false;
+   int blobs = layer.blobs_size();
+
+   for(int b=0;b<blobs;b++)
+   {
+      auto &blob = layer.blobs(b);
+
+      if (blob.data_size() || blob.double_data_size())
+      {
+         int dims = blob.shape().dim_size();
+         Shape shape(dims);
+         for(int d=0;d<dims;d++)
+            shape[d] = blob.shape().dim(d);
+
+         int type = blob.data_size() ? Float32 : Float64;
+         Tensor *tensor = new Tensor(type, shape);
+         value ten = allocTensor(tensor);
+
+         int count = tensor->elementCount;
+         if (blob.data_size())
+         {
+            for(int i=0;i<count;i++)
+               tensor->setFloat64(blob.data(i),i,1);
+         }
+         else
+         {
+            for(int i=0;i<count;i++)
+               tensor->setFloat64(blob.double_data(i),i,1);
+         }
+
+
+         //TODO - setdata
+         //printf("Made %d\n", dims);
+
+         val_array_push(array, ten);
+         result = true;
+      }
+   }
+   return result;
+}
+
+
 static void loadCaffeNet(caffe::NetParameter net,value m,bool weightsOnly )
 {
    int n = net.layer_size();
@@ -1088,28 +1173,9 @@ static void loadCaffeNet(caffe::NetParameter net,value m,bool weightsOnly )
                continue;
             }
 
-            for(int b=0;b<blobs;b++)
-            {
-               auto &blob = layer.blobs(b);
-               value weights = alloc_array(0);
-
-               if (blob.data_size() || blob.double_data_size())
-               {
-                  int dims = blob.shape().dim_size();
-                  Shape shape(dims);
-                  for(int d=0;d<dims;d++)
-                     shape[d] = blob.shape().dim(d);
-
-                  int type = blob.data_size() ? Float32 : Float64;
-                  Tensor *tensor = new Tensor(type, shape);
-                  value ten = allocTensor(tensor);
-                  //TODO - setdata
-                  //printf("Made %d\n", dims);
-
-                  val_array_push(weights, ten);
-                  alloc_field(item, val_id("weights"), weights);
-               }
-            }
+            value weights = alloc_array(0);
+            if (fillBlobs(layer, weights))
+               alloc_field(item, val_id("weights"), weights);
          }
       }
       return;
@@ -1123,7 +1189,18 @@ static void loadCaffeNet(caffe::NetParameter net,value m,bool weightsOnly )
    knownTypes["Dropout"] = true;
    knownTypes["Split"] = true;
    knownTypes["Softmax"] = true;
-   knownTypes["Input"] = true;
+   knownTypes["Scale"] = true;
+   knownTypes["BatchNorm"] = true;
+
+   value tops = make_string_array(net.input());
+   if (!val_is_null(tops))
+   {
+      value lay = alloc_empty_object();
+      alloc_field(lay, _id_type, alloc_string("Input") );
+      alloc_field(lay, val_id("input_dim"), make_int_array(net.input_dim()));
+      alloc_field(lay, val_id("top"), tops );
+      val_array_push(m,  lay);
+   }
 
    //printf("Layers %d\n", n);
    for(int i=0;i<n;i++)
@@ -1147,6 +1224,8 @@ static void loadCaffeNet(caffe::NetParameter net,value m,bool weightsOnly )
          value shapes = alloc_array(blobs);
          bool hasWeights = false;
          value weights = alloc_array(0);
+         if (fillBlobs(layer, weights))
+            alloc_field(lay, val_id("weights"), weights);
          for(int b=0;b<blobs;b++)
          {
             auto &blob = layer.blobs(b);
@@ -1167,7 +1246,6 @@ static void loadCaffeNet(caffe::NetParameter net,value m,bool weightsOnly )
                //TODO - setdata
 
                val_array_push(weights, ten);
-               alloc_field(lay, val_id("weights"), weights);
             }
          }
          alloc_field(lay, val_id("shapes"), shapes);
@@ -1178,10 +1256,19 @@ static void loadCaffeNet(caffe::NetParameter net,value m,bool weightsOnly )
       {
          // ignore
       }
+      else if (layer_type=="Input")
+      {
+         auto &param = layer.input_param();
+         if (param.shape_size()>0)
+         {
+            auto &shape = param.shape(0);
+            alloc_field(lay, val_id("input_dim"),make_int_array(shape.dim()));
+         }
+      }
       else if (layer_type=="Convolution")
       {
          auto &param = layer.convolution_param();
-         alloc_field(lay, val_id("outputs"), alloc_int(param.num_output()));
+         alloc_field(lay, val_id("filters"), alloc_int(param.num_output()));
          alloc_field(lay, val_id("pad"), make_int_array(param.pad()));
          alloc_field(lay, val_id("size"), make_int_array(param.kernel_size()));
          alloc_field(lay, val_id("stride"), make_int_array(param.stride()));
@@ -1216,8 +1303,16 @@ static void loadCaffeNet(caffe::NetParameter net,value m,bool weightsOnly )
             alloc_field(lay, val_id("stride_w"), alloc_int(param.stride_w()));
          if (param.has_stride_h())
             alloc_field(lay, val_id("stride_h"), alloc_int(param.stride_h()));
+
+         if (param.has_kernel_size())
+            alloc_field(lay, val_id("size"), alloc_int(param.kernel_size()));
+         if (param.has_kernel_w())
+            alloc_field(lay, val_id("kernel_w"), alloc_int(param.kernel_w()));
+         if (param.has_kernel_h())
+            alloc_field(lay, val_id("kernel_h"), alloc_int(param.kernel_h()));
+
          if (param.has_global_pooling())
-            alloc_field(lay, val_id("global_pooling"), alloc_int(param.global_pooling()));
+            alloc_field(lay, val_id("global_pooling"), alloc_bool(param.global_pooling()));
       }
       else if (layer_type=="Concat")
       {
@@ -1225,6 +1320,24 @@ static void loadCaffeNet(caffe::NetParameter net,value m,bool weightsOnly )
          if (param.has_axis())
             alloc_field(lay, val_id("axis"), alloc_int(param.axis()));
       }
+      else if (layer_type=="Eltwise")
+      {
+         auto &param = layer.eltwise_param();
+         int op = param.operation();
+         alloc_field(lay, val_id("operation"), alloc_int(op));
+
+         int n = param.coeff_size();
+         value coeffs = alloc_array(n);
+         for(int i=0;i<n;i++)
+             val_array_set_i(coeffs,i,alloc_int(param.coeff(i)));
+         alloc_field(lay, val_id("coeffs"), coeffs );
+      }
+      else if (layer_type=="InnerProduct")
+      {
+         auto &param = layer.inner_product_param();
+         alloc_field(lay, val_id("transpose"), alloc_bool(param.transpose()));
+      }
+
       else
       {
          printf("Unknown layer type %s\n", layer_type.c_str() );

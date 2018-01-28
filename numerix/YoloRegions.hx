@@ -23,7 +23,7 @@ class YoloRegions extends Layer
       var num = Std.parseInt(config.num);
       classCount = Std.parseInt(config.classes);
       if (config.classNames==null)
-         classNames = coco_classes;
+         classNames = CocoClasses.names;
       else
          classNames = Std.string(config.classNames).split(",");
 

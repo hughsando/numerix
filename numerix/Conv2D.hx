@@ -15,10 +15,12 @@ class Conv2D extends Layer
    public var weights(default,null):Tensor;
    public var bias(default,null):Tensor;
    public var allowTransform(default,null):Bool;
+   public var inputChannels(default,null):Int;
 
    public var scales(default,null):Tensor;
    public var means(default,null):Tensor;
    public var vars(default,null):Tensor;
+
 
    public function new(config:Dynamic, input:Layer)
    {
@@ -33,6 +35,7 @@ class Conv2D extends Layer
       strides = config.strides;
       filters = config.filters;
       useBias = config.useBias;
+      inputChannels = 0;
       if (config.allowTransform==null)
          allowTransform = defaultAllowTransform;
       else
@@ -60,6 +63,12 @@ class Conv2D extends Layer
          throw 'Unknown padding $pad';
    }
 
+   public function setActivation(inActication:Int)
+   {
+      activation = inActication;
+      layConv2DSetActication(handle,inActication);
+   }
+
    public function setNormalization(inScales:Tensor, inMeans:Tensor, inVars:Tensor)
    {
       scales = inScales;
@@ -72,8 +81,12 @@ class Conv2D extends Layer
 
    override public function setWeights(inWeights:Array<Tensor>)
    {
-      // TODO - set filters/kernel
       weights = inWeights[0];
+      var s = weights.shape;
+      kernelSize = [ s[2], s[1] ];
+      filters = s[0];
+      inputChannels = s[3];
+
       bias = inWeights[1];
       release();
 
@@ -83,12 +96,27 @@ class Conv2D extends Layer
    }
 
 
-   override public function toString() return 'Conv2D($name:$kernelSize x $filters $activation $weights $bias)';
+   //override public function toString() return 'Conv2D($name:$kernelSize x $filters $activation $weights $bias)';
+   override public function toString()
+   {
+      var w = 0;
+      var h = 0;
+      if (kernelSize.length==2)
+      {
+         w= kernelSize[0];
+         h= kernelSize[1];
+      }
+      else
+         w = h = kernelSize[0];
+
+      return 'Conv2D($name: $w x $h x $filters)';
+   }
 
 
 
    static var layCreateConv2D = Loader.load("layCreateConv2D","oiiooobo");
    static var layConv2DSetNorm = Loader.load("layConv2DSetNorm","oooov");
+   static var layConv2DSetActication = Loader.load("layConv2DSetActication","oiv");
 
 
 }

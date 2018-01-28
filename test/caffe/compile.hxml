@@ -1,0 +1,6 @@
+-cpp cpp
+-main Test
+-lib hxhdf5
+-lib numerix
+-lib nme
+-D HXCPP_M64

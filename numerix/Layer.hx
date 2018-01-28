@@ -1,6 +1,7 @@
 package numerix;
 import numerix.*;
 import Sys.println;
+import haxe.Timer;
 
 class Layer
 {
@@ -11,6 +12,8 @@ class Layer
    static public inline var ACT_RELU = 1;
    static public inline var ACT_SIGMOID = 2;
    static public inline var ACT_LEAKY = 3;
+   static public var showTimes(default,set) = false;
+   static public var totalTime = 0.0;
 
 
 
@@ -41,6 +44,15 @@ class Layer
       layRelease(handle);
       handle = null;
    }
+
+   public static function set_showTimes(inShow:Bool) : Bool
+   {
+      showTimes = inShow;
+      totalTime = 0.0;
+      layAccurateTimes(inShow);
+      return inShow;
+   }
+
 
    public function unlink()
    {
@@ -80,6 +92,9 @@ class Layer
    {
       if (handle!=null && !valid)
       {
+         var t0 = 0.0;
+         var t1 = 0.0;
+
          if (inputs.length==1)
          {
             if (inputs[0]==null)
@@ -87,7 +102,11 @@ class Layer
             var src = inputs[0].getOutput();
             if (src==null)
                throw "Bad output :" + this + " " + inputs;
+            if (showTimes)
+               t0 = Timer.stamp();
             resultBuffer = Tensor.fromHandle( layRun(handle, this, src) );
+            if (showTimes)
+               t1 = Timer.stamp();
          }
          else if (inputs.length==2)
          {
@@ -96,13 +115,40 @@ class Layer
             var src = [ inputs[0].getOutput(), inputs[1].getOutput() ];
             if (src[0]==null || src[1]==null)
                throw "Bad output: " + this + " " + src;
+            if (showTimes)
+               t0 = Timer.stamp();
             resultBuffer = Tensor.fromHandle( layRun(handle, this, src) );
+            if (showTimes)
+               t1 = Timer.stamp();
          }
          else
          {
+            if (showTimes)
+               t0 = Timer.stamp();
             resultBuffer = Tensor.fromHandle( layRun(handle, this, null) );
+            if (showTimes)
+               t1 = Timer.stamp();
          }
          valid = true;
+
+         if (showTimes)
+         {
+            var diff = t1-t0;
+            totalTime += diff;
+            var display = Std.int(totalTime*10000)*0.1;
+            diff = Std.int(diff*10000)*0.1;
+            var shape = resultBuffer.shape;
+            if (shape.length>2)
+            {
+               var c = shape[ shape.length-1 ];
+               var w = shape[ shape.length-2 ];
+               var h = shape[ shape.length-3 ];
+
+               println(' [$w,$h,$c] $this $diff'+'ms' /*+ ' -> $display'+'ms'*/ );
+            }
+            else
+               println(' $this $diff'+"ms");
+         }
       }
 
       //if ( resultBuffer.channels>0)
@@ -116,6 +162,11 @@ class Layer
       return layGetBoxes(handle);
    }
 
+   public function getClasses() : Array< Classification >
+   {
+      return [];
+   }
+
    public function padInputsWithZero()
    {
       laySetPadInput(handle);
@@ -127,6 +178,7 @@ class Layer
    static var laySetPadInput = Loader.load("laySetPadInput","ov");
    static var layRelease = Loader.load("layRelease","ov");
    static var layGetBoxes = Loader.load("layGetBoxes","oo");
+   static var layAccurateTimes = Loader.load("layAccurateTimes","bv");
 }
 
 

@@ -80,6 +80,8 @@ class Test
       if (bmpname!=null && bmpname.endsWith(".dat"))
       {
          var bytes = sys.io.File.getBytes(bmpname);
+         if (bytes.length!=3*model.height*model.width)
+            throw "Length of .dat file does not match specified model file size " + model.width + "x" + model.height + "x3";
          val = Tensor.fromBytes(bytes,Nx.float32, [3, model.height, model.width] );
          val = val.reorder([1,2,0],true);
       }
@@ -105,14 +107,36 @@ class Test
             var t0 = haxe.Timer.stamp();
             for(go in 0...10)
                result = model.run(val);
-            println("Time 10: " + Std.int((haxe.Timer.stamp()-t0)*100) + "ms");
+            var time = (haxe.Timer.stamp()-t0);
+            Layer.showTimes = true;
+            result = model.run(val);
+            println("Time 10: " + Std.int(time*100) + "ms");
          }
 
          var boxes = model.outputLayer.getBoxes();
-         for(box in boxes)
-            println(box.className + ":" + box.prob + "  " + box.w + "x" + box.h);
-         println( result );
-         println( result.min + "..." + result.max );
+         if (boxes!=null &&boxes.length>0)
+         {
+            for(box in boxes)
+               println(box.className + ":" + box.prob + "  " + box.w + "x" + box.h);
+         }
+         else
+         {
+            var classes = model.outputLayer.getClasses();
+            if (classes!=null && classes.length>0)
+            {
+               for(c in 0...classes.length)
+               {
+                  if (c>4) break;
+                  var cls = classes[c];
+                  println(c + " " + cls);
+               }
+            }
+            else
+            {
+               println( result );
+               println( result.min + "..." + result.max );
+            }
+         }
          Io.writeFile("result.nx", result);
 
          #if nme

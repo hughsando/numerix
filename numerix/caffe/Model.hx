@@ -7,44 +7,11 @@ import numerix.Nx;
 import cpp.NativeMath.idiv;
 using StringTools;
 
-class Params
-{
-  public var w:Int;
-  public var h:Int;
-  public var channels:Int;
-  public var layer:Layer;
 
-  public function new(inW=0, inH=0, inC=0, inLayer=null)
-  {
-     w = inW;
-     h = inH;
-     channels = inC;
-     layer = inLayer;
-  }
-}
-
-class Node
-{
-   public var inputs:Array<Dynamic>;
-   public var outputs:Array<Dynamic>;
-
-   public function new()
-   {
-      inputs = [];
-      outputs = [];
-   }
-   public function toString()
-   {
-      var inName = inputs.map( function(x) return x.name );
-      var outName = outputs.map( function(x) return x.name );
-      return 'Node($inName,$outName)';
-   }
-}
 
 class Model extends numerix.Model
 {
    var transpose:Bool;
-   var paramStack:Array<Params>;
    var reorgLayer:Reorg = null;
    var filename:String;
    var weightName:String;
@@ -67,182 +34,226 @@ class Model extends numerix.Model
       }
 
 
-      var nodeMap = new Map<String, Node>();
-      function makeNode(name:String)
-      {
-         if (nodeMap.exists(name))
-            return nodeMap.get(name);
-         var node = new Node();
-         nodeMap.set(name,node);
-         return node;
-      }
-
       var layers:Array<Dynamic> = caffeLoad(txtName, binName);
-      var first:Dynamic = null;
+
+      // BOTTOM = input layer name(s)
+      // TOP = set output name
+
+      var layerMap = new Map<String, Layer>();
+
+
       for(layer in layers)
       {
-         var bottom:Array<String> = layer.bottom;
-         if (bottom!=null)
-            for(b in bottom)
-               makeNode(b).outputs.push(layer);
-         else
-            first = layer;
-
          var top:Array<String> = layer.top;
-         if (top!=null)
-            for(t in top)
-               makeNode(t).inputs.push(layer);
+         if (top!=null && top.length==0)
+            throw "caffe layer without top:" + top;
+         var outName = top[0];
+
+
+         var inputLayers:Array<Layer> = layer.bottom==null ? [] :
+              layer.bottom.map( layerMap.get );
+
+         var lastLayer:Layer = null;
+         switch(layer.type)
+         {
+            case "Input":
+               var lay = new InputLayer();
+               if (inputLayer==null)
+               {
+                  inputLayer = lay;
+                  var shape:Array<Int> = layer.input_dim;
+                  if (shape!=null)
+                  {
+                      switch(shape.length)
+                      {
+                         case 4:
+                            height = shape[2];
+                            width = shape[3];
+                         case 3:
+                            height = shape[1];
+                            width = shape[2];
+                         default:
+                            throw "Could not use input shape " + shape;
+                      }
+                  }
+               }
+               layerMap.set(outName,lastLayer = lay);
+
+            case "Convolution":
+               var cfg:Dynamic = { };
+
+               var padSize:Int = 0;
+               var pad:Array<Int> = layer.pad;
+               if (pad!=null)
+               {
+                  if (pad.length!=0)
+                  {
+                     if (pad.length!=1 && pad[0]!=pad[1])
+                        throw "Convolution.pad - expected padding to be the same";
+                     padSize = pad[0];
+                  }
+               }
+               else if (layer.pad_w !=null)
+               {
+                  if (layer.pad_w!=layer.pad_h)
+                     throw "Convolution - expected pad_w = pad_h";
+                  padSize = layer.pad_w;
+               }
+
+               cfg.outputs = layer.filters;
+               cfg.dilation = layer.dilation;
+
+               var strides = layer.strides;
+               if (layer.stride_w!=null && layer.stride_h!=null)
+                   strides = [ Std.int(layer.stride_w), Std.int(layer.stride_h) ];
+               cfg.strides = strides;
+
+               var size:Array<Int> = layer.size;
+               if (layer.kernel_w!=null && layer.kernel_h!=null)
+                   size = [ Std.int(layer.kernel_w), Std.int(layer.kernel_h) ];
+               cfg.kernelSize = size;
+
+               if (padSize==0)
+                  cfg.padding='valid';
+               else if (padSize== Std.int( (size[0]-1)/2 ))
+                  cfg.padding='same';
+               else
+                  throw 'Convolution - could not calculate padding - $padSize / $size' + ((size[0]-1)/2);
+
+               if (inputLayers.length!=1 || inputLayers[0]==null)
+                  throw "Convolution - expected 1 input layer";
+
+               var lay = new Conv2D(cfg, inputLayers[0]);
+               layerMap.set(outName,lastLayer = lay);
+
+               var weights:Array<Dynamic> = layer.weights;
+               var tensors:Array<Tensor> = weights.map( Tensor.fromHandle );
+               if (tensors[0]!=null)
+                  tensors[0] = tensors[0].reorder([0,2,3,1]);
+               lay.setWeights(tensors);
+
+               //trace(tensors[0]);
+               //tensors[0].print();
+               //trace(tensors[1]);
+               //tensors[1].print();
+
+
+            case "ReLU":
+               var conv:Conv2D = cast inputLayers[0];
+               if (conv==null)
+                  throw "ReLU must follow a Convolution layer";
+               conv.setActivation(Layer.ACT_RELU);
+               layerMap.set(outName,lastLayer = conv);
+
+
+            case "Dropout":
+               if (inputLayers.length!=1)
+                  throw "Dropout - expected single input";
+               layerMap.set(outName,lastLayer = inputLayers[0]);
+
+
+            case "Split":
+               if (inputLayers.length!=1)
+                  throw "Split - expected single input";
+               var lay = inputLayers[0];
+               for(t in top)
+                  layerMap.set(t,lay);
+               lastLayer = lay;
+
+
+            case "Pooling":
+               if (layer.global_pooling==null)
+               {
+                  var cfg:Dynamic = { };
+
+                  var padSize:Int = 0;
+                  var pad:Null<Int> = layer.pad;
+                  if (pad!=null)
+                  {
+                     padSize = pad;
+                  }
+                  else if (layer.pad_w !=null)
+                  {
+                     if (layer.pad_w!=layer.pad_h)
+                        throw "Pooling - expected pad_w = pad_h";
+                     padSize = layer.pad_w;
+                     trace(padSize);
+                  }
+
+                  var strides = layer.strides;
+                  if (layer.stride!=null)
+                  {
+                     var s:Int = layer.stride;
+                     strides = [s,s];
+                  }
+                  else if (layer.stride_w!=null && layer.stride_h!=null)
+                      strides = [ Std.int(layer.stride_w), Std.int(layer.stride_h) ];
+
+                  if (strides==null)
+                      throw "Pooling - could not find stride";
+                  cfg.strides = strides;
+
+                  var size:Array<Int> = layer.size;
+                  if (layer.size!=null)
+                  {
+                     var ks:Int = layer.size;
+                     size = [ks,ks];
+                  }
+                  else if (layer.kernel_w!=null && layer.kernel_h!=null)
+                      size = [ Std.int(layer.kernel_w), Std.int(layer.kernel_h) ];
+    
+                  if (size==null)
+                     throw "Pooling - could not find kernel size";
+                  cfg.kernelSize = size;
+
+
+                  if (padSize==0)
+                     cfg.padding='valid';
+                  else if (padSize== Std.int( (size[0]+strides[0]-1)/2 ))
+                     cfg.padding='same';
+                  else
+                     throw 'Pooling - could not calculate padding - $padSize $strides / $size';
+
+                  if (layer.method!=0)
+                     println("todo - pool type : " + layer.method );
+
+                  var lay = new MaxPool(cfg, inputLayers[0]);
+                  layerMap.set(outName,lastLayer = lay);
+               }
+               else
+               {
+                  if (layer.method!=1)
+                     println("todo - global pool type : " + layer.method );
+
+                  var lay = new GlobalPool(layer, inputLayers[0]);
+                  layerMap.set(outName,lastLayer = lay);
+               }
+
+
+            case "Concat":
+               if (inputLayers.length!=2)
+                  throw "Concat - expected 2 inputs";
+               var lay = new Concat(layer, inputLayers[0],inputLayers[1]);
+               layerMap.set(outName,lastLayer = lay);
+
+
+
+            case "Softmax":
+               if (inputLayers.length!=1)
+                  throw "Softmax - expected single input";
+               var lay = new Softmax(layer, inputLayers[0]);
+               layerMap.set(outName,lastLayer = lay);
+
+
+            default:
+               throw "Unknown layer type " + layer.type;
+         }
+
+         if (lastLayer!=null && (layers.length==0 || layers[layers.length-1]!=layers) )
+            addLayer(lastLayer);
       }
-
-      println('First $first');
-
-      for(n in nodeMap.keys())
-      {
-         var node = nodeMap.get(n);
-         if (node.outputs.length==0)
-            println('OUT node ' + node);
-         if (node.inputs.length==0)
-            println('IN node ' + node);
-      }
-
    }
 
-   /*
-   function createLayer(file:haxe.io.Input, config:Dynamic, params:Params) : Params
-   {
-      var name = config.class_name;
-      switch(name)
-      {
-         case "net" :
-            width = config.width;
-            height = config.height;
-            channels = config.channels;
-            inputLayer = new InputLayer();
-            return new Params(width, height, channels, inputLayer);
-
-         case "convolutional" :
-            var size:Int = config.size;
-            config.kernelSize = [ size,size ];
-            var stride:Int = config.stride;
-            config.strides = [ stride,stride ];
-            config.padding = config.pad==1 ? "same" : "valid";
-            config.useBias = true;
-            if (config.activation==null)
-               config.activation = "logistic";
-
-            var conv2D = new Conv2D(config, params.layer);
-            var n:Int = config.filters;
-            var w = params.w;
-            var h = params.h;
-            var c = params.channels;
-            //println('Convolutional $w,$h,$c');
-
-            var buffer = Bytes.alloc(n*4);
-            checkData(file);
-            file.readBytes(buffer,0,n*4);
-            var bias = Tensor.fromBytes(buffer,Nx.float32,[n]);
-
-            if (config.batch_normalize)
-            {
-               // output scales, mean, variance
-               file.readBytes(buffer,0,n*4);
-               var scales = Tensor.fromBytes(buffer,Nx.float32,[n]);
-               file.readBytes(buffer,0,n*4);
-               var means = Tensor.fromBytes(buffer,Nx.float32,[n]);
-               file.readBytes(buffer,0,n*4);
-               var vars = Tensor.fromBytes(buffer,Nx.float32,[n]);
-
-               conv2D.setNormalization(scales, means, vars);
-            }
-            var buffer = Bytes.alloc(n*c*size*size*4);
-            file.readBytes(buffer,0,buffer.length);
-            var weights = Tensor.fromBytes(buffer,Nx.float32,[n,c,size,size]);
-            weights = weights.reorder([0,2,3,1],true);
-            //println(" weight " + weights.min + "..." + weights.max );
-            //println('Conv2D $weights $bias');
-
-            conv2D.setWeights([weights,bias]);
-            if (conv2D.padding==Layer.PAD_SAME)
-            {
-               return new Params(
-                   idiv(params.w + stride-1,stride),
-                   idiv(params.h + stride-1,stride),
-                   n, conv2D );
-            }
-            else
-            {
-               return new Params(
-                  idiv(params.w - size+1,stride),
-                  idiv(params.h - size+1,stride),
-                   n, conv2D );
-            }
-
-         case "maxpool" :
-            var size:Int = config.size;
-            config.kernelSize = [ size,size ];
-            var stride:Int = config.stride;
-            config.strides = [ stride,stride ];
-            config.padding = 'same';
-            //println('Maxpool ${params.w},${params.h},${params.channels}');
-            var maxPool = new MaxPool(config, params.layer);
-            if (maxPool.padding==Layer.PAD_SAME)
-            {
-               return new Params(
-                 idiv(params.w + stride-1,stride),
-                 idiv(params.h + stride-1,stride),
-                 params.channels, maxPool );
-            }
-            else
-            {
-               return new Params(
-                 idiv(params.w - size+1 + stride-1,stride),
-                 idiv(params.h - size+1 + stride-1,stride),
-                 params.channels, maxPool );
-            }
-
-         case "route" :
-            var lays = config.layers.split(",");
-            var l = paramStack.length;
-            if (lays.length==1)
-            {
-               var old:Params = untyped paramStack[ l + Std.parseInt(lays[0]) ];
-               //println('route1 ${old.w},${old.h},${old.channels}');
-               return old;
-            }
-
-            var l0:Params = untyped  paramStack[ l + Std.parseInt(lays[0]) ];
-            var l1:Params = untyped  paramStack[ l + Std.parseInt(lays[1]) ];
-            //println('Concat ${l0.w},${l0.w},${l0.channels+l1.channels}');
-            var cc =  new Concat(config,l0.layer,l1.layer);
-            return new Params(l0.w,l0.h,l0.channels + l1.channels, cc);
-
-         case "reorg" :
-            var stride = Std.parseInt(config.stride);
-            var reorg =  new Reorg(config, params.layer);
-            var w = idiv(params.w, stride);
-            var h = idiv(params.h, stride);
-            reorgLayer = reorg;
-            return new Params(w,h,params.channels*stride*stride, reorg);
-
-         case "region" :
-            var regions = new YoloRegions(config,params.layer);
-            return new Params(1,1,1, regions);
-
-         case "ncs" :
-            var graphDir = haxe.io.Path.directory(filename);
-            if (graphDir=="") graphDir = ".";
-
-            var ncs = new Movidius(config, params.layer, graphDir);
-            return new Params(ncs.outputWidth, ncs.outputHeight, ncs.outputChannels, ncs);
-
-
-         default:
-            throw 'Unknown layer type $name';
-      }
-
-      return null;
-   }
-   */
 
    static var caffeLoad = Loader.load("caffeLoad","sso");
 }

@@ -61,8 +61,8 @@ Tensor *Tensor::makeBuffer(Tensor *inBuffer, int inW, int inH, int inChannels, i
    }
 
    Shape s(3);
-   s[0] = inW;
-   s[1] = inH;
+   s[0] = inH;
+   s[1] = inW;
    s[2] = inChannels;
    return new Tensor( inType, s );
 }
@@ -120,7 +120,8 @@ void Tensor::printSub(const std::string &indent, int offset, int dim, int inMaxE
       if (dotdotdot)
       {
          printf("%s   ...\n", indent.c_str());
-         printSub(next, offset + (size-2)*strides[dim], dim+1,inMaxElems);
+
+         printSub(next, offset + (size-1)*strides[dim], dim+1,inMaxElems);
       }
 
       printf("%s]\n",indent.c_str());
@@ -495,7 +496,11 @@ void TReorder(const DATA *src, void *inDest,
 Tensor *Tensor::reorder(const std::vector<int> &order)
 {
    if (order.size()!=shape.size())
-      TensorThrow( "Wrong number of coordinate in reorer" );
+   {
+      char buffer[1000];
+      sprintf(buffer,"Wrong number of coordinates in reorder %d!=%d", (int)order.size(),(int)shape.size() );
+      TensorThrow(buffer);
+   }
 
    for(int i=0;i<order.size();i++)
       if (std::find(order.begin(), order.end(), i) == order.end())

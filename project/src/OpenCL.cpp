@@ -435,6 +435,7 @@ void oclGetDeviceProps(void *inDevice, OclProps &outProps, int &outComputeUnits)
 
 
 
+// --- MaxPool --------------------------------------
 
 
 static const char *oclMaxPoolProg = 
@@ -583,10 +584,21 @@ public:
       if (err)
          TensorThrow("OpenCLMaxPool - could not clEnqueueNDRangeKernel");
 
+
+      if (Layer::accurateTimes)
+      {
+         err = clFinish(ctx->queue0);
+         if (err)
+         {
+            printf("Error in clFinish = %d\n", err);
+            TensorThrow("OpenCLConv2D - Error waiting clFinish");
+         }
+      }
+
+
       return result;
    }
 };
-
 
 
 Layer *oclCreateMaxPool(int sizeX, int sizeY,
@@ -597,6 +609,145 @@ Layer *oclCreateMaxPool(int sizeX, int sizeY,
 }
 
 
+
+
+// --- Concat --------------------------------------
+
+static const char *oclConcatProg = 
+"__kernel void Concat(const __global float* src0, const __global float *src1, __global float* dest, const int srcW, const int srcH) {\n"
+    "const int x = get_global_id(0);\n"
+    "const int y = get_global_id(1);\n"
+    "const __global float *i0 = src0 + (y*srcW + x)*IN0;\n"
+    "const __global float *i1 = src1 + (y*srcW + x)*IN1;\n"
+    "__global float *d = dest + (y*srcW + x)*(IN0+IN1);\n"
+
+    "for(int f=0;f<IN0;f++) {\n"
+       "d[f] = i0[f];\n"
+    "}\n"
+    "d+=IN0;\n"
+    "for(int f=0;f<IN1;f++) {\n"
+       "d[f] = i1[f];\n"
+    "}\n"
+"}"
+;
+
+
+
+class OpenCLConcat : public Layer
+{
+   cl_kernel  kernel;
+   int lastIn0;
+   int lastIn1;
+
+public:
+   OpenCLConcat( )
+   {
+      OpenCLContext *ctx = (OpenCLContext *)gOclContext;
+      if (!ctx)
+         TensorThrow("OpenCLConcat - no current ocl context");
+
+      lastIn0 = lastIn1 = 0;
+      kernel = 0;
+   }
+
+   ~OpenCLConcat()
+   {
+   }
+
+   void initKernel(OpenCLContext *ctx, int in0, int in1)
+   {
+      lastIn0 = in0;
+      lastIn1 = in1;
+      char buildOptions[1024];
+      sprintf(buildOptions," -DIN0=%d -DIN1=%d", in0, in1);
+      kernel = ctx->makeKernel("CONCAT", oclConcatProg,"Concat", buildOptions);
+   }
+
+   virtual Tensor *run(Tensor *inSrc0, Tensor *inSrc1, Tensor *inBuffer)
+   {
+
+      if (inSrc0->type != inSrc1->type || inSrc0->type!=Float32)
+         TensorThrow("Concat - input types must be float32");
+
+      CShape sin0 = inSrc0->shape;
+      CShape sin1 = inSrc1->shape;
+      if (sin0.size()!=3 || sin1.size()!=3)
+         TensorThrow("Concat only supports H*W*C tensors");
+
+      if (sin0[0]!=sin1[0] || sin0[1]!=sin1[1])
+         TensorThrow("Concat - mismatch image sizes");
+
+      OpenCLContext *ctx = (OpenCLContext *)gOclContext;
+      if (!ctx)
+         TensorThrow("Concat - no OpenCL context");
+
+      int srcH = sin0[0];
+      int srcW = sin0[1];
+      int c0 = sin0[2];
+      int c1 = sin1[2];
+
+      if (kernel && lastIn0!=c0 || lastIn1!=c1)
+         kernel = 0;
+      if (!kernel)
+         initKernel(ctx, c0,c1);
+
+
+      int channels = c0+c1;
+
+      Tensor *result = Tensor::makeBuffer(inBuffer, srcW, srcH, channels, inSrc0->type);
+
+
+      const OclData *src0 = inSrc0->oclRead();
+      const OclData *src1 = inSrc1->oclRead();
+
+      OclData *dest = result->oclWrite();
+
+      cl_int err = 0;
+      err |= clSetKernelArg(kernel, 0, sizeof(cl_mem), &src0);
+      err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &src1);
+      err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &dest);
+      err |= clSetKernelArg(kernel, 3, sizeof(int), &srcW);
+      err |= clSetKernelArg(kernel, 4, sizeof(int), &srcH);
+
+      if (err)
+      {
+         printf("Error setting kernal arg %d\n", err);
+         TensorThrow("OpenCLConcat - error setting args");
+      }
+
+      if (!ctx)
+         TensorThrow("OpenCLConcat - no current ocl context");
+
+      size_t globalSize[2] = { (size_t)srcW, (size_t)srcH };
+ 
+      cl_uint work_dim = 2;
+      err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, 0/*Work offset*/, globalSize, 0, 0, NULL, NULL);
+      if (err)
+         TensorThrow("OpenCLConcat - could not clEnqueueNDRangeKernel");
+
+      if (Layer::accurateTimes)
+      {
+         err = clFinish(ctx->queue0);
+         if (err)
+         {
+            printf("Error in clFinish = %d\n", err);
+            TensorThrow("OpenCLConv2D - Error waiting clFinish");
+         }
+      }
+
+      return result;
+   }
+};
+
+
+
+Layer *oclCreateConcat( )
+{
+   return new OpenCLConcat( );
+}
+
+
+// --- Conv2D --------------------------------------------------------------------
 
 
 
@@ -738,14 +889,16 @@ public:
 
       if (err)
          TensorThrow("OpenCLConv2D - could not clEnqueueNDRangeKernel");
-      /*
-      err = clFinish(ctx->queue0);
-      if (err)
+
+      if (Layer::accurateTimes)
       {
-         printf("Error in clFinish = %d\n", err);
-         TensorThrow("OpenCLConv2D - Error waiting clFinish");
+         err = clFinish(ctx->queue0);
+         if (err)
+         {
+            printf("Error in clFinish = %d\n", err);
+            TensorThrow("OpenCLConv2D - Error waiting clFinish");
+         }
       }
-      */
    }
 };
 

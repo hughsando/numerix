@@ -32,7 +32,7 @@ public:
       if (sin0.size()!=3 || sin1.size()!=3)
          TensorThrow("Concat only supports H*W*C tensors");
 
-      if (sin0[0]!=sin1[0] || sin0[0]!=sin1[0])
+      if (sin0[0]!=sin1[0] || sin0[1]!=sin1[1])
          TensorThrow("Concat - mismatch image sizes");
 
       srcH = sin0[0];
