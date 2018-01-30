@@ -438,7 +438,7 @@ void oclGetDeviceProps(void *inDevice, OclProps &outProps, int &outComputeUnits)
 // --- MaxPool --------------------------------------
 
 
-static const char *oclMaxPoolProg = 
+static const char *oclMaxPool2x2Prog = 
 "__kernel void MaxPool(const __global float* src, __global float* dest, const int destW, const int destH, const int features, const int srcLastX, int const srcLastY, const int srcShift) {\n"
     "const int x = get_global_id(0);\n"
     "const int y = get_global_id(1);\n"
@@ -462,6 +462,55 @@ static const char *oclMaxPoolProg =
        "m1 = src[o3+f];\n"
        "float mb = m0>m1 ? m0 : m1;\n"
        "dest[dOff+f] = ma>mb ? ma:mb;\n"
+    "}\n"
+"}"
+;
+
+
+static const char *oclMaxPool3x3Prog = 
+"__kernel void MaxPool(const __global float* src, __global float* dest, const int destW, const int destH, const int features, const int srcLastX, int const srcLastY, const int srcShift) {\n"
+    "const int x = get_global_id(0);\n"
+    "const int y = get_global_id(1);\n"
+
+    "const int srcStride = (destW<<srcShift)*features;\n"
+    "const int srcY = y<<srcShift;\n"
+    "const int srcX = x<<srcShift;\n"
+    "const int dy = srcStride;\n"
+    "const int dx = features;\n"
+
+    //7 4 8
+    //3 0 1
+    //6 2 5
+    "const int o0 = srcY*srcStride + srcX*features;\n"
+    "const int o1 = srcX<srcLastX ? o0+dx : o0;\n"
+    "const int o2 = srcY<srcLastY ? o0+dy : o0;\n"
+    "const int o3 = srcX>0 ? o0-dx : o0;\n"
+    "const int o4 = srcY>0 ? o0-dy : o0;\n"
+
+    "const int o5 = srcX<srcLastX ? o2+dx : o0;\n"
+    "const int o6 = srcX>0 ? o0-dx : o0;\n"
+    "const int o7 = srcX>0 ? o4-dx : o0;\n"
+    "const int o8 = srcY>0 ? o1-dy : o0;\n"
+
+    "const int dOff = (y*destW+x)*features;\n"
+    "for(int f=0;f<features;f++) {\n"
+       "float m0 = src[o0+f];\n"
+       "float m1 = src[o1+f];\n"
+       "float ma = m0>m1 ? m0 : m1;\n"
+       "m0 = src[o2+f];\n"
+       "m1 = src[o3+f];\n"
+       "float mb = m0>m1 ? m0 : m1;\n"
+       "float mc = ma>mb ? ma : mb;\n"
+       "m0 = src[o4+f];\n"
+       "m1 = src[o5+f];\n"
+       "ma = m0>m1 ? m0 : m1;\n"
+       "m0 = src[o6+f];\n"
+       "m1 = src[o7+f];\n"
+       "mb = m0>m1 ? m0 : m1;\n"
+       "mc = ma>mb ? ma : mb;\n"
+       "m0 = src[o8+f];\n"
+
+       "dest[dOff+f] = mc>m0 ? mc:m0;\n"
     "}\n"
 "}"
 ;
@@ -502,7 +551,12 @@ public:
       if (!ctx)
          TensorThrow("OpenCLMaxPool - no current ocl context");
 
-      kernel = ctx->makeKernel("MAX_POOL", oclMaxPoolProg,"MaxPool");
+      if (filterX==2 && filterY==2)
+         kernel = ctx->makeKernel("MAX_POOL", oclMaxPool2x2Prog,"MaxPool");
+      else if (filterX==3 && filterY==3)
+         kernel = ctx->makeKernel("MAX_POOL", oclMaxPool3x3Prog,"MaxPool");
+      else
+         TensorThrow("TODO - unimplemented OpenCL MaxPool size");
    }
 
    ~OpenCLMaxPool()

@@ -144,7 +144,7 @@ class Layer
                var w = shape[ shape.length-2 ];
                var h = shape[ shape.length-3 ];
 
-               println(' [$w,$h,$c] $this $diff'+'ms' /*+ ' -> $display'+'ms'*/ );
+               println(' [$w,$h,$c] $this $diff'+'ms'/* + ' (total so far: $display'+'ms)'*/ );
             }
             else
                println(' $this $diff'+"ms");

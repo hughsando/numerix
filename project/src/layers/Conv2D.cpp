@@ -427,7 +427,7 @@ public:
          if (y>=destH)
             break;
 
-         const float *src = (const float *)src0->cpuRead() + srcW*inputs*y;
+         const float *src = (const float *)src0->cpuRead() + srcW*inputs*y*strideY;
          float *dest = (float *)destTensor->cpuWrite() + destW*outputs*y;
          for(int x=0;x<destW;x++)
          {
@@ -491,7 +491,7 @@ public:
 
                }
             }
-            src+=inputs;
+            src+=inputs*strideX;
          }
       }
    }
@@ -522,7 +522,7 @@ public:
 
 
          float *dest = (float *)destTensor->cpuWrite() + destW*outputs*y;
-         int srcY = y;
+         int srcY = y*strideY;
 
          int dyMin = std::max(padOy-srcY,0);
          int dyMax = std::min(srcH+padOy-srcY,filterY);
@@ -535,7 +535,7 @@ public:
 
          for(int x=0;x<destW;x++)
          {
-            int srcX = x;
+            int srcX = x*strideX;
 
             int dxMin = std::max(padOx-srcX,0);
             int dxMax = std::min(srcW+padOx-srcX,filterX);
@@ -1278,7 +1278,7 @@ Layer *Layer::createConv2D(int strideY, int strideX,
 
    #ifdef NUMERIX_WINOGRAD
    if (inAllowTransform && filter.size()==4 && (filter[0]&3)==0 && filter[1]==3 && filter[2]==3 && (filter[3]&3)==0 &&
-       pweights==0 )
+       pweights==0 && strideX==1 &&  strideY==1)
       return new Conv2DWinograd(strideY, strideX, activation, padding, weights, bias);
    #endif
 

@@ -62,6 +62,7 @@ class Test
          }
       }
 
+
       if (args.remove("-notrans"))
          numerix.Conv2D.defaultAllowTransform = false;
 
@@ -88,9 +89,23 @@ class Test
       #if nme
       else if (bmpname!=null)
       {
+
+         // mean_value: 104
+         // mean_value: 117
+         // mean_value: 123
+
          //var scaling = NmeTools.TRANS_STD;
-         var scaling = NmeTools.TRANS_UNIT_SCALE;
+         //var scaling = NmeTools.TRANS_UNIT_SCALE;
+         var scaling = NmeTools.TRANS_UNSCALED;
          val = NmeTools.loadImageF32( bmpname, scaling );
+         var pixels = val.width * val.height;
+         var idx = 0;
+         for(p in 0...pixels)
+         {
+            val[idx] = val[idx]-104; idx++;
+            val[idx] = val[idx]-117; idx++;
+            val[idx] = val[idx]-123; idx++;
+         }
       }
       #end
 
@@ -138,6 +153,8 @@ class Test
             }
          }
          Io.writeFile("result.nx", result);
+         for(layer in model.layers)
+            println(layer.name + " = " + (layer.resultBuffer==null?"?" : ""+layer.resultBuffer[0]) );
 
          #if nme
          if (result.channels==3)

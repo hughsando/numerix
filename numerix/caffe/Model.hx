@@ -103,7 +103,7 @@ class Model extends numerix.Model
                cfg.outputs = layer.filters;
                cfg.dilation = layer.dilation;
 
-               var strides = layer.strides;
+               var strides = layer.stride;
                if (layer.stride_w!=null && layer.stride_h!=null)
                    strides = [ Std.int(layer.stride_w), Std.int(layer.stride_h) ];
                cfg.strides = strides;
@@ -180,7 +180,7 @@ class Model extends numerix.Model
                      trace(padSize);
                   }
 
-                  var strides = layer.strides;
+                  var strides = layer.stride;
                   if (layer.stride!=null)
                   {
                      var s:Int = layer.stride;
