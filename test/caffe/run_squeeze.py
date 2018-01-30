@@ -19,6 +19,18 @@ net.blobs[ net.inputs[0] ].data[0] = im
 net.forward()
 
 result = net.blobs[ net.outputs[0] ].data[0];
-for k in net.blobs.keys():
-    print( k,"=", net.blobs[k].data[0].flatten()[0] )
+
+if False:
+    for k in net.blobs.keys():
+        data = net.blobs[k].data[0]
+        shape = data.shape;
+        if (len(shape)==4):
+            print( k,shape," =>")
+        elif (len(shape)==3):
+            print( k,shape," =>", data[ shape[0]-1, shape[1]-1, shape[2]-1] )
+        elif (len(shape)==2):
+            print( k,shape," =>", data[ shape[0]-1, shape[1]-1])
+        else:
+            print( k,shape," =>", data[ shape[0]-1])
+
 print( result.argmax(), "=", result[ result.argmax() ]);

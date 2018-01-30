@@ -19,7 +19,7 @@ class Model
       layers = [];
    }
 
-   public function run(input:Tensor) : Tensor
+   public function run(input:Tensor,inAllowResize=true) : Tensor
    {
       if (outputLayer==null && layers.length>0)
          outputLayer = layers[layers.length-1];
@@ -42,7 +42,7 @@ class Model
             throw "This model only supports images with 3 dimensions";
          var h = shape[0];
          var w = shape[1];
-         if (width!=w || height!=h)
+         if ( (width!=w || height!=h) && inAllowResize)
          {
             resizeBuffer = input.cropAndScale(width,height,resizeBuffer,true);
             input = resizeBuffer;
@@ -64,6 +64,8 @@ class Model
 
    public function addLayer(layer:Layer)
    {
+      if (layers.length>0 && layers[layers.length-1]==layer)
+         throw "Double layer " + layers + "+" + layer;
       layers.push(layer);
    }
 

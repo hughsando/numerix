@@ -338,6 +338,42 @@ class Tensor
 
       int    getIntAt(int inIndex);
       double getFloatAt(int inIndex);
+      double getFloat(int inIdx0) {
+         if (shape.size()!=1)  ShapeError(1);
+         if (inIdx0>=shape[0]) BoundsError(0,inIdx0);
+         return getFloatAt(inIdx0);
+      }
+      double getFloat(int inIdx0,int inIdx1) {
+         if (shape.size()!=2)  ShapeError(2);
+         if (inIdx0>=shape[0]) BoundsError(0,inIdx0);
+         if (inIdx1>=shape[1]) BoundsError(1,inIdx1);
+         return getFloatAt(inIdx0*strides[0]+inIdx1);
+      }
+      double getFloat(int inIdx0,int inIdx1,int inIdx2) {
+         if (shape.size()!=3)  ShapeError(3);
+         if (inIdx0>=shape[0]) BoundsError(0,inIdx0);
+         if (inIdx1>=shape[1]) BoundsError(1,inIdx1);
+         if (inIdx2>=shape[2]) BoundsError(2,inIdx2);
+         return getFloatAt(inIdx0*strides[0]+inIdx1*strides[1]+inIdx2);
+      }
+      double getFloat(int inIdx0,int inIdx1,int inIdx2,int inIdx3) {
+         if (shape.size()!=4)  ShapeError(4);
+         if (inIdx0>=shape[0]) BoundsError(0,inIdx0);
+         if (inIdx1>=shape[1]) BoundsError(1,inIdx1);
+         if (inIdx2>=shape[2]) BoundsError(2,inIdx2);
+         if (inIdx3>=shape[3]) BoundsError(3,inIdx3);
+         return getFloatAt(inIdx0*strides[0]+inIdx1*strides[1]+inIdx2*strides[2]+inIdx3);
+      }
+      double getFloat(int inIdx0,int inIdx1,int inIdx2,int inIdx3,int inIdx4) {
+         if (shape.size()!=5)  ShapeError(5);
+         if (inIdx0>=shape[0]) BoundsError(0,inIdx0);
+         if (inIdx1>=shape[1]) BoundsError(1,inIdx1);
+         if (inIdx2>=shape[2]) BoundsError(2,inIdx2);
+         if (inIdx3>=shape[3]) BoundsError(3,inIdx3);
+         if (inIdx4>=shape[4]) BoundsError(4,inIdx4);
+         return getFloatAt(inIdx0*strides[0]+inIdx1*strides[1]+inIdx2*strides[2]+inIdx3*strides[3]+inIdx4);
+      }
+
 
       double getMin();
       double getMax();
@@ -350,6 +386,9 @@ class Tensor
 
       void convertToNchw(u8 *outData, const u8 *inData) const;
       void convertToNhwc(u8 *outData, const u8 *inData) const;
+
+      void BoundsError(int inDim, int inValue);
+      void ShapeError(int inRequested);
 
    protected:
       TensorData  *data;

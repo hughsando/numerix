@@ -68,9 +68,11 @@ public:
       }
       else // padValid
       {
-         destW = (srcW-filterX+1 + strideX-1)/strideX;
-         destH = (srcH-filterY+1 + strideY-1)/strideY;
+         // This seems to match caffe...
+         destW = (srcW)/strideX;
+         destH = (srcH)/strideY;
       }
+      //printf("MaxPool %dx%d + (%d,%d) %d,%d\n", destW, destW,  filterX, filterY, padOx,padOy);
 
       bool match = false;
       if (inBuffer && inBuffer->shape.size()==3 && inBuffer->type==Float32)

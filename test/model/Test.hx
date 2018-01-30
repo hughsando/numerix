@@ -22,6 +22,7 @@ class Test
       if (cpu)
          numerix.Model.enableGpu(false);
       var doTime = !args.remove("-notime");
+      var allowResize = !args.remove("-noresize");
 
       for(a in args)
       {
@@ -115,16 +116,16 @@ class Test
          println("Warmup...");
 
          var t0 = haxe.Timer.stamp();
-         var result = model.run(val);
+         var result = model.run(val,allowResize);
          println("Warmup Time : " + Std.int((haxe.Timer.stamp()-t0)*1000) + "ms");
          if (doTime)
          {
             var t0 = haxe.Timer.stamp();
             for(go in 0...10)
-               result = model.run(val);
+               result = model.run(val,allowResize);
             var time = (haxe.Timer.stamp()-t0);
             Layer.showTimes = true;
-            result = model.run(val);
+            result = model.run(val,allowResize);
             println("Time 10: " + Std.int(time*100) + "ms");
          }
 
@@ -153,8 +154,25 @@ class Test
             }
          }
          Io.writeFile("result.nx", result);
-         for(layer in model.layers)
-            println(layer.name + " = " + (layer.resultBuffer==null?"?" : ""+layer.resultBuffer[0]) );
+         if (false)
+         {
+            for(layer in model.layers)
+            {
+               var result = "?";
+               var shape = [];
+               if (layer.resultBuffer!=null)
+               {
+                  shape = layer.resultBuffer.shape;
+                  if (shape.length==3)
+                     result = Std.string(layer.resultBuffer.get(shape[0]-1,shape[1]-1,shape[2]-1));
+                  else if (shape.length==2)
+                     result = Std.string(layer.resultBuffer.get(shape[0]-1,shape[1]-1));
+                  else
+                     result = Std.string(layer.resultBuffer[shape[0]-1]);
+               }
+               println(layer.name + " " + shape + " = " + result);
+            }
+         }
 
          #if nme
          if (result.channels==3)

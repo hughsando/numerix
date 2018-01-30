@@ -56,6 +56,7 @@ public:
       return result;
    }
 
+   /*
    Tensor *src0;
 
    void runThread(int threadId)
@@ -72,6 +73,7 @@ public:
             break;
       }
    }
+   */
 };
 
 Layer *Layer::createGlobalPool()

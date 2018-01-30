@@ -54,6 +54,7 @@ class Model extends numerix.Model
               layer.bottom.map( layerMap.get );
 
          var lastLayer:Layer = null;
+         var doAdd = true;
          switch(layer.type)
          {
             case "Input":
@@ -80,7 +81,7 @@ class Model extends numerix.Model
                layerMap.set(outName,lastLayer = lay);
 
             case "Convolution":
-               var cfg:Dynamic = { };
+               var cfg:Dynamic = { name:layer.name };
 
                var padSize:Int = 0;
                var pad:Array<Int> = layer.pad;
@@ -144,12 +145,14 @@ class Model extends numerix.Model
                   throw "ReLU must follow a Convolution layer";
                conv.setActivation(Layer.ACT_RELU);
                layerMap.set(outName,lastLayer = conv);
+               doAdd =false;
 
 
             case "Dropout":
                if (inputLayers.length!=1)
                   throw "Dropout - expected single input";
                layerMap.set(outName,lastLayer = inputLayers[0]);
+               doAdd =false;
 
 
             case "Split":
@@ -159,12 +162,13 @@ class Model extends numerix.Model
                for(t in top)
                   layerMap.set(t,lay);
                lastLayer = lay;
+               doAdd =false;
 
 
             case "Pooling":
                if (layer.global_pooling==null)
                {
-                  var cfg:Dynamic = { };
+                  var cfg:Dynamic = { name:layer.name };
 
                   var padSize:Int = 0;
                   var pad:Null<Int> = layer.pad;
@@ -177,7 +181,7 @@ class Model extends numerix.Model
                      if (layer.pad_w!=layer.pad_h)
                         throw "Pooling - expected pad_w = pad_h";
                      padSize = layer.pad_w;
-                     trace(padSize);
+                     //trace(padSize);
                   }
 
                   var strides = layer.stride;
@@ -249,7 +253,7 @@ class Model extends numerix.Model
                throw "Unknown layer type " + layer.type;
          }
 
-         if (lastLayer!=null && (layers.length==0 || layers[layers.length-1]!=layers) )
+         if (doAdd)//lastLayer!=null && (layers.length==0 || layers[layers.length-1]!=layer) )
             addLayer(lastLayer);
       }
    }

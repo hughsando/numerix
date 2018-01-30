@@ -50,6 +50,11 @@ abstract Tensor(Dynamic)
       tdPrint(this, maxElems);
    }
 
+   public function get(idx0:Int,?idx1:Int, ?idx2:Int, ?idx3:Int, ?idx4:Int):Float
+   {
+      return tdGetAt(this, idx0, idx1, idx2, idx3, idx4);
+   }
+
    @:op([])
    public function at(inIndex:Int):Float
    {
@@ -232,6 +237,7 @@ abstract Tensor(Dynamic)
    static var tdSetFlat = Loader.load("tdSetFlat","ov");
    static var tdSetShape = Loader.load("tdSetShape","oov");
    static var tdAt = Loader.load("tdAt","oid");
+   static var tdGetAt = Loader.load("tdGetAt","oiooood");
    static var tdSetAt = Loader.load("tdSetAt","oidiv");
    static var tdResizeAxis = Loader.load("tdResizeAxis","oiiio");
    //static var tdGetMinAxis = Loader.load("tdGetMin","ooo");

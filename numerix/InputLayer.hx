@@ -2,7 +2,6 @@ package numerix;
 
 class InputLayer extends Layer
 {
-   var value:Tensor;
    var lastShape:Array<Int>;
 
    public function new()
@@ -13,17 +12,17 @@ class InputLayer extends Layer
 
    public function set(tensor:Tensor)
    {
-      value = tensor;
+      resultBuffer = tensor;
       valid = true;
       invalidateAll();
    }
 
    override public function getOutput() : Tensor
    {
-      return value;
+      return resultBuffer;
    }
 
-   override public function toString() return 'InputLayer($value)';
+   override public function toString() return 'InputLayer($resultBuffer)';
 
 }
 

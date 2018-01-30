@@ -26,6 +26,7 @@
 #endif
 
 
+
 namespace numerix
 {
 
@@ -502,6 +503,22 @@ double tdAt(value inTensor, int index)
    return tensor->getFloatAt(index);
 }
 DEFINE_PRIME2(tdAt)
+
+double tdGetAt(value inTensor, int idx0, value idx1, value idx2, value idx3, value idx4)
+{
+   TO_TENSOR
+   if (val_is_null(idx1))
+      return tensor->getFloatAt(idx0);
+   if (val_is_null(idx2))
+      return tensor->getFloat(idx0,val_int(idx1));
+   if (val_is_null(idx3))
+      return tensor->getFloat(idx0,val_int(idx1),val_int(idx2));
+   if (val_is_null(idx4))
+      return tensor->getFloat(idx0,val_int(idx1),val_int(idx2),val_int(idx3));
+   return tensor->getFloat(idx0,val_int(idx1),val_int(idx2),val_int(idx3),val_int(idx4));
+}
+DEFINE_PRIME6(tdGetAt)
+
 
 void tdSetAt(value inTensor, int index, double inVal,int count)
 {

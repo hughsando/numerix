@@ -51,16 +51,6 @@ DynamicFunction6(openclLib, CL_API_CALL, cl_int, -99, clGetKernelWorkGroupInfo, 
 namespace numerix
 {
 
-enum ProgramKey
-{
-   progMaxPool,
-   progConv2DBase,
-   progConv2D1x1Base,
-   progConv2D_3x3_32,
-   progConv2DUnpack,
-};
-
-
 
 OclContext *gOclContext = 0;
 
@@ -203,7 +193,7 @@ public:
       inOps += " -D ";
       inOps += inMethod;
       if (useIntelMethod)
-         inOps += " -DINTEL";
+         inOps += " -D INTEL";
       inOps += " -Werror";
       const char *buildOptions = inOps.c_str();
 
@@ -227,7 +217,7 @@ public:
          err = clBuildProgram(prog, 1, &devices[0], buildOptions, 0, 0);
          if (err)
          {
-            printf("Error clBuildProgram : %d\n", err);
+            printf("Error clBuildProgram : (%p) %d\n", devices[0], err);
 
             size_t size = 0;
             clGetProgramBuildInfo(prog, devices[0], CL_PROGRAM_BUILD_LOG, 0, 0, &size);
@@ -639,7 +629,7 @@ public:
          TensorThrow("OpenCLMaxPool - could not clEnqueueNDRangeKernel");
 
 
-      if (Layer::accurateTimes)
+      if (Layer::accurateTimes || true)
       {
          err = clFinish(ctx->queue0);
          if (err)
@@ -849,7 +839,7 @@ public:
             break;
       }
       char argBuf[1000];
-      sprintf(argBuf," -D INPUTS=%d -D OUTPUTS=%d -D FX=%d -D FY=%d",inputs,outputs,filterX,filterY);
+      sprintf(argBuf," -D INPUTS=%d -D OUTPUTS=%d -D FX=%d -D FY=%d -D STRIDE_X=%d -D STRIDE_Y=%d -D DEST_W=%d -D DEST_H=%d",inputs,outputs,filterX,filterY, strideX, strideY, destW, destH);
       buildOptions += argBuf;
 
       OpenCLContext *ctx = (OpenCLContext *)gOclContext;

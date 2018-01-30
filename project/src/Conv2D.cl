@@ -34,17 +34,16 @@ __kernel void Conv2D(const __global float* src, const __global float *weights, c
     const int x = get_global_id(0);
     const int y = get_global_id(1);
     const int srcStride = width*INPUTS;
-    
-    if (x<width && y<height) {
+
     int weightOff = 0;
-    int destOff = (y*width+x) * OUTPUTS;
+    int destOff = (y*DEST_W+x) * OUTPUTS;
     for(int o=0;o<OUTPUTS;o++) {
        float sum=inBias[o];
        for(int dy=dMin; dy<dMax; dy++) {
-          int sy = y+dy;
+          int sy = y*STRIDE_Y+dy;
           if (sy>=0 && sy<height) {
              for(int dx=dMin; dx<dMax; dx++) {
-                 int sx = x+dx;
+                 int sx = x*STRIDE_X+dx;
                  if (sx>=0 && sx<width) {
                     int srcOff = sy*srcStride + INPUTS*sx;
                     for(int i=0;i<INPUTS;i++)
@@ -58,7 +57,6 @@ __kernel void Conv2D(const __global float* src, const __global float *weights, c
        }
     dest[destOff+o] = ACTIVATION(sum);
     }
-   }
 };
 #endif
 

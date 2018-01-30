@@ -128,6 +128,21 @@ void Tensor::printSub(const std::string &indent, int offset, int dim, int inMaxE
    }
 }
 
+void Tensor::BoundsError(int inDim, int inValue)
+{
+   char buf[1000];
+   sprintf(buf,"BoundsError - component %d - requested element %d of %d",inDim, inValue, shape[inDim]);
+   TensorThrow(buf);
+}
+
+void Tensor::ShapeError(int inRequested)
+{
+   char buf[1000];
+   sprintf(buf,"ShapeError requested shape %d, but has %d",inRequested, (int)shape.size());
+   TensorThrow(buf);
+}
+
+
 void Tensor::print(int inMaxElems)
 {
    std::string indent = "";
