@@ -57,6 +57,7 @@ public:
 
    Tensor *run(Tensor *inSrc0, Tensor *inBuffer)
    {
+      startRun();
       boxes.resize(0);
       int h = inSrc0->shape[0];
       int w = inSrc0->shape[1];
@@ -108,6 +109,7 @@ public:
 
       SortBoxes(boxes);
 
+      endRun();
       return dummy;
    }
 

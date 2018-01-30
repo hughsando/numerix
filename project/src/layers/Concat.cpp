@@ -42,6 +42,7 @@ public:
       channels = c0 + c1;
       //printf("Concat -> %d %d %d\n", srcW, srcH, channels);
 
+      startRun();
       Tensor *result = Tensor::makeBuffer(inBuffer, srcW, srcH, channels, inSrc0->type);
 
       bool nchw = inSrc0->isGpuNchw();
@@ -67,6 +68,7 @@ public:
          src0 = 0;
          destTensor = 0;
       }
+      endRun();
 
       return result;
    }

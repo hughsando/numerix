@@ -392,6 +392,7 @@ public:
 
    virtual void doRun(Tensor *input, Tensor *output)
    {
+      startRun();
       src0 = input;
       destTensor = output;
       src0->cpuRead();
@@ -400,6 +401,7 @@ public:
       runThreaded();
       src0 = 0;
       destTensor = 0;
+      endRun();
    }
 
 
@@ -825,6 +827,7 @@ public:
 
    virtual void doRun(Tensor *input, Tensor *output)
    {
+      startRun();
       src0 = input;
       destTensor = output;
       src0->cpuRead();
@@ -834,6 +837,7 @@ public:
 
       src0 = 0;
       destTensor = 0;
+      endRun();
    }
 
    inline void runTile( float *src, float *dest,

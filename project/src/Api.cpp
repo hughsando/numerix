@@ -768,6 +768,14 @@ value layCreateGlobalPool(bool inAverage)
 DEFINE_PRIME1(layCreateGlobalPool);
 
 
+double layGetRunTime(value inLayer)
+{
+   TO_LAYER
+   return layer->getRunTime();
+}
+DEFINE_PRIME1(layGetRunTime);
+
+
 value layCreateSoftmax()
 {
    Layer *layer = 0;

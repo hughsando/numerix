@@ -48,6 +48,12 @@ DynamicFunction6(openclLib, CL_API_CALL, cl_int, -99, clGetProgramBuildInfo, cl_
 
 DynamicFunction6(openclLib, CL_API_CALL, cl_int, -99, clGetKernelWorkGroupInfo, cl_kernel, cl_device_id, cl_kernel_work_group_info, size_t, void *, size_t * );
 
+DynamicFunction2(openclLib, CL_API_CALL, cl_int, -99, clWaitForEvents, cl_uint, const cl_event *);
+
+DynamicFunction5(openclLib, CL_API_CALL, cl_int, -99, clGetEventProfilingInfo, cl_event, cl_profiling_info, size_t, void *,size_t *);
+
+
+
 namespace numerix
 {
 
@@ -136,8 +142,7 @@ public:
       // Force on...
       useIntelMethod = true;
 
-
-      queue0 = clCreateCommandQueue(context, devices[0], 0, &error);
+      queue0 = clCreateCommandQueue(context, devices[0], CL_QUEUE_PROFILING_ENABLE, &error);
       if (!queue0 || error)
          TensorThrow("Could not create OpenCL command queue");
 
@@ -424,6 +429,77 @@ void oclGetDeviceProps(void *inDevice, OclProps &outProps, int &outComputeUnits)
 }
 
 
+class OpenCLLayerData
+{
+public:
+   cl_event timingEvent;
+   double   totalTime;
+   int      runCount;
+   bool     waiting;
+
+
+   OpenCLLayerData()
+   {
+      waiting = false;
+      totalTime = 0.0;
+      runCount = 0;
+   }
+
+   ~OpenCLLayerData()
+   {
+      updateStats();
+   }
+
+   void updateStats()
+   {
+      if (waiting)
+      {
+         waiting = false;
+         clWaitForEvents(1, &timingEvent);
+
+         cl_ulong time_start;
+         cl_ulong time_end;
+
+         clGetEventProfilingInfo(timingEvent, CL_PROFILING_COMMAND_START, sizeof(time_start), &time_start, NULL);
+         clGetEventProfilingInfo(timingEvent, CL_PROFILING_COMMAND_END, sizeof(time_end), &time_end, NULL);
+
+         double nanoSeconds = time_end-time_start;
+         totalTime += nanoSeconds * 1e-9;
+         runCount++;
+      }
+   }
+
+   cl_event *startKernel()
+   {
+      updateStats();
+      waiting = true;
+      return &timingEvent;
+   }
+
+   double getRunTime()
+   {
+      updateStats();
+      if (runCount==0)
+         return 0.0;
+      return totalTime/runCount;
+   }
+
+
+};
+
+class OpenCLLayer : public Layer
+{
+public:
+   OpenCLLayerData data;
+
+   cl_event *startKernel() { return data.startKernel(); }
+   void updateStats() { data.updateStats(); }
+   double getRunTime() { return data.getRunTime(); }
+
+};
+
+
+
 
 // --- MaxPool --------------------------------------
 
@@ -507,7 +583,7 @@ static const char *oclMaxPool3x3Prog =
 
 
 
-class OpenCLMaxPool : public Layer
+class OpenCLMaxPool : public OpenCLLayer
 {
    int        filterY;
    int        filterX;
@@ -624,7 +700,7 @@ public:
       size_t globalSize[2] = { (size_t)destW, (size_t)destH };
  
       cl_uint work_dim = 2;
-      err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, 0/*Work offset*/, globalSize, 0, 0, NULL, NULL);
+      err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, 0/*Work offset*/, globalSize, 0, 0, NULL, startKernel());
       if (err)
          TensorThrow("OpenCLMaxPool - could not clEnqueueNDRangeKernel");
 
@@ -677,7 +753,7 @@ static const char *oclConcatProg =
 
 
 
-class OpenCLConcat : public Layer
+class OpenCLConcat : public OpenCLLayer
 {
    cl_kernel  kernel;
    int lastIn0;
@@ -765,7 +841,7 @@ public:
       size_t globalSize[2] = { (size_t)srcW, (size_t)srcH };
  
       cl_uint work_dim = 2;
-      err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, 0/*Work offset*/, globalSize, 0, 0, NULL, NULL);
+      err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, 0/*Work offset*/, globalSize, 0, 0, NULL, startKernel());
       if (err)
          TensorThrow("OpenCLConcat - could not clEnqueueNDRangeKernel");
 
@@ -803,6 +879,8 @@ class OpenCLConv2D : public Conv2DBase
    int  threads;
    cl_kernel kernel;
    Shape kernelShape;
+   OpenCLLayerData data;
+
 
 public:
    OpenCLConv2D(int inStrideY, int inStrideX,
@@ -820,6 +898,10 @@ public:
    {
 
    }
+
+   cl_event *startKernel() { return data.startKernel(); }
+   void updateStats() { data.updateStats(); }
+   double getRunTime() { return data.getRunTime(); }
 
    void initKernel()
    {
@@ -911,7 +993,7 @@ public:
             cl_uint work_dim = 2;
             size_t globalSize[2] = { (size_t)threads,  (size_t)groupCount  };
             size_t localSize[2] = {  (size_t)threads, 1 };
-            err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, work_offset, globalSize, localSize, 0, NULL, NULL);
+            err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, work_offset, globalSize, localSize, 0, NULL, startKernel());
 
          }
          else
@@ -920,7 +1002,7 @@ public:
             int groupCount = ctx->computeUnits;
             size_t globalSize[1] = { (size_t)(32*32*groupCount) };
             size_t localSize[1] = { (size_t)(32*32) };
-            err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, work_offset, globalSize, localSize, 0, NULL, NULL);
+            err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, work_offset, globalSize, localSize, 0, NULL, startKernel());
          }
       }
       else
@@ -928,7 +1010,7 @@ public:
          size_t globalSize[2] = { (size_t)(destW), (size_t)(destH) };
          cl_uint work_dim = 2;
          size_t *work_offset = 0;
-         err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, work_offset, globalSize, 0, 0, NULL, NULL);
+         err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, work_offset, globalSize, 0, 0, NULL, startKernel());
       }
 
       if (err)

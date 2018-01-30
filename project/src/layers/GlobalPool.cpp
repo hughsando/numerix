@@ -31,6 +31,7 @@ public:
       srcW = sin0[1];
       channels = sin0[2];
 
+      startRun();
       Tensor *result = Tensor::makeBuffer(inBuffer, 1, 1, channels, inSrc0->type);
 
       nchw = inSrc0->isGpuNchw();
@@ -53,6 +54,7 @@ public:
       for(int c=0;c<channels;c++)
          dest[c] = sum[c] * scale;
 
+      endRun();
       return result;
    }
 

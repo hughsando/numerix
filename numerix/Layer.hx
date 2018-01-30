@@ -53,6 +53,8 @@ class Layer
       return inShow;
    }
 
+   public function getRunTime() return layGetRunTime(handle);
+
 
    public function unlink()
    {
@@ -102,11 +104,7 @@ class Layer
             var src = inputs[0].getOutput();
             if (src==null)
                throw "Bad output :" + this + " " + inputs;
-            if (showTimes)
-               t0 = Timer.stamp();
             resultBuffer = Tensor.fromHandle( layRun(handle, this, src) );
-            if (showTimes)
-               t1 = Timer.stamp();
          }
          else if (inputs.length==2)
          {
@@ -115,25 +113,17 @@ class Layer
             var src = [ inputs[0].getOutput(), inputs[1].getOutput() ];
             if (src[0]==null || src[1]==null)
                throw "Bad output: " + this + " " + src;
-            if (showTimes)
-               t0 = Timer.stamp();
             resultBuffer = Tensor.fromHandle( layRun(handle, this, src) );
-            if (showTimes)
-               t1 = Timer.stamp();
          }
          else
          {
-            if (showTimes)
-               t0 = Timer.stamp();
             resultBuffer = Tensor.fromHandle( layRun(handle, this, null) );
-            if (showTimes)
-               t1 = Timer.stamp();
          }
          valid = true;
 
          if (showTimes)
          {
-            var diff = t1-t0;
+            var diff = getRunTime();
             totalTime += diff;
             var display = Std.int(totalTime*10000)*0.1;
             diff = Std.int(diff*10000)*0.1;
@@ -179,6 +169,7 @@ class Layer
    static var layRelease = Loader.load("layRelease","ov");
    static var layGetBoxes = Loader.load("layGetBoxes","oo");
    static var layAccurateTimes = Loader.load("layAccurateTimes","bv");
+   static var layGetRunTime = Loader.load("layGetRunTime","od");
 }
 
 

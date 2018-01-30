@@ -48,13 +48,19 @@ void SortBoxes(Boxes &ioBoxes);
 
 class Layer
 {
+protected:
    volatile int jobId;
    std::vector<unsigned char *> buffers;
+   double runTime;
+   double runStart;
+   int    runCount;
 
 public:
+   typedef unsigned char u8;
    static bool accurateTimes;
 
-   typedef unsigned char u8;
+   Layer();
+
 
    static Layer *createConv2D(int inStrideY, int inStrideX,
                               Activation activation, Padding padding,
@@ -93,7 +99,11 @@ public:
 
    virtual void setActivation(Activation inActivation) { }
 
+   virtual double getRunTime();
+
    int getNextJob();
+   void startRun();
+   void endRun();
 
    float *allocFloats(int count,bool inZero=false);
    void   releaseFloats();

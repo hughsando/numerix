@@ -30,6 +30,8 @@ public:
       srcW = sin0[1];
       channels = sin0[2];
 
+      startRun();
+
       Tensor *result = Tensor::makeBuffer(inBuffer, srcW, srcH, channels, inSrc0->type);
 
       float *dest = (float *)result->cpuWrite(false);
@@ -54,6 +56,8 @@ public:
                *d++ = expChannel[c]*norm;
          }
       }
+
+      endRun();
 
       return result;
    }
