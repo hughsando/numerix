@@ -505,90 +505,6 @@ public:
 // --- MaxPool --------------------------------------
 
 
-static const char *oclMaxPool2x2Prog = 
-"__kernel void MaxPool(const __global float* src, __global float* dest, const int destW, const int destH, const int features, const int srcLastX, int const srcLastY, const int srcShift,const int srcStride) {\n"
-    "const int x = get_global_id(0);\n"
-    "const int y = get_global_id(1);\n"
-
-    "const int srcY = y<<srcShift;\n"
-    "const int srcX = x<<srcShift;\n"
-    "const int dy = srcY<srcLastY ? srcStride : 0;\n"
-    "const int dx = srcX<srcLastX ? features : 0;\n"
-
-    "const int o0 = srcY*srcStride + srcX*features;\n"
-    "const int o1 = o0+dx;\n"
-    "const int o2 = o0+dy;\n"
-    "const int o3 = o2+dx;\n"
-    "const int dOff = (y*destW+x)*features;\n"
-    "for(int f=0;f<features;f++) {\n"
-       "float m0 = src[o0+f];\n"
-       "float m1 = src[o1+f];\n"
-       "float ma = m0>m1 ? m0 : m1;\n"
-       "m0 = src[o2+f];\n"
-       "m1 = src[o3+f];\n"
-       "float mb = m0>m1 ? m0 : m1;\n"
-       "dest[dOff+f] = ma>mb ? ma:mb;\n"
-    "}\n"
-"}"
-;
-
-
-static const char *oclMaxPool3x3Prog = 
-"__kernel void MaxPool(const __global float* src, __global float* dest, const int destW, const int destH, const int features, const int srcLastX, int const srcLastY, const int srcShift,const int srcStride) {\n"
-    "const int x = get_global_id(0);\n"
-    "const int y = get_global_id(1);\n"
-
-    "const int srcX = x<<srcShift;\n"
-    "const int srcY = y<<srcShift;\n"
-
-    //0 1 2
-    //3 4 5
-    //6 7 8
-    "const int o0 = srcY*srcStride + srcX*features;\n"
-    "const int o1 = o0+features;\n"
-    "const int o2 = srcX+1<srcLastX ? o1+features : o0;\n"
-    "const int o3 = o0+srcStride;\n"
-    "const int o4 = o1+srcStride;\n"
-    "const int o5 = o2+srcStride;\n"
-    "const int o6 = srcY+1<srcLastY ? o3 + srcStride : o3;\n"
-    "const int o7 = srcY+1<srcLastY ? o4 + srcStride : o4;\n"
-    "const int o8 = srcY+1<srcLastY ? o5 + srcStride : o5;\n"
-
-
-    /*
-    //7 4 8
-    //3 0 1
-    //6 2 5
-    "const int o0 = srcY*srcStride + srcX*features;\n"
-    "const int o1 = srcX<srcLastX ? o0+features : o0;\n"
-    "const int o2 = srcY<srcLastY ? o0+srcStride : o0;\n"
-    "const int o3 = srcX>0 ? o0-features : o0;\n"
-    "const int o4 = srcY>0 ? o0-srcStride : o0;\n"
-
-    "const int o5 = srcX<srcLastX ? o2+features : o0;\n"
-    "const int o6 = srcX>0 ? o2-features : o0;\n"
-    "const int o7 = srcX>0 ? o4-features : o0;\n"
-    "const int o8 = srcY>0 ? o1-srcStride : o0;\n"
-    */
-
-    "const int dOff = (y*destW+x)*features;\n"
-    "for(int f=0;f<features;f++) {\n"
-       "float ma = src[o0];\n"
-       "ma = max(ma,src[o1]);\n"
-       "ma = max(ma,src[o2]);\n"
-       "ma = max(ma,src[o2]);\n"
-       "ma = max(ma,src[o3]);\n"
-       "ma = max(ma,src[o4]);\n"
-       "ma = max(ma,src[o5]);\n"
-       "ma = max(ma,src[o6]);\n"
-       "ma = max(ma,src[o7]);\n"
-       "dest[dOff+f] = max(ma,src[o8]);\n"
-       "src++;\n"
-    "}\n"
-"}"
-;
-
-
 
 class OpenCLMaxPool : public OpenCLLayer
 {
@@ -600,6 +516,7 @@ class OpenCLMaxPool : public OpenCLLayer
    Padding    padding;
    int        padX;
    int        padY;
+   int        lastChannels;
 
    bool       odd;
 
@@ -624,18 +541,27 @@ public:
       if (!ctx)
          TensorThrow("OpenCLMaxPool - no current ocl context");
 
-      if (filterX==2 && filterY==2)
-         kernel = ctx->makeKernel("MAX_POOL", openclMaxPool_cl,"MaxPool2x2");
-      else if (filterX==3 && filterY==3)
-         kernel = ctx->makeKernel("MAX_POOL", openclMaxPool_cl,"MaxPool3x3");
-      else
-         TensorThrow("TODO - unimplemented OpenCL MaxPool size");
+      lastChannels = 0;
+      kernel = 0;
    }
 
    ~OpenCLMaxPool()
    {
    }
 
+   void initKernel(OpenCLContext *ctx, int channels)
+   {
+      lastChannels = channels;
+      char buildOptions[1024];
+      sprintf(buildOptions," -D CHANNELS=%d", channels);
+
+      if (filterX==2 && filterY==2)
+         kernel = ctx->makeKernel("MAX_POOL", openclMaxPool_cl,"MaxPool2x2", buildOptions);
+      else if (filterX==3 && filterY==3)
+         kernel = ctx->makeKernel("MAX_POOL", openclMaxPool_cl,"MaxPool3x3", buildOptions);
+      else
+         TensorThrow("TODO - unimplemented OpenCL MaxPool size");
+   }
 
    virtual Tensor *run(Tensor *inSrc0, Tensor *inBuffer)
    {
@@ -675,7 +601,14 @@ public:
       if (!match)
          result = new Tensor( Float32, Shape3(destH, destW, channels ) );
 
+
       OpenCLContext *ctx = (OpenCLContext *)gOclContext;
+
+      if (kernel && lastChannels!=channels)
+         kernel = 0;
+      if (!kernel)
+         initKernel(ctx, channels);
+
 
       const OclData *src = inSrc0->oclRead();
 
@@ -686,16 +619,15 @@ public:
       err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &dest);
       err |= clSetKernelArg(kernel, 2, sizeof(int), &destW);
       err |= clSetKernelArg(kernel, 3, sizeof(int), &destH);
-      err |= clSetKernelArg(kernel, 4, sizeof(int), &channels);
 
       int srcLastX = srcW-1;
       int srcLastY = srcH-1;
-      err |= clSetKernelArg(kernel, 5, sizeof(int), &srcLastX);
-      err |= clSetKernelArg(kernel, 6, sizeof(int), &srcLastY);
+      err |= clSetKernelArg(kernel, 4, sizeof(int), &srcLastX);
+      err |= clSetKernelArg(kernel, 5, sizeof(int), &srcLastY);
       int srcShift = strideX==1 ? 0 : 1;
-      err |= clSetKernelArg(kernel, 7, sizeof(int), &srcShift);
+      err |= clSetKernelArg(kernel, 6, sizeof(int), &srcShift);
       int srcStride = srcW * channels;
-      err |= clSetKernelArg(kernel, 8, sizeof(int), &srcStride);
+      err |= clSetKernelArg(kernel, 7, sizeof(int), &srcStride);
 
       if (err)
       {
@@ -706,10 +638,14 @@ public:
       if (!ctx)
          TensorThrow("OpenCLMaxPool - no current ocl context");
 
+
+
+      
+
       size_t globalSize[2] = { (size_t)destW, (size_t)destH };
  
       cl_uint work_dim = 2;
-      err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, 0/*Work offset*/, globalSize, 0, 0, NULL, startKernel());
+      err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, 0, globalSize, 0, 0, NULL, startKernel());
       if (err)
          TensorThrow("OpenCLMaxPool - could not clEnqueueNDRangeKernel");
 
@@ -885,6 +821,7 @@ class OpenCLConv2D : public Conv2DBase
    int padX;
    int padY;
    bool useTiled3x3;
+   bool useTiled1x1;
    int  threads;
    cl_kernel kernel;
    Shape kernelShape;
@@ -899,6 +836,7 @@ public:
    {
       kernel = 0;
       useTiled3x3 = false;
+      useTiled1x1 = false;
       threads = 16;
 
    }
@@ -932,7 +870,14 @@ public:
       char argBuf[1000];
       int dMin = padding==padValid ? 0 : (-filterX)/2;
       int dMax = dMin + filterX;
-      sprintf(argBuf," -D INPUTS=%d -D OUTPUTS=%d -D FX=%d -D FY=%d -D STRIDE_X=%d -D STRIDE_Y=%d -D DEST_W=%d -D DEST_H=%d -D dMin=%d -D dMax=%d",inputs,outputs,filterX,filterY, strideX, strideY, destW, destH, dMin, dMax);
+
+
+      if ( outputs>=64 && !(outputs&63))
+         threads = 32;
+
+      useTiled1x1 = is1x1 && !(outputs&31);
+
+      sprintf(argBuf," -D INPUTS=%d -D OUTPUTS=%d -D FX=%d -D FY=%d -D STRIDE_X=%d -D STRIDE_Y=%d -D DEST_W=%d -D DEST_H=%d -D dMin=%d -D dMax=%d -D OVEC=%d",inputs,outputs,filterX,filterY, strideX, strideY, destW, destH, dMin, dMax, threads);
       buildOptions += argBuf;
 
       OpenCLContext *ctx = (OpenCLContext *)gOclContext;
@@ -941,16 +886,13 @@ public:
 
       if ( filterX==3 && filterY==3 && !(inputs&3) && !(outputs&31) )
       {
-         if ( outputs>=64 && !(outputs&63))
-            threads = 32;
-         sprintf(argBuf," -D OVEC=%d", threads);
          buildOptions += argBuf;
          useTiled3x3 = true;
          kernel = ctx->makeKernel("CONV2D_3x3", openclConv2D_cl,"Conv2D", buildOptions);
       }
       else
       {
-         const char *func = is1x1 ? "CONV2D_1x1" : "CONV2D_SIMPLE";
+         const char *func = is1x1 ? (useTiled1x1 ? "TILED_1X1" : "CONV2D_1x1") : "CONV2D_SIMPLE";
 
          useTiled3x3 = false;
          kernel = ctx->makeKernel(func, openclConv2D_cl, "Conv2D", buildOptions);
@@ -994,11 +936,11 @@ public:
          TensorThrow("OpenCLConv2D - error setting args");
       }
 
-      if (useTiled3x3)
+      if (useTiled3x3 || useTiled1x1)
       {
          size_t *work_offset = 0;
 
-         if (ctx->useIntelMethod)
+         if (ctx->useIntelMethod || useTiled1x1)
          {
             int groupCount = srcH;
             cl_uint work_dim = 2;

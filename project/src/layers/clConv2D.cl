@@ -3,9 +3,146 @@
 #define PIX 32
 #define OUT 32
 
+#define INPUTS4 (INPUTS/4)
+
+#define THREADS OVEC
+
+
+
+
+#ifdef TILED_1X1
+
+inline void processTiles1x1(const int MaxPix,
+   const __global float* s1,
+   const __global float *weights,
+   const __global float *bias,
+   __global float *out)
+{
+   float4 zero = 0.0f;
+
+   // tid = threadId (0...OVEC) used to do 2xOVEC outputs at the same time
+   const int tid = get_local_id(0);
+
+
+   // float4 seem to be fast that float8 on hardware
+   for(int o=0;o<OUTPUTS;o+= THREADS*2 )
+   {
+      // Each thread handles 6 horizontal outputs for 1 output
+      float4 sum00 = { bias[o+tid*2], 0.0f, 0.0f, 0.0f };
+      float4 sum01 = sum00;
+      float4 sum02 = sum00;
+      float4 sum03 = sum00;
+      float4 sum04 = sum00;
+      float4 sum05 = sum00;
+      float4 sum10 = { bias[o+tid*2+1], 0.0f, 0.0f, 0.0f };
+      float4 sum11 = sum10;
+      float4 sum12 = sum10;
+      float4 sum13 = sum10;
+      float4 sum14 = sum10;
+      float4 sum15 = sum10;
+
+      __global const float4 *s4 = (__global const float4 *)(s1);
+
+      // Each thread is running a different output
+      const __global float4 *w4 = (const __global float4 *)( weights + (o+tid*2)*INPUTS );
+
+      for(int sx=0; sx<INPUTS4 ; sx++, s4++)
+      {
+         #define GetSrcOffset(Pixel) (Pixel<MaxPix) ?  s4[ Pixel*INPUTS4 ] : zero;
+
+         float4 weight0 = w4[0];
+         float4 weight1 = w4[INPUTS4];
+         w4++;
+
+         float4 s = s4[0];
+         sum00 = mad(weight0, s, sum00 );
+         sum10 = mad(weight1, s, sum10 );
+         if (MaxPix==1) continue;
+
+         s = s4[INPUTS4];
+         sum01 = mad(weight0, s, sum01 );
+         sum11 = mad(weight1, s, sum11 );
+         if (MaxPix==2) continue;
+
+         s = s4[INPUTS4*2];
+         sum02 = mad(weight0, s, sum02 );
+         sum12 = mad(weight1, s, sum12 );
+         if (MaxPix==3) continue;
+
+         s = s4[INPUTS4*3];
+         sum03 = mad(weight0, s, sum03 );
+         sum13 = mad(weight1, s, sum13 );
+         if (MaxPix==4) continue;
+
+         s = s4[INPUTS4*4];
+         sum04 = mad(weight0, s, sum04 );
+         sum14 = mad(weight1, s, sum14 );
+         if (MaxPix==5) continue;
+
+         s = s4[INPUTS4*5];
+         sum05 = mad(weight0, s, sum05 );
+         sum15 = mad(weight1, s, sum15 );
+      }
+
+
+      // Write  output for 6 pixels per thread + bias + activation
+
+      float2 f2;
+      float val;
+      #define SAVE(X,Y) \
+         if (X<MaxPix) { \
+         f2 = sum##Y##X.xy + sum##Y##X.zw; \
+         val = f2.x + f2.y; \
+         out[(tid*2)+Y+OUTPUTS*X] = ACTIVATION(val); \
+         }
+
+      SAVE(0,0)
+      SAVE(0,1)
+      SAVE(1,0)
+      SAVE(1,1)
+      SAVE(2,0)
+      SAVE(2,1)
+      SAVE(3,0)
+      SAVE(3,1)
+      SAVE(4,0)
+      SAVE(4,1)
+      SAVE(5,0)
+      SAVE(5,1)
+
+      out += THREADS*2;
+   }
+}
+
+
+__kernel void Conv2D(const __global float* src, const __global float *weights, const __global float *bias, const int width, const int height, __global float *dest)
+{
+   const int tid = get_local_id(0);
+   const int row = get_global_id(1);
+
+   const __global float *s1 =  src + (row)*INPUTS*width;
+
+   __global float *out = dest + row*OUTPUTS*width;
+
+   int x = 0;
+   for(  ;x+6<=width; x+=6 )
+   {
+      processTiles1x1(1000, s1, weights, bias, out);
+
+      out += OUTPUTS*6;
+      s1+=INPUTS*6;
+   }
+
+   if (x<width)
+      processTiles1x1(width-x, s1, weights, bias, out);
+}
+
+
+#endif
 
 #ifdef CONV2D_1x1
-__kernel void Conv2D(const __global float* inSrc, const __global float *inWeights, const __global float *inBias, const int width, const int height, __global float *dest) {
+
+__kernel void Conv2D(const __global float* inSrc, const __global float *inWeights, const __global float *inBias, const int width, const int height, __global float *dest)
+{
     const int x = get_global_id(0);
     const int y = get_global_id(1);
     const int srcStride = width*INPUTS;
@@ -21,14 +158,16 @@ __kernel void Conv2D(const __global float* inSrc, const __global float *inWeight
        woff+=INPUTS;
     dest[destOff+o] = ACTIVATION(sum);
     }
-};
+}
+
 #endif
 
 
 #ifdef CONV2D_SIMPLE
 
 
-__kernel void Conv2D(const __global float* src, const __global float *weights, const __global float *inBias, const int srcWidth, const int srcHeight, __global float *dest ) {
+__kernel void Conv2D(const __global float* src, const __global float *weights, const __global float *inBias, const int srcWidth, const int srcHeight, __global float *dest )
+{
     const int x = get_global_id(0);
     const int y = get_global_id(1);
     const int srcStride = srcWidth*INPUTS;
@@ -68,8 +207,6 @@ __kernel void Conv2D(const __global float* src, const __global float *weights, c
 
 #ifdef CONV2D_3x3
 
-
-#define THREADS OVEC
 
 #ifdef INTEL
 
@@ -136,7 +273,6 @@ inline float dotRowLocal(const __local float *src, const __global float *w, int 
 
 #endif
 
-#define INPUTS4 (INPUTS/4)
 
 
 inline void processTiles(const bool IsX0, const int MaxPix,
@@ -149,7 +285,7 @@ inline void processTiles(const bool IsX0, const int MaxPix,
 {
    float4 zero = 0.0f;
 
-   // tid = threadId (0...OVEC) used to do OVEC outputs at the same time
+   // tid = threadId (0...OVEC) used to do 2*OVEC outputs at the same time
    const int tid = get_local_id(0);
 
 
