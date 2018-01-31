@@ -27,35 +27,38 @@ __kernel void Conv2D(const __global float* inSrc, const __global float *inWeight
 
 #ifdef CONV2D_SIMPLE
 
-#define dMin (-FX/2)
-#define dMax (FX+dMin)
 
-__kernel void Conv2D(const __global float* src, const __global float *weights, const __global float *inBias, const int width, const int height, __global float *dest ) {
+__kernel void Conv2D(const __global float* src, const __global float *weights, const __global float *inBias, const int srcWidth, const int srcHeight, __global float *dest ) {
     const int x = get_global_id(0);
     const int y = get_global_id(1);
-    const int srcStride = width*INPUTS;
+    const int srcStride = srcWidth*INPUTS;
 
-    int weightOff = 0;
     int destOff = (y*DEST_W+x) * OUTPUTS;
-    for(int o=0;o<OUTPUTS;o++) {
+    int weightOff = 0;
+    for(int o=0;o<OUTPUTS;o++)
+    {
        float sum=inBias[o];
-       for(int dy=dMin; dy<dMax; dy++) {
+       for(int dy=dMin; dy<dMax; dy++)
+       {
           int sy = y*STRIDE_Y+dy;
-          if (sy>=0 && sy<height) {
-             for(int dx=dMin; dx<dMax; dx++) {
+          if (sy>=0 && sy<srcHeight)
+          {
+             for(int dx=dMin; dx<dMax; dx++)
+             {
                  int sx = x*STRIDE_X+dx;
-                 if (sx>=0 && sx<width) {
+                 if (sx>=0 && sx<srcWidth)
+                 {
                     int srcOff = sy*srcStride + INPUTS*sx;
                     for(int i=0;i<INPUTS;i++)
                         sum += src[srcOff+i] * weights[weightOff+i];
                  }
                  weightOff+=INPUTS;
              }
-          } else {
-             weightOff += INPUTS * (dMax-dMin);
           }
+          else
+             weightOff+=FX*INPUTS;
        }
-    dest[destOff+o] = ACTIVATION(sum);
+       dest[destOff+o] = ACTIVATION(sum);
     }
 };
 #endif

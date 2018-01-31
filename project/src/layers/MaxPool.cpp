@@ -74,6 +74,7 @@ public:
       }
       //printf("MaxPool %dx%d + (%d,%d) %d,%d\n", destW, destW,  filterX, filterY, padOx,padOy);
 
+      startRun();
       bool match = false;
       if (inBuffer && inBuffer->shape.size()==3 && inBuffer->type==Float32)
       {
@@ -98,6 +99,8 @@ public:
       runThreaded();
       src0 = 0;
       destTensor = 0;
+
+      endRun();
 
       return result;
    }
@@ -151,7 +154,9 @@ public:
                      float val = *chan;
                      chan += channels;
                      if (val>m) m = val;
+                     break;
                   }
+                     break;
                }
                *dest++ = m;
             }

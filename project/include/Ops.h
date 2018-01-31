@@ -282,6 +282,15 @@ inline void dot4Interlaced(float *dest, const float *alignedBias, const float *w
    }
 }
 
+/*
+inline float dot(float s0,const float *w, const float *s, int n, Activation activation)
+{
+   float sum = s0;
+   for(int i=0;i<n;i++)
+      sum += s[i];
+   return sum;
+}
+*/
 
 
 inline float dot(float s0,const float *w, const float *s, int n, Activation activation)

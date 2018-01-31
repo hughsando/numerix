@@ -505,11 +505,10 @@ public:
 
 
 static const char *oclMaxPool2x2Prog = 
-"__kernel void MaxPool(const __global float* src, __global float* dest, const int destW, const int destH, const int features, const int srcLastX, int const srcLastY, const int srcShift) {\n"
+"__kernel void MaxPool(const __global float* src, __global float* dest, const int destW, const int destH, const int features, const int srcLastX, int const srcLastY, const int srcShift,const int srcStride) {\n"
     "const int x = get_global_id(0);\n"
     "const int y = get_global_id(1);\n"
 
-    "const int srcStride = (destW<<srcShift)*features;\n"
     "const int srcY = y<<srcShift;\n"
     "const int srcX = x<<srcShift;\n"
     "const int dy = srcY<srcLastY ? srcStride : 0;\n"
@@ -534,49 +533,67 @@ static const char *oclMaxPool2x2Prog =
 
 
 static const char *oclMaxPool3x3Prog = 
-"__kernel void MaxPool(const __global float* src, __global float* dest, const int destW, const int destH, const int features, const int srcLastX, int const srcLastY, const int srcShift) {\n"
+"__kernel void MaxPool(const __global float* src, __global float* dest, const int destW, const int destH, const int features, const int srcLastX, int const srcLastY, const int srcShift,const int srcStride) {\n"
     "const int x = get_global_id(0);\n"
     "const int y = get_global_id(1);\n"
 
-    "const int srcStride = (destW<<srcShift)*features;\n"
-    "const int srcY = y<<srcShift;\n"
     "const int srcX = x<<srcShift;\n"
-    "const int dy = srcStride;\n"
-    "const int dx = features;\n"
+    "const int srcY = y<<srcShift;\n"
+
+    /*
+    //0 1 2
+    //3 4 5
+    //6 7 8
+    "const int o0 = srcY*srcStride + srcX*features;\n"
+    "const int o1 = o0+features;\n"
+    "const int o2 = srcX+1<srcLastX ? o1+features : o0;\n"
+    "const int o3 = o0+srcStride;\n"
+    "const int o4 = o1+srcStride;\n"
+    "const int o5 = o2+srcStride;\n"
+    "const int o6 = srcY+1<srcLastY ? o3 + srcStride : o3;\n"
+    "const int o7 = srcY+1<srcLastY ? o4 + srcStride : o4;\n"
+    "const int o8 = srcY+1<srcLastY ? o5 + srcStride : o5;\n"
+
+    "const int dOff = (y*destW+x)*features;\n"
+    "for(int f=0;f<features;f++) {\n"
+       "float ma = src[o0];\n"
+       "ma = max(ma,src[o1]);\n"
+       "ma = max(ma,src[o2]);\n"
+       "ma = max(ma,src[o3]);\n"
+       "ma = max(ma,src[o4]);\n"
+       "ma = max(ma,src[o5]);\n"
+       "ma = max(ma,src[o6]);\n"
+       "ma = max(ma,src[o7]);\n"
+       "dest[dOff+f] = max(ma,src[o8]);\n"
+     */
 
     //7 4 8
     //3 0 1
     //6 2 5
     "const int o0 = srcY*srcStride + srcX*features;\n"
-    "const int o1 = srcX<srcLastX ? o0+dx : o0;\n"
-    "const int o2 = srcY<srcLastY ? o0+dy : o0;\n"
-    "const int o3 = srcX>0 ? o0-dx : o0;\n"
-    "const int o4 = srcY>0 ? o0-dy : o0;\n"
+    "const int o1 = srcX<srcLastX ? o0+features : o0;\n"
+    "const int o2 = srcY<srcLastY ? o0+srcStride : o0;\n"
+    "const int o3 = srcX>0 ? o0-features : o0;\n"
+    "const int o4 = srcY>0 ? o0-srcStride : o0;\n"
 
-    "const int o5 = srcX<srcLastX ? o2+dx : o0;\n"
-    "const int o6 = srcX>0 ? o0-dx : o0;\n"
-    "const int o7 = srcX>0 ? o4-dx : o0;\n"
-    "const int o8 = srcY>0 ? o1-dy : o0;\n"
+    "const int o5 = srcX<srcLastX ? o2+features : o0;\n"
+    "const int o6 = srcX>0 ? o2-features : o0;\n"
+    "const int o7 = srcX>0 ? o4-features : o0;\n"
+    "const int o8 = srcY>0 ? o1-srcStride : o0;\n"
 
     "const int dOff = (y*destW+x)*features;\n"
     "for(int f=0;f<features;f++) {\n"
-       "float m0 = src[o0+f];\n"
-       "float m1 = src[o1+f];\n"
-       "float ma = m0>m1 ? m0 : m1;\n"
-       "m0 = src[o2+f];\n"
-       "m1 = src[o3+f];\n"
-       "float mb = m0>m1 ? m0 : m1;\n"
-       "float mc = ma>mb ? ma : mb;\n"
-       "m0 = src[o4+f];\n"
-       "m1 = src[o5+f];\n"
-       "ma = m0>m1 ? m0 : m1;\n"
-       "m0 = src[o6+f];\n"
-       "m1 = src[o7+f];\n"
-       "mb = m0>m1 ? m0 : m1;\n"
-       "mc = ma>mb ? ma : mb;\n"
-       "m0 = src[o8+f];\n"
-
-       "dest[dOff+f] = mc>m0 ? mc:m0;\n"
+       "float ma = src[o0];\n"
+       "ma = max(ma,src[o2]);\n"
+       "ma = max(ma,src[o2]);\n"
+       "ma = max(ma,src[o3]);\n"
+       "ma = max(ma,src[o4]);\n"
+       "ma = max(ma,src[o5]);\n"
+       "ma = max(ma,src[o6]);\n"
+       "ma = max(ma,src[o7]);\n"
+       "dest[dOff+f] = max(ma,src[o8]);\n"
+       "dest[dOff+f] = src[o7];\n"
+       "src++;\n"
     "}\n"
 "}"
 ;
@@ -687,6 +704,8 @@ public:
       err |= clSetKernelArg(kernel, 6, sizeof(int), &srcLastY);
       int srcShift = strideX==1 ? 0 : 1;
       err |= clSetKernelArg(kernel, 7, sizeof(int), &srcShift);
+      int srcStride = srcW * channels;
+      err |= clSetKernelArg(kernel, 8, sizeof(int), &srcStride);
 
       if (err)
       {
@@ -705,7 +724,7 @@ public:
          TensorThrow("OpenCLMaxPool - could not clEnqueueNDRangeKernel");
 
 
-      if (Layer::accurateTimes || true)
+      if (Layer::accurateTimes)
       {
          err = clFinish(ctx->queue0);
          if (err)
@@ -921,7 +940,9 @@ public:
             break;
       }
       char argBuf[1000];
-      sprintf(argBuf," -D INPUTS=%d -D OUTPUTS=%d -D FX=%d -D FY=%d -D STRIDE_X=%d -D STRIDE_Y=%d -D DEST_W=%d -D DEST_H=%d",inputs,outputs,filterX,filterY, strideX, strideY, destW, destH);
+      int dMin = padding==padValid ? 0 : (-filterX)/2;
+      int dMax = dMin + filterX;
+      sprintf(argBuf," -D INPUTS=%d -D OUTPUTS=%d -D FX=%d -D FY=%d -D STRIDE_X=%d -D STRIDE_Y=%d -D DEST_W=%d -D DEST_H=%d -D dMin=%d -D dMax=%d",inputs,outputs,filterX,filterY, strideX, strideY, destW, destH, dMin, dMax);
       buildOptions += argBuf;
 
       OpenCLContext *ctx = (OpenCLContext *)gOclContext;

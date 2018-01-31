@@ -23,6 +23,7 @@ class Test
          numerix.Model.enableGpu(false);
       var doTime = !args.remove("-notime");
       var allowResize = !args.remove("-noresize");
+      var showResults = args.remove("-showresults");
 
       for(a in args)
       {
@@ -154,7 +155,7 @@ class Test
             }
          }
          Io.writeFile("result.nx", result);
-         if (false)
+         if (showResults)
          {
             for(layer in model.layers)
             {

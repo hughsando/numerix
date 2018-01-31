@@ -126,7 +126,7 @@ class Layer
             var diff = getRunTime();
             totalTime += diff;
             var display = Std.int(totalTime*10000)*0.1;
-            diff = Std.int(diff*10000)*0.1;
+            diff = Std.int(diff*100000)*0.01;
             var shape = resultBuffer.shape;
             if (shape.length>2)
             {
@@ -134,7 +134,7 @@ class Layer
                var w = shape[ shape.length-2 ];
                var h = shape[ shape.length-3 ];
 
-               println(' [$w,$h,$c] $this $diff'+'ms' + ' (total so far: $display'+'ms)' );
+               println(' [$w,$h,$c]\t$diff $this ' + '($display)' );
             }
             else
                println(' $this $diff'+"ms");
