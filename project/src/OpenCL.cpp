@@ -682,17 +682,44 @@ static const char *oclConcatProg =
 "__kernel void Concat(const __global float* src0, const __global float *src1, __global float* dest, const int srcW, const int srcH) {\n"
     "const int x = get_global_id(0);\n"
     "const int y = get_global_id(1);\n"
-    "const __global float *i0 = src0 + (y*srcW + x)*IN0;\n"
-    "const __global float *i1 = src1 + (y*srcW + x)*IN1;\n"
     "__global float *d = dest + (y*srcW + x)*(IN0+IN1);\n"
 
-    "for(int f=0;f<IN0;f++) {\n"
-       "d[f] = i0[f];\n"
-    "}\n"
+    "if (IN0&15) {\n"
+       "const __global float *i0 = src0 + (y*srcW + x)*IN0;\n"
+       "for(int f=0;f<IN0;f++) {\n"
+          "d[f] = i0[f];\n"
+       "}\n"
+     "} else {\n"
+       "const __global float4 *i0 = (const __global float4 *)(src0 + (y*srcW + x)*IN0);\n"
+       "__global float4 *d4 = (__global float4 *)(d);\n"
+       "for(int f=0;f<IN0;f+=16) {\n"
+          "d4[0] = i0[0];\n"
+          "d4[1] = i0[1];\n"
+          "d4[2] = i0[2];\n"
+          "d4[3] = i0[3];\n"
+          "i0+=4;\n"
+          "d4+=4;\n"
+       "}\n"
+     "}\n"
     "d+=IN0;\n"
-    "for(int f=0;f<IN1;f++) {\n"
-       "d[f] = i1[f];\n"
-    "}\n"
+
+    "if (IN1&15) {\n"
+       "const __global float *i1 = src1 + (y*srcW + x)*IN1;\n"
+       "for(int f=0;f<IN0;f++) {\n"
+          "d[f] = i1[f];\n"
+       "}\n"
+     "} else {\n"
+       "const __global float4 *i1 = (const __global float4 *)(src1 + (y*srcW + x)*IN1);\n"
+       "__global float4 *d4 = (__global float4 *)(d);\n"
+       "for(int f=0;f<IN1;f+=16) {\n"
+          "d4[0] = i1[0];\n"
+          "d4[1] = i1[1];\n"
+          "d4[2] = i1[2];\n"
+          "d4[3] = i1[3];\n"
+          "i1+=4;\n"
+          "d4+=4;\n"
+       "}\n"
+     "}\n"
 "}"
 ;
 
@@ -872,10 +899,18 @@ public:
       int dMax = dMin + filterX;
 
 
-      if ( outputs>=64 && !(outputs&63))
+      if ( !(outputs&63) )
          threads = 32;
+      else if (!(outputs&31) )
+         threads = 16;
+      else if (!(outputs&15) )
+         threads = 8;
+      else if (!(outputs&7) )
+         threads = 4;
+      else
+         threads = 0;
 
-      useTiled1x1 = is1x1 && !(outputs&31);
+      useTiled1x1 = is1x1 && threads;
 
       sprintf(argBuf," -D INPUTS=%d -D OUTPUTS=%d -D FX=%d -D FY=%d -D STRIDE_X=%d -D STRIDE_Y=%d -D DEST_W=%d -D DEST_H=%d -D dMin=%d -D dMax=%d -D OVEC=%d",inputs,outputs,filterX,filterY, strideX, strideY, destW, destH, dMin, dMax, threads);
       buildOptions += argBuf;
@@ -884,7 +919,7 @@ public:
       if (!ctx)
          TensorThrow("OpenCLConv2D - no current ocl context");
 
-      if ( filterX==3 && filterY==3 && !(inputs&3) && !(outputs&31) )
+      if ( filterX==3 && filterY==3 && !(inputs&3) && threads)
       {
          buildOptions += argBuf;
          useTiled3x3 = true;
