@@ -154,9 +154,7 @@ public:
                      float val = *chan;
                      chan += channels;
                      if (val>m) m = val;
-                     break;
                   }
-                     break;
                }
                *dest++ = m;
             }

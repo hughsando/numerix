@@ -540,7 +540,6 @@ static const char *oclMaxPool3x3Prog =
     "const int srcX = x<<srcShift;\n"
     "const int srcY = y<<srcShift;\n"
 
-    /*
     //0 1 2
     //3 4 5
     //6 7 8
@@ -554,19 +553,8 @@ static const char *oclMaxPool3x3Prog =
     "const int o7 = srcY+1<srcLastY ? o4 + srcStride : o4;\n"
     "const int o8 = srcY+1<srcLastY ? o5 + srcStride : o5;\n"
 
-    "const int dOff = (y*destW+x)*features;\n"
-    "for(int f=0;f<features;f++) {\n"
-       "float ma = src[o0];\n"
-       "ma = max(ma,src[o1]);\n"
-       "ma = max(ma,src[o2]);\n"
-       "ma = max(ma,src[o3]);\n"
-       "ma = max(ma,src[o4]);\n"
-       "ma = max(ma,src[o5]);\n"
-       "ma = max(ma,src[o6]);\n"
-       "ma = max(ma,src[o7]);\n"
-       "dest[dOff+f] = max(ma,src[o8]);\n"
-     */
 
+    /*
     //7 4 8
     //3 0 1
     //6 2 5
@@ -580,10 +568,12 @@ static const char *oclMaxPool3x3Prog =
     "const int o6 = srcX>0 ? o2-features : o0;\n"
     "const int o7 = srcX>0 ? o4-features : o0;\n"
     "const int o8 = srcY>0 ? o1-srcStride : o0;\n"
+    */
 
     "const int dOff = (y*destW+x)*features;\n"
     "for(int f=0;f<features;f++) {\n"
        "float ma = src[o0];\n"
+       "ma = max(ma,src[o1]);\n"
        "ma = max(ma,src[o2]);\n"
        "ma = max(ma,src[o2]);\n"
        "ma = max(ma,src[o3]);\n"
@@ -592,7 +582,6 @@ static const char *oclMaxPool3x3Prog =
        "ma = max(ma,src[o6]);\n"
        "ma = max(ma,src[o7]);\n"
        "dest[dOff+f] = max(ma,src[o8]);\n"
-       "dest[dOff+f] = src[o7];\n"
        "src++;\n"
     "}\n"
 "}"
@@ -670,8 +659,8 @@ public:
       }
       else // padValid
       {
-         destW = (srcW-filterX+1 + strideX-1)/strideX;
-         destH = (srcH-filterY+1 + strideY-1)/strideY;
+         destW = (srcW)/strideX;
+         destH = (srcH)/strideY;
       }
 
 
