@@ -9,6 +9,7 @@
 #include <ctype.h>
 
 extern const char *openclConv2D_cl;
+extern const char *openclMaxPool_cl;
 
 #ifdef HX_WINDOWS
 DynamicLibrary openclLib("OpenCL.dll");
@@ -624,9 +625,9 @@ public:
          TensorThrow("OpenCLMaxPool - no current ocl context");
 
       if (filterX==2 && filterY==2)
-         kernel = ctx->makeKernel("MAX_POOL", oclMaxPool2x2Prog,"MaxPool");
+         kernel = ctx->makeKernel("MAX_POOL", openclMaxPool_cl,"MaxPool2x2");
       else if (filterX==3 && filterY==3)
-         kernel = ctx->makeKernel("MAX_POOL", oclMaxPool3x3Prog,"MaxPool");
+         kernel = ctx->makeKernel("MAX_POOL", openclMaxPool_cl,"MaxPool3x3");
       else
          TensorThrow("TODO - unimplemented OpenCL MaxPool size");
    }

@@ -51,6 +51,7 @@
 
      <file name="src/OpenCL.cpp" if="NX_OPENCL"  />
      <file name="src/layers/clConv2D.cl" embedName="openclConv2D_cl" if="NX_OPENCL"  />
+     <file name="src/layers/clMaxPool.cl" embedName="openclMaxPool_cl" if="NX_OPENCL"  />
 
      <section if="linux||rpi" >
         <compilerflag value="-Isrc/movidius" />
