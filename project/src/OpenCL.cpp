@@ -9,6 +9,7 @@
 #include <ctype.h>
 
 extern const char *openclConv2D_cl;
+extern const char *openclIntelConv2D_cl;
 extern const char *openclMaxPool_cl;
 
 #ifdef HX_WINDOWS
@@ -140,8 +141,6 @@ public:
          buf[i] = tolower(buf[i]);
       buf[5]='\0';
       useIntelMethod = std::string(buf)=="intel";
-      // Force on...
-      useIntelMethod = true;
 
       queue0 = clCreateCommandQueue(context, devices[0], CL_QUEUE_PROFILING_ENABLE, &error);
       if (!queue0 || error)
@@ -849,6 +848,7 @@ class OpenCLConv2D : public Conv2DBase
    int padY;
    bool useTiled3x3;
    bool useTiled1x1;
+   bool useIntelTiled1x1;
    int  threads;
    cl_kernel kernel;
    Shape kernelShape;
@@ -864,6 +864,7 @@ public:
       kernel = 0;
       useTiled3x3 = false;
       useTiled1x1 = false;
+      useIntelTiled1x1 = false;
       threads = 16;
 
    }
@@ -884,10 +885,10 @@ public:
       switch(activation)
       {
          case actRelu:
-            buildOptions += "-D ACTIVATION(x)=(x<0?0.0f:x)";
+            buildOptions += "-D ACTIVATION(x)=fmax(x,0.0f)";
             break;
          case actLeaky:
-            buildOptions += "-D ACTIVATION(x)=(x<0?0.1f*x:x)";
+            buildOptions += "-D ACTIVATION(x)=fmax(x,0.1f*x)";
             break;
 
          default:
@@ -910,27 +911,49 @@ public:
       else
          threads = 0;
 
-      useTiled1x1 = is1x1 && threads;
-
-      sprintf(argBuf," -D INPUTS=%d -D OUTPUTS=%d -D FX=%d -D FY=%d -D STRIDE_X=%d -D STRIDE_Y=%d -D DEST_W=%d -D DEST_H=%d -D dMin=%d -D dMax=%d -D OVEC=%d",inputs,outputs,filterX,filterY, strideX, strideY, destW, destH, dMin, dMax, threads);
-      buildOptions += argBuf;
 
       OpenCLContext *ctx = (OpenCLContext *)gOclContext;
       if (!ctx)
          TensorThrow("OpenCLConv2D - no current ocl context");
 
-      if ( filterX==3 && filterY==3 && !(inputs&3) && threads)
+      useTiled1x1 = is1x1 && threads;
+      useIntelTiled1x1 = is1x1 && (threads>=8) && ctx->useIntelMethod;
+      useTiled3x3 = false;
+
+      if (useIntelTiled1x1)
       {
+         sprintf(argBuf," -D INPUT0_SIZE_X=%d -D INPUT0_SIZE_Y=%d -D INPUT0_FEATURE_NUM=%d ",
+                 srcW, srcH, inputs);
          buildOptions += argBuf;
-         useTiled3x3 = true;
-         kernel = ctx->makeKernel("CONV2D_3x3", openclConv2D_cl,"Conv2D", buildOptions);
+         sprintf(argBuf," -D OUTPUT_SIZE_X=%d -D OUTPUT_SIZE_Y=%d -D OUTPUT_FEATURE_NUM=%d",
+                 destW, destH, outputs);
+         buildOptions += argBuf;
+         sprintf(argBuf," -D FILTER_OFM_PITCH=%d -D FILTER_IFM_NUM=%d ",
+                 inputs, inputs);
+         buildOptions += argBuf;
+
+         const char *func = "INTEL_TILED_1X1";
+         const char *prog = openclIntelConv2D_cl;
+         kernel = ctx->makeKernel(func, prog, "Conv2D_1x1", buildOptions);
       }
       else
       {
-         const char *func = is1x1 ? (useTiled1x1 ? "TILED_1X1" : "CONV2D_1x1") : "CONV2D_SIMPLE";
+         sprintf(argBuf," -D INPUTS=%d -D OUTPUTS=%d -D FX=%d -D FY=%d -D STRIDE_X=%d -D STRIDE_Y=%d -D DEST_W=%d -D DEST_H=%d -D dMin=%d -D dMax=%d -D OVEC=%d",inputs,outputs,filterX,filterY, strideX, strideY, destW, destH, dMin, dMax, threads);
+         buildOptions += argBuf;
 
-         useTiled3x3 = false;
-         kernel = ctx->makeKernel(func, openclConv2D_cl, "Conv2D", buildOptions);
+         if ( filterX==3 && filterY==3 && !(inputs&3) && threads)
+         {
+            buildOptions += argBuf;
+            useTiled3x3 = true;
+            kernel = ctx->makeKernel("CONV2D_3x3", openclConv2D_cl,"Conv2D", buildOptions);
+         }
+         else
+         {
+            const char *func = is1x1 ? (useTiled1x1 ? "TILED_1X1" : "CONV2D_1x1") : "CONV2D_SIMPLE";
+
+            const char *prog = openclConv2D_cl;
+            kernel = ctx->makeKernel(func, prog, "Conv2D", buildOptions);
+         }
       }
    }
 
@@ -959,11 +982,14 @@ public:
 
       cl_int err = 0;
       err |= clSetKernelArg(kernel, 0, sizeof(cl_mem), &src);
-      err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &w);
-      err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &b);
-      err |= clSetKernelArg(kernel, 3, sizeof(cl_int), &srcW);
-      err |= clSetKernelArg(kernel, 4, sizeof(cl_int), &srcH);
-      err |= clSetKernelArg(kernel, 5, sizeof(cl_mem), &dest);
+      err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &dest);
+      err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &w);
+      err |= clSetKernelArg(kernel, 3, sizeof(cl_mem), &b);
+      if (!useIntelTiled1x1)
+      {
+         err |= clSetKernelArg(kernel, 4, sizeof(cl_int), &srcW);
+         err |= clSetKernelArg(kernel, 5, sizeof(cl_int), &srcH);
+      }
 
       if (err)
       {
@@ -971,33 +997,28 @@ public:
          TensorThrow("OpenCLConv2D - error setting args");
       }
 
-      if (useTiled3x3 || useTiled1x1)
+      size_t *work_offset = 0;
+      if (useIntelTiled1x1)
       {
-         size_t *work_offset = 0;
+         int groupCount = srcH;
+         cl_uint work_dim = 2;
+         size_t globalSize[2] = { (size_t)(destW*destH/16),  (size_t)(outputs)  };
+         size_t localSize[2] = { (size_t)(1),  (size_t)(16)  };
+         err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, work_offset, globalSize, localSize, 0, NULL, startKernel());
+      }
+      else if (useTiled3x3 || useTiled1x1)
+      {
+         int groupCount = srcH;
+         cl_uint work_dim = 2;
+         size_t globalSize[2] = { (size_t)threads,  (size_t)groupCount  };
+         size_t localSize[2] = {  (size_t)threads, 1 };
+         err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, work_offset, globalSize, localSize, 0, NULL, startKernel());
 
-         if (ctx->useIntelMethod || useTiled1x1)
-         {
-            int groupCount = srcH;
-            cl_uint work_dim = 2;
-            size_t globalSize[2] = { (size_t)threads,  (size_t)groupCount  };
-            size_t localSize[2] = {  (size_t)threads, 1 };
-            err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, work_offset, globalSize, localSize, 0, NULL, startKernel());
-
-         }
-         else
-         {
-            cl_uint work_dim = 1;
-            int groupCount = ctx->computeUnits;
-            size_t globalSize[1] = { (size_t)(32*32*groupCount) };
-            size_t localSize[1] = { (size_t)(32*32) };
-            err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, work_offset, globalSize, localSize, 0, NULL, startKernel());
-         }
       }
       else
       {
          size_t globalSize[2] = { (size_t)(destW), (size_t)(destH) };
          cl_uint work_dim = 2;
-         size_t *work_offset = 0;
          err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, work_offset, globalSize, 0, 0, NULL, startKernel());
       }
 

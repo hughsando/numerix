@@ -6,7 +6,8 @@ class Test
    public static function main()
    {
       //testConv();
-      testOpenCl();
+      //testOpenCl();
+      testOpenCl_1x1();
    }
 
    public static function testCreate()
@@ -36,6 +37,82 @@ class Test
       Sys.println("Reduced");
       reduced.print();
    }
+
+
+   static function testOpenCl_1x1()
+   {
+      Model.enableGpu(false);
+
+      var platforms = numerix.opencl.ClCtx.platforms;
+      Sys.println("Using CPU implementation");
+      var refResult = null;
+
+      var Inputs = 8;
+      var Outputs = 16;
+      var SrcW = 16;
+      var SrcH = 1;
+
+      for(mode in 0...platforms.length+1)
+      {
+         var src = Nx.zeros([SrcH,SrcW,Inputs]);
+         var weights = Nx.zeros([Outputs,1,1,Inputs]);
+         var bias = Nx.zeros([Outputs]);
+
+
+         for(i in 0...bias.elementCount)
+            bias[i] = i%29;
+         for(w in 0...weights.elementCount)
+            weights[w] = w%19;
+         for(s in 0...src.elementCount)
+            src[s] = s%17;
+
+         if (mode>0)
+         {
+            var platform = platforms[mode-1];
+            var devices = [ platform.devices[0] ];
+            var ctx = new numerix.opencl.ClCtx(platform,devices);
+
+            Sys.println("Using opencl platform " + platform.name);
+         }
+
+         var cfg = { activation:'linear', kernelSize:[1,1], filters:16, padding:'same',
+                      allowTransform: false };
+
+
+         var model = new Model();
+         var inputLayer = model.makeInputLayer();
+
+         var conv2D = new Conv2D(cfg,inputLayer);
+         model.addLayer( conv2D );
+
+         conv2D.setWeights( [weights,bias] );
+
+         var result = model.run(src);
+         if (refResult==null)
+            refResult = result;
+         else
+         {
+            var shape = refResult.shape;
+            var idx = 0;
+            for(y in 0...shape[0])
+               for(x in 0...shape[1])
+                   for(ch in 0...shape[2])
+                   {
+                       if (Math.abs(refResult[idx]-result[idx])>0.001)
+                       {
+                          Sys.println('Bad index [$y,$x,$ch], ' + refResult[idx] + "!=" + result[idx] + " d=" + (refResult[idx]-result[idx]) );
+                       }
+                       idx++;
+                   }
+            Sys.println("Verified " + shape);
+         }
+     }
+
+   }
+
+
+
+
 
    static function testOpenCl()
    {

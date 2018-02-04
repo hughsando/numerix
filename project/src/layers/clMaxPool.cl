@@ -33,9 +33,9 @@ __kernel void MaxPool3x3(const __global float* src, __global float* dest, const 
     const int srcX = x<<srcShift;
     const int srcY = y<<srcShift;
 
-    //0 1 2
-    //3 4 5
-    //6 7 8
+    // 0 1 2
+    // 3 4 5
+    // 6 7 8
     const int dx = CHANNELS>>3;
     const int dy = srcStride>>3;
     const int o0 = srcY*dy + srcX*dx;

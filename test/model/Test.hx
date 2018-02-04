@@ -122,12 +122,12 @@ class Test
          if (doTime)
          {
             var t0 = haxe.Timer.stamp();
-            for(go in 0...10)
+            for(go in 0...100)
                result = model.run(val,allowResize);
             var time = (haxe.Timer.stamp()-t0);
             Layer.showTimes = true;
             result = model.run(val,allowResize);
-            println("Time 10: " + Std.int(time*100) + "ms");
+            println("Time 100: " + Std.int(time*10) + "ms");
          }
 
          var boxes = model.outputLayer.getBoxes();

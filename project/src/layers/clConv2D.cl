@@ -1,13 +1,6 @@
 
-#define SRC 32
-#define PIX 32
-#define OUT 32
-
 #define INPUTS4 (INPUTS/4)
-
 #define THREADS OVEC
-
-
 
 
 #ifdef TILED_1X1
@@ -114,7 +107,7 @@ inline void processTiles1x1(const int MaxPix,
 }
 
 
-__kernel void Conv2D(const __global float* src, const __global float *weights, const __global float *bias, const int width, const int height, __global float *dest)
+__kernel void Conv2D(const __global float* src, __global float *dest, const __global float *weights, const __global float *bias, const int width, const int height)
 {
    const int tid = get_local_id(0);
    const int row = get_global_id(1);
@@ -141,7 +134,7 @@ __kernel void Conv2D(const __global float* src, const __global float *weights, c
 
 #ifdef CONV2D_1x1
 
-__kernel void Conv2D(const __global float* inSrc, const __global float *inWeights, const __global float *inBias, const int width, const int height, __global float *dest)
+__kernel void Conv2D(const __global float* inSrc, __global float *dest, const __global float *inWeights, const __global float *inBias, const int width, const int height)
 {
     const int x = get_global_id(0);
     const int y = get_global_id(1);
@@ -166,7 +159,7 @@ __kernel void Conv2D(const __global float* inSrc, const __global float *inWeight
 #ifdef CONV2D_SIMPLE
 
 
-__kernel void Conv2D(const __global float* src, const __global float *weights, const __global float *inBias, const int srcWidth, const int srcHeight, __global float *dest )
+__kernel void Conv2D(const __global float* src, __global float *dest, const __global float *weights, const __global float *inBias, const int srcWidth, const int srcHeight )
 {
     const int x = get_global_id(0);
     const int y = get_global_id(1);
@@ -208,22 +201,9 @@ __kernel void Conv2D(const __global float* src, const __global float *weights, c
 #ifdef CONV2D_3x3
 
 
-#ifdef INTEL
 
 inline float dotRow(const __global float *src, const __global float *weight, int n)
 {
-   /*
-   float8 sum8 = (float8)(0.0f);
-   const __global float8 *s8 = (const __global float8 *)src;
-   const __global float8 *w8 = (const __global float8 *)weight;
-   int eights = n>>3;
-   for(int i=0;i<eights;i++)
-      sum8 = mad(s8[i], w8[i], sum8);
-
-   float4 sum4 = sum8.s0123 + sum8.s4567;
-   float2 sum2 = sum4.s01 + sum4.s23;
-   return sum2.s0 + sum2.s1;
-   */
    float4 sum4 = (float4)(0.0f);
    const __global float4 *s4 = (const __global float4 *)src;
    const __global float4 *w4 = (const __global float4 *)weight;
@@ -270,8 +250,6 @@ inline float dotRowLocal(const __local float *src, const __global float *w, int 
    }
    return sum;
 }
-
-#endif
 
 
 
@@ -422,9 +400,8 @@ inline void processTiles(const bool IsX0, const int MaxPix,
 
 
 
-__kernel void Conv2D(const __global float* src, const __global float *weights, const __global float *bias, const int width, const int height, __global float *dest)
+__kernel void Conv2D(const __global float* src, __global float *dest, const __global float *weights, const __global float *bias, const int width, const int height)
 {
-   #ifdef INTEL
    const int tid = get_local_id(0);
    const int row = get_global_id(1);
 
@@ -459,83 +436,8 @@ __kernel void Conv2D(const __global float* src, const __global float *weights, c
 
       processTiles(false, width-x, s0, s1, s2, weights, bias, out);
    }
-
-
-   #else
-   int pixels = width*height;
-   int pix0 = PIX * ( ((pixels+PIX-1)/PIX)*get_group_id(0)/get_num_groups(0) );
-   int maxPix = PIX * ( ((pixels+PIX-1)/PIX)*(get_group_id(0)+1)/get_num_groups(0) );
-   if (maxPix>pixels)
-      maxPix = pixels;
-
-   const int pixId = get_local_id(0) / PIX;
-   const int chanId = get_local_id(0) % PIX;
-
-   for( ; pix0<maxPix; pix0+=PIX)
-   {
-      // Calculate src offset and range for pixel in this thread
-      int pix = pix0 + pixId;
-      int py = pix / width; // todo - fast version?
-      int px = pix - py*width;
-
-      for(int oBase=0;oBase<OUTPUTS;oBase+=OUT)
-      {
-         __local float outputSum[PIX][OUT];
-         // Initialize outputSum
-         outputSum[pixId][chanId] = bias[oBase+chanId];
-         barrier(CLK_LOCAL_MEM_FENCE);
-
-         int weightBase = oBase * (INPUTS * 9);
-         for(int sy=0; sy<3; sy++)
-         {
-            int srcBase = ((py+(sy-1))*width + px - 1) *INPUTS;
-            for(int sx=0; sx<3; sx++)
-            {
-               int valid = (sx>0|px>0) &
-                           (sy>0|py>0) &
-                           (sx<2|px<(width-1)) &
-                           (sy<2|py<(height-1)) &
-                           (pix<maxPix);
-               for(int ch0 = 0; ch0 < INPUTS; ch0+=SRC)
-               {
-                  __local float srcBuf[PIX][SRC];
-                  __local float wBuf[OUT][SRC];
-
-                  // Fill Src ...
-                  srcBuf[pixId][chanId] = valid ? src[ srcBase + ch0 + chanId ] : 0.0f;
-
-                  // Fill weights ...
-                  //  w = out0:  s0 s1 s2 s3 .... s31
-                  //      out2:  s0 s1 s2 s3 .... s31
-                  //        ...
-                  //      outN:  s0 s1 s2 s3 .... s31
-                  wBuf[pixId][chanId] = weights[ weightBase + pixId*(INPUTS*9) + chanId ];
-
-                  barrier(CLK_LOCAL_MEM_FENCE);
-
-                  weightBase += SRC;
-
-                  // chanId == outId
-                  float sum = outputSum[pixId][chanId];
-                  for(int s =0; s < SRC; s ++)
-                     sum += srcBuf[pixId][s] * wBuf[chanId][s];
-
-                  outputSum[pixId][chanId] = sum;
-
-                  barrier(CLK_LOCAL_MEM_FENCE);
-               }
-               srcBase += INPUTS;
-            }
-         }
-
-         if (pix < maxPix)
-            dest[(py*width + px)*OUTPUTS + oBase+chanId] = ACTIVATION( outputSum[pixId][chanId] );
-
-         barrier(CLK_LOCAL_MEM_FENCE);
-      }
-   }
-   #endif
 }
+
 #endif
 
 
