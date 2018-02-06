@@ -237,6 +237,8 @@ typedef float BIAS_TYPE;
     OBASE + (Y*OUTPUT_SIZE_X + X) * INPUT0_FEATURE_NUM 
 
 
+#ifdef INTEL_TILED_1X1
+
 __attribute__((intel_reqd_sub_group_size(16)))
 __kernel void Conv2D_1x1(
     __global INPUT0_TYPE* input, 
@@ -310,4 +312,169 @@ __kernel void Conv2D_1x1(
         output[dst_index] = ACTIVATION(output16s[i]);
     }
 }
+
+#endif // INTEL_TILED_1X1
+
+
+
+
+#ifdef INTEL_TILED_3X3
+
+// Convolution for 3x3 filter, 6xTY tiles
+// Each workgroup calculates 8 outputs, and has 8 threads
+
+// Tile Height
+#define TW 4
+#define TH 4
+
+#define SRC_W INPUT0_SIZE_X
+#define SRC_H INPUT0_SIZE_Y
+#define DEST_W OUTPUT_SIZE_X
+#define DEST_H OUTPUT_SIZE_Y
+
+#define READ_T8(ptr,element)  as_float(intel_sub_group_block_read((const __global uint*)(ptr + element)))
+#define READ_T8x8(ptr,element)  as_float8(intel_sub_group_block_read8((const __global uint*)(ptr + element)))
+
+typedef const __global float8 *f8Ptr;
+
+__attribute__((reqd_work_group_size(1, 1, 8)))
+__attribute__((intel_reqd_sub_group_size(8)))
+__kernel void Conv2D_3x3(
+    const __global float *input,
+    __global float *dest,
+    const __global float *weights,
+    const __global float *bias )
+{
+    const unsigned xTile = get_group_id(0);
+    const unsigned yTile = get_group_id(1);
+    const unsigned outBase = get_group_id(2) * 8;
+
+    // threadId is used for input and output feature index
+    const unsigned threadId = get_local_id(2);
+
+    const int x0 = xTile * TW;
+    const int y0 = yTile * TH;
+    const __global float *srcPtr0 = input + ( (y0-1)*SRC_W + (x0-1))*INPUT0_FEATURE_NUM;
+
+    // Tile output,
+    float output_t8[TH][TW]/* x8 theads */;
+    // Source rows
+    float srcY_t8[3][TW+2] /* x8 threads */;
+
+
+    #define UNROLL_TILE(VAR,loop) { \
+       { const int VAR =0; loop; } \
+       { const int VAR =1; loop; } \
+       { const int VAR =2; loop; } \
+       { const int VAR =3; loop; } \
+    }
+    #define UNROLL_OUTER(VAR,loop) { \
+       UNROLL_TILE(VAR,loop) \
+       { const int VAR =4; loop; } \
+       { const int VAR =5; loop; } \
+    }
+
+
+    // Init with bias...
+    output_t8[0][0] = READ_T8(bias,outBase);
+    // Copy to outher outputs
+    UNROLL_TILE(I, UNROLL_TILE(J, { if (I||J) output_t8[I][J] = output_t8[0][0]; } ) );
+
+
+    // output8 is the 8 feature outputs at a given location
+    //    float * thread8
+    // src8 is the 8 feature src inputs at convolution offset
+    //    float * thread8
+    // w8 is the 8 weights that must be applied to each src to accumulate in the output
+    //    is float8 * thread8
+    //     =  [INPUT] * [ OUTPUT ]
+    //
+    // fma vs mad?
+    #define ACCUMULATE( output8, src8, w8 ) \
+        output8 = mad( sub_group_broadcast(src8,0), w8.s0, output8 ); \
+        output8 = mad( sub_group_broadcast(src8,1), w8.s1, output8 ); \
+        output8 = mad( sub_group_broadcast(src8,2), w8.s2, output8 ); \
+        output8 = mad( sub_group_broadcast(src8,3), w8.s3, output8 ); \
+        output8 = mad( sub_group_broadcast(src8,4), w8.s4, output8 ); \
+        output8 = mad( sub_group_broadcast(src8,5), w8.s5, output8 ); \
+        output8 = mad( sub_group_broadcast(src8,6), w8.s6, output8 ); \
+        output8 = mad( sub_group_broadcast(src8,7), w8.s7, output8 ); \
+
+    int weightBase = 9*outBase*INPUT0_FEATURE_NUM;
+
+    // Loads up [XY=9][INPUTS=float8][OUTPUTS=thread]
+    float8 w_t8[9] /* x8 */;
+
+    for(int i=0; i<INPUT0_FEATURE_NUM; i+=8)
+    {
+       w_t8[0] = READ_T8x8(weights, weightBase+8*8*0);
+       w_t8[1] = READ_T8x8(weights, weightBase+8*8*1);
+       w_t8[2] = READ_T8x8(weights, weightBase+8*8*2);
+       w_t8[3] = READ_T8x8(weights, weightBase+8*8*3);
+       w_t8[4] = READ_T8x8(weights, weightBase+8*8*4);
+       w_t8[5] = READ_T8x8(weights, weightBase+8*8*5);
+       w_t8[6] = READ_T8x8(weights, weightBase+8*8*6);
+       w_t8[7] = READ_T8x8(weights, weightBase+8*8*7);
+       w_t8[8] = READ_T8x8(weights, weightBase+8*8*8);
+
+
+       weightBase += 9*8*8;
+
+       // Pre-load first 2 rows ...
+       UNROLL_OUTER(X, {
+          int x = x0+(X-1);
+          srcY_t8[0][X] = x>=0 && x<SRC_W && y0>0 ? READ_T8( srcPtr0, X*INPUT0_FEATURE_NUM ) : 0.0f;
+          srcY_t8[1][X] = x>=0 && x<SRC_W ?         READ_T8( srcPtr0, (SRC_W+X)*INPUT0_FEATURE_NUM ) : 0.0f;
+       } );
+
+       UNROLL_TILE(Y, {
+          const int s0 = Y%3;
+          const int s1 = (Y+1)%3;
+          const int s2 = (Y+2)%3;
+          if (y0+Y<DEST_H)
+          {
+             UNROLL_TILE(X, {
+                ACCUMULATE( output_t8[Y][X], srcY_t8[s0][1+X-1], w_t8[0] );
+                ACCUMULATE( output_t8[Y][X], srcY_t8[s0][1+X  ], w_t8[1] );
+                ACCUMULATE( output_t8[Y][X], srcY_t8[s0][1+X+1], w_t8[2] );
+
+                ACCUMULATE( output_t8[Y][X], srcY_t8[s1][1+X-1], w_t8[3] );
+                ACCUMULATE( output_t8[Y][X], srcY_t8[s1][1+X  ], w_t8[4] );
+                ACCUMULATE( output_t8[Y][X], srcY_t8[s1][1+X+1], w_t8[5] );
+             })
+
+             if (y0+Y+1<DEST_H )
+             {
+                // Load bottom row
+                UNROLL_OUTER(X, {
+                   int x = x0+(X-1);
+                   srcY_t8[s2][X] = x>=0 && x<SRC_W ? READ_T8( srcPtr0, (SRC_W*(Y+2)+X)*INPUT0_FEATURE_NUM ) : 0.0f;
+                } );
+                UNROLL_TILE(X, {
+                   ACCUMULATE( output_t8[Y][X], srcY_t8[s2][1+X-1], w_t8[6] );
+                   ACCUMULATE( output_t8[Y][X], srcY_t8[s2][1+X  ], w_t8[7] );
+                   ACCUMULATE( output_t8[Y][X], srcY_t8[s2][1+X+1], w_t8[8] );
+                })
+             }
+          }
+       } );
+
+       srcPtr0 += 8;
+    }
+
+    UNROLL_TILE(Y, {
+       UNROLL_TILE(X, {
+          float o = ACTIVATION( output_t8[Y][X] );
+          //dest[  ((y0+Y)*DEST_W+(x0+X))*OUTPUT_FEATURE_NUM + outBase + threadId ] =  o;
+          intel_sub_group_block_write((__global uint*)( dest + ( (y0+Y)*DEST_W+(x0+X))*OUTPUT_FEATURE_NUM + outBase) , as_uint(o) );
+       })
+    });
+}
+
+#endif
+
+
+
+
+
 

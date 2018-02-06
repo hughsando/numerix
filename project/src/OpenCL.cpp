@@ -828,6 +828,7 @@ public:
 
       return result;
    }
+
 };
 
 
@@ -849,10 +850,12 @@ class OpenCLConv2D : public Conv2DBase
    bool useTiled3x3;
    bool useTiled1x1;
    bool useIntelTiled1x1;
+   bool useIntelTiled3x3;
    int  threads;
    cl_kernel kernel;
    Shape kernelShape;
    OpenCLLayerData data;
+   Tensor *overrideWeights;
 
 
 public:
@@ -865,13 +868,16 @@ public:
       useTiled3x3 = false;
       useTiled1x1 = false;
       useIntelTiled1x1 = false;
+      useIntelTiled3x3 = false;
       threads = 16;
+      overrideWeights = 0;
 
    }
 
    ~OpenCLConv2D()
    {
-
+      if (overrideWeights)
+         overrideWeights->decRef();
    }
 
    cl_event *startKernel() { return data.startKernel(); }
@@ -918,9 +924,16 @@ public:
 
       useTiled1x1 = is1x1 && threads;
       useIntelTiled1x1 = is1x1 && (threads>=8) && ctx->useIntelMethod;
-      useTiled3x3 = false;
+      useTiled3x3 = filterX==3 && filterY==3 && !(inputs&3) && threads;
+      bool wasI3x3 = useIntelTiled3x3;
 
-      if (useIntelTiled1x1)
+      useIntelTiled3x3 = filterX==3 && filterY==3 && !(inputs&7) && !(outputs&7) && ctx->useIntelMethod;
+
+      if (!wasI3x3 && useIntelTiled3x3)
+         rebuildWeights();
+
+
+      if (useIntelTiled1x1 || useIntelTiled3x3)
       {
          sprintf(argBuf," -D INPUT0_SIZE_X=%d -D INPUT0_SIZE_Y=%d -D INPUT0_FEATURE_NUM=%d ",
                  srcW, srcH, inputs);
@@ -932,19 +945,21 @@ public:
                  inputs, inputs);
          buildOptions += argBuf;
 
-         const char *func = "INTEL_TILED_1X1";
          const char *prog = openclIntelConv2D_cl;
-         kernel = ctx->makeKernel(func, prog, "Conv2D_1x1", buildOptions);
+
+         if (useIntelTiled1x1)
+            kernel = ctx->makeKernel("INTEL_TILED_1X1", prog, "Conv2D_1x1", buildOptions);
+         else
+            kernel = ctx->makeKernel("INTEL_TILED_3X3", prog, "Conv2D_3x3", buildOptions);
       }
       else
       {
          sprintf(argBuf," -D INPUTS=%d -D OUTPUTS=%d -D FX=%d -D FY=%d -D STRIDE_X=%d -D STRIDE_Y=%d -D DEST_W=%d -D DEST_H=%d -D dMin=%d -D dMax=%d -D OVEC=%d",inputs,outputs,filterX,filterY, strideX, strideY, destW, destH, dMin, dMax, threads);
          buildOptions += argBuf;
 
-         if ( filterX==3 && filterY==3 && !(inputs&3) && threads)
+         if ( useTiled3x3 )
          {
             buildOptions += argBuf;
-            useTiled3x3 = true;
             kernel = ctx->makeKernel("CONV2D_3x3", openclConv2D_cl,"Conv2D", buildOptions);
          }
          else
@@ -972,7 +987,7 @@ public:
       CShape sin = input->shape;
 
       const OclData *src = input->oclRead();
-      const OclData *w = weights->oclRead();
+      const OclData *w = (overrideWeights ? overrideWeights : weights)->oclRead();
       const OclData *b = bias->oclRead();
       OclData *dest = output->oclWrite();
 
@@ -985,7 +1000,7 @@ public:
       err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &dest);
       err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &w);
       err |= clSetKernelArg(kernel, 3, sizeof(cl_mem), &b);
-      if (!useIntelTiled1x1)
+      if (!useIntelTiled1x1 && !useIntelTiled3x3)
       {
          err |= clSetKernelArg(kernel, 4, sizeof(cl_int), &srcW);
          err |= clSetKernelArg(kernel, 5, sizeof(cl_int), &srcH);
@@ -1004,6 +1019,19 @@ public:
          cl_uint work_dim = 2;
          size_t globalSize[2] = { (size_t)(destW*destH/16),  (size_t)(outputs)  };
          size_t localSize[2] = { (size_t)(1),  (size_t)(16)  };
+         err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, work_offset, globalSize, localSize, 0, NULL, startKernel());
+      }
+      else if (useIntelTiled3x3)
+      {
+         int groupCount = srcH;
+         cl_uint work_dim = 3;
+         size_t xGroups = (destW+3)/4;
+         size_t yGroups = (destH+3)/4;
+         size_t outputGroups = outputs/8;
+
+         size_t localSize[3] = { 1,  1, 8 };
+         size_t globalSize[3] = { xGroups*localSize[0], yGroups*localSize[1], outputGroups*localSize[2] };
+
          err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, work_offset, globalSize, localSize, 0, NULL, startKernel());
       }
       else if (useTiled3x3 || useTiled1x1)
@@ -1035,6 +1063,38 @@ public:
          }
       }
    }
+
+   void rebuildWeights()
+   {
+      Conv2DBase::rebuildWeights();
+      if (overrideWeights)
+      {
+         overrideWeights->decRef();
+         overrideWeights = 0;
+      }
+
+      if (useIntelTiled3x3)
+      {
+         Shape shape = weights->shape;
+         int outs = shape[0];
+         int h = shape[1];
+         int w = shape[2];
+         int ins = shape[3];
+         overrideWeights = new Tensor( weights->type, shape );
+
+
+         int idx = 0;
+         for(int oBase=0;oBase<outs;oBase+=8)
+            for(int iBase=0; iBase<ins; iBase+=8)
+                for(int y=0;y<h;y++)
+                   for(int x=0;x<w;x++)
+                      for(int i=0;i<8;i++)
+                         for(int o=0;o<8;o++)
+                            overrideWeights->setFloatAt( idx++, weights->getFloat(oBase+o,y,x,iBase+i) );
+      }
+   }
+
+
 };
 
 Layer *oclCreateConv2D(int inStrideY, int inStrideX,

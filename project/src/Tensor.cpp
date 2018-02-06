@@ -449,6 +449,24 @@ void Tensor::setFloat64(double inValue, int inOffsetElem, unsigned int inCount)
 }
 
 
+void Tensor::setFloatAt(int inIndex,float inValue)
+{
+   void *d = cpuWritePart();
+   switch(type)
+   {
+      case Float32: ((float *)d)[ inIndex ]= inValue; break;
+      case Float64: ((double *)d)[ inIndex ]= inValue; break;
+      case UInt8:   ((unsigned char *)d)[ inIndex ]= inValue; break;
+      case UInt16:  ((unsigned short *)d)[ inIndex ]= inValue; break;
+      case UInt32:  ((unsigned int *)d)[ inIndex ]= inValue; break;
+      case UInt64:  ((TUInt64 *)d)[ inIndex ]= inValue; break;
+      case Int8:    ((signed char *)d)[ inIndex ]= inValue; break;
+      case Int16:   ((short *)d)[ inIndex ]= inValue; break;
+      case Int32:   ((int *)d)[ inIndex ]= inValue; break;
+      case Int64:   ((TInt64 *)d)[ inIndex ]= inValue; break;
+   }
+}
+
 
 template<typename DATA>
 void TReorder(const DATA *src, void *inDest,

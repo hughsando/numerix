@@ -327,6 +327,7 @@ class Tensor
       void zero();
       void setInt32(int inValue, int inOffsetElem, unsigned int inCount);
       void setFloat64(double inValue, int inOffsetElem, unsigned int inCount);
+      void setFloatAt(int inIndex, float inValue);
 
       void setFlat();
       void setShape(CShape inShape);
