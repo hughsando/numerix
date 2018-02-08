@@ -943,7 +943,7 @@ public:
       useTiled1x1 = is1x1 && threads;
       useIntelTiled1x1 = is1x1 && (threads>=8) && !(outputs&15) && ctx->useIntelMethod;
       useTiled3x3 = strideX==1 && strideY==1 && filterX==3 && filterY==3 && !(inputs&3) && threads;
-      useIntelTiled3x3x3 = filterX==3 && filterY==3 && inputs==3 && threads && strideX==2 && strideY==2 && ctx->useIntelMethod;
+      useIntelTiled3x3x3 = filterX==3 && filterY==3 && inputs==3 && !(outputs&15) && strideX==2 && strideY==2 && ctx->useIntelMethod;
 
       //printf("useIntelTiled3x3 ----- %d:  %d %d %d %d %d %d %d\n", useIntelTiled3x3x3,
       //       filterX==3, filterY==3, inputs==3, threads, strideX==2, strideY==2, ctx->useIntelMethod );
@@ -1045,15 +1045,28 @@ public:
          size_t localSize[2] = { (size_t)(1),  (size_t)(16)  };
          err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, work_offset, globalSize, localSize, 0, NULL, startKernel());
       }
-      else if (useIntelTiled3x3 || useIntelTiled3x3x3)
+      else if (useIntelTiled3x3x3)
       {
          int groupCount = srcH;
          cl_uint work_dim = 3;
-         size_t xGroups = useIntelTiled3x3x3 ? (destW+2)/3 : (destW+3)/4;
+         size_t xGroups = (destW+6)/7;
+         size_t yGroups = (destH+7)/8;
+         size_t outputGroups = outputs/16;
+
+         size_t localSize[3] = { 1,  1, 16 };
+         size_t globalSize[3] = { xGroups*localSize[0], yGroups*localSize[1], outputGroups*localSize[2] };
+
+         err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, work_offset, globalSize, localSize, 0, NULL, startKernel());
+      }
+      else if (useIntelTiled3x3)
+      {
+         int groupCount = srcH;
+         cl_uint work_dim = 3;
+         size_t xGroups = (destW+3)/4;
          size_t yGroups = (destH+3)/4;
          size_t outputGroups = outputs/8;
 
-         size_t localSize[3] = { 1,  1, 8 };
+         size_t localSize[3] = { 1,  1,  8 };
          size_t globalSize[3] = { xGroups*localSize[0], yGroups*localSize[1], outputGroups*localSize[2] };
 
          err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, work_offset, globalSize, localSize, 0, NULL, startKernel());
@@ -1106,15 +1119,16 @@ public:
          int ins = shape[3];
          overrideWeights = new Tensor( weights->type, shape );
 
+         int outputGroups = useIntelTiled3x3x3 ? 16 : 8;
 
          int idx = 0;
          int inputs = std::min(8,ins);
-         for(int oBase=0;oBase<outs;oBase+=8)
+         for(int oBase=0;oBase<outs;oBase+=outputGroups)
             for(int iBase=0; iBase<ins; iBase+=8)
                 for(int y=0;y<h;y++)
                    for(int x=0;x<w;x++)
                       for(int i=0;i<inputs;i++)
-                         for(int o=0;o<8;o++)
+                         for(int o=0;o<outputGroups;o++)
                             overrideWeights->setFloatAt( idx++, weights->getFloat(oBase+o,y,x,iBase+i) );
       }
    }

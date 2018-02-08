@@ -352,15 +352,15 @@ __kernel void Conv2D_3x3(
 // Each workgroup calculates 8 outputs, and has 8 threads
 
 // Output Tile Height
-#define OTW 3
-#define OTH 4
+#define OTW 7
+#define OTH 8
 
 // stride = 2
 
 
 
-__attribute__((reqd_work_group_size(1, 1, 8)))
-__attribute__((intel_reqd_sub_group_size(8)))
+__attribute__((reqd_work_group_size(1, 1, 16)))
+__attribute__((intel_reqd_sub_group_size(16)))
 __kernel void Conv2D_3X3X3(
     const __global float *input,
     __global float *dest,
@@ -369,7 +369,7 @@ __kernel void Conv2D_3X3X3(
 {
     const unsigned xTile = get_group_id(0);
     const unsigned yTile = get_group_id(1);
-    const unsigned outBase = get_group_id(2) * 8;
+    const unsigned outBase = get_group_id(2) * 16;
 
     // threadId is used for source columnn and output feature index
     const signed int threadId = get_local_id(2);
@@ -380,7 +380,7 @@ __kernel void Conv2D_3X3X3(
 
     // 4x3 x 3 -> 9 x 7 x 3
     // Source rows
-    float src[9][3]; // x t8 - only need 7 compnents, so last thread can slack off
+    float src[17][3]; // x t16 - only need 7 compnents, so last thread can slack off
 
 
     #define UNROLL_SRC_ROWS(VAR,loop) { \
@@ -393,11 +393,20 @@ __kernel void Conv2D_3X3X3(
        { const signed int VAR =6; loop; } \
        { const signed int VAR =7; loop; } \
        { const signed int VAR =8; loop; } \
+       { const signed int VAR =9; loop; } \
+       { const signed int VAR =10; loop; } \
+       { const signed int VAR =11; loop; } \
+       { const signed int VAR =12; loop; } \
+       { const signed int VAR =13; loop; } \
+       { const signed int VAR =14; loop; } \
+       { const signed int VAR =15; loop; } \
+       { const signed int VAR =16; loop; } \
+       { const signed int VAR =17; loop; } \
     }
 
     int  srcOffset = (sy0*SRC_W + sx0 + threadId)*INPUT0_FEATURE_NUM;
     // Only load valid x, and if threadId is ok ...
-    bool validX = (sx0+threadId>=0) &&  (threadId < 7) && (sx0+threadId<SRC_W );
+    bool validX = (sx0+threadId>=0) &&  (threadId < 15) && (sx0+threadId<SRC_W );
     UNROLL_SRC_ROWS(Y, {
           bool valid = validX && (sy0+Y>=0) && (sy0+Y < SRC_H);
           src[Y][0] = valid ? input[ srcOffset ]   : 0.0f;
@@ -413,12 +422,20 @@ __kernel void Conv2D_3X3X3(
        { const int VAR =0; loop; } \
        { const int VAR =1; loop; } \
        { const int VAR =2; loop; } \
+       { const int VAR =3; loop; } \
+       { const int VAR =4; loop; } \
+       { const int VAR =5; loop; } \
+       { const int VAR =6; loop; } \
     }
     #define UNROLL_HEIGHT(VAR,loop) { \
        { const int VAR =0; loop; } \
        { const int VAR =1; loop; } \
        { const int VAR =2; loop; } \
        { const int VAR =3; loop; } \
+       { const int VAR =4; loop; } \
+       { const int VAR =5; loop; } \
+       { const int VAR =6; loop; } \
+       { const int VAR =7; loop; } \
     }
 
 
@@ -446,17 +463,17 @@ __kernel void Conv2D_3X3X3(
     //}
 
     w.s.w8[0] = READ_T8x8( weights, weightBase );
-    w.s.w8[1] = READ_T8x8( weights, weightBase + 64);
-    w.s.w8[2] = READ_T8x8( weights, weightBase + 128);
-    w.s.w2 =    READ_T8x2( weights, weightBase + 192);
-    w.s.w1 =    READ_T8(   weights, weightBase + 208);
+    w.s.w8[1] = READ_T8x8( weights, weightBase + 64*2);
+    w.s.w8[2] = READ_T8x8( weights, weightBase + 128*2);
+    w.s.w2 =    READ_T8x2( weights, weightBase + 192*2);
+    w.s.w1 =    READ_T8(   weights, weightBase + 208*2);
 
 
    // Accumulate out
-   #define ACCUMULATE( output8, src, x, w ) \
-        output8 = mad( sub_group_broadcast(src[0],x), w[0], output8 ); \
-        output8 = mad( sub_group_broadcast(src[1],x), w[1], output8 ); \
-        output8 = mad( sub_group_broadcast(src[2],x), w[2], output8 ); \
+   #define ACCUMULATE( output16, src, x, w ) \
+        output16 = mad( sub_group_broadcast(src[0],x), w[0], output16 ); \
+        output16 = mad( sub_group_broadcast(src[1],x), w[1], output16 ); \
+        output16 = mad( sub_group_broadcast(src[2],x), w[2], output16 ); \
 
 
     float biasVal = READ_T8(bias,outBase);
