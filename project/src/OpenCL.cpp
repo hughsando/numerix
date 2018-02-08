@@ -12,6 +12,10 @@ extern const char *openclConv2D_cl;
 extern const char *openclIntelConv2D_cl;
 extern const char *openclMaxPool_cl;
 
+
+// This allows to to profile layers. 
+bool gOpenCLProfilingQueue = true;
+
 #ifdef HX_WINDOWS
 DynamicLibrary openclLib("OpenCL.dll");
 #else
@@ -30,6 +34,7 @@ DynamicFunction1(openclLib, CL_API_CALL, cl_int, -99, clReleaseContext, cl_conte
 DynamicFunction1(openclLib, CL_API_CALL, cl_int, -99, clReleaseMemObject, cl_mem)
 DynamicFunction1(openclLib, CL_API_CALL, cl_int, -99, clReleaseProgram, cl_program)
 DynamicFunction1(openclLib, CL_API_CALL, cl_int, -99, clReleaseKernel, cl_kernel)
+DynamicFunction1(openclLib, CL_API_CALL, cl_int, -99, clReleaseEvent, cl_event)
 DynamicFunction1(openclLib, CL_API_CALL, cl_int, -99, clFinish, cl_command_queue)
 
 DynamicFunction5(openclLib, CL_API_CALL, cl_mem, 0, clCreateBuffer, cl_context, cl_mem_flags, size_t, void *, cl_int *)
@@ -142,7 +147,7 @@ public:
       buf[5]='\0';
       useIntelMethod = std::string(buf)=="intel";
 
-      queue0 = clCreateCommandQueue(context, devices[0], CL_QUEUE_PROFILING_ENABLE, &error);
+      queue0 = clCreateCommandQueue(context, devices[0], gOpenCLProfilingQueue ? CL_QUEUE_PROFILING_ENABLE : 0, &error);
       if (!queue0 || error)
          TensorThrow("Could not create OpenCL command queue");
 
@@ -443,6 +448,7 @@ public:
       waiting = false;
       totalTime = 0.0;
       runCount = 0;
+      timingEvent = 0;
    }
 
    ~OpenCLLayerData()
@@ -463,6 +469,8 @@ public:
          clGetEventProfilingInfo(timingEvent, CL_PROFILING_COMMAND_START, sizeof(time_start), &time_start, NULL);
          clGetEventProfilingInfo(timingEvent, CL_PROFILING_COMMAND_END, sizeof(time_end), &time_end, NULL);
 
+         clReleaseEvent(timingEvent);
+
          double nanoSeconds = time_end-time_start;
          totalTime += nanoSeconds * 1e-9;
          runCount++;
@@ -472,8 +480,12 @@ public:
    cl_event *startKernel()
    {
       updateStats();
-      waiting = true;
-      return &timingEvent;
+      if (Layer::openCLTimingEvents)
+      {
+         waiting = true;
+         return &timingEvent;
+      }
+      return 0;
    }
 
    double getRunTime()
@@ -851,6 +863,7 @@ class OpenCLConv2D : public Conv2DBase
    bool useTiled1x1;
    bool useIntelTiled1x1;
    bool useIntelTiled3x3;
+   bool useIntelTiled3x3x3;
    int  threads;
    cl_kernel kernel;
    Shape kernelShape;
@@ -869,9 +882,11 @@ public:
       useTiled1x1 = false;
       useIntelTiled1x1 = false;
       useIntelTiled3x3 = false;
+      useIntelTiled3x3x3 = false;
       threads = 16;
       overrideWeights = 0;
-
+      padX = padding==padValid ? 0 : ( (filterX-1)/2 );
+      padY = padding==padValid ? 0 : ( (filterY-1)/2 );
    }
 
    ~OpenCLConv2D()
@@ -923,17 +938,21 @@ public:
          TensorThrow("OpenCLConv2D - no current ocl context");
 
       useTiled1x1 = is1x1 && threads;
-      useIntelTiled1x1 = is1x1 && (threads>=8) && ctx->useIntelMethod;
-      useTiled3x3 = filterX==3 && filterY==3 && !(inputs&3) && threads;
+      useIntelTiled1x1 = is1x1 && (threads>=8) && !(outputs&15) && ctx->useIntelMethod;
+      useTiled3x3 = strideX==1 && strideY==1 && filterX==3 && filterY==3 && !(inputs&3) && threads;
+      useIntelTiled3x3x3 = filterX==3 && filterY==3 && inputs==3 && threads && strideX==2 && strideY==2 && ctx->useIntelMethod;
       bool wasI3x3 = useIntelTiled3x3;
 
-      useIntelTiled3x3 = filterX==3 && filterY==3 && !(inputs&7) && !(outputs&7) && ctx->useIntelMethod;
+      //printf("useIntelTiled3x3 ----- %d:  %d %d %d %d %d %d %d\n", useIntelTiled3x3x3,
+      //       filterX==3, filterY==3, inputs==3, threads, strideX==2, strideY==2, ctx->useIntelMethod );
+
+      useIntelTiled3x3 = strideX==1 && strideY==1 && filterX==3 && filterY==3 && !(inputs&7) && !(outputs&7) && ctx->useIntelMethod;
 
       if (!wasI3x3 && useIntelTiled3x3)
          rebuildWeights();
 
 
-      if (useIntelTiled1x1 || useIntelTiled3x3)
+      if (useIntelTiled1x1 || useIntelTiled3x3 || useIntelTiled3x3x3)
       {
          sprintf(argBuf," -D INPUT0_SIZE_X=%d -D INPUT0_SIZE_Y=%d -D INPUT0_FEATURE_NUM=%d ",
                  srcW, srcH, inputs);
@@ -943,12 +962,15 @@ public:
          buildOptions += argBuf;
          sprintf(argBuf," -D FILTER_OFM_PITCH=%d -D FILTER_IFM_NUM=%d ",
                  inputs, inputs);
+         sprintf(argBuf," -D PADX=%d -D PADY=%d ", padX, padY);
          buildOptions += argBuf;
 
          const char *prog = openclIntelConv2D_cl;
 
          if (useIntelTiled1x1)
             kernel = ctx->makeKernel("INTEL_TILED_1X1", prog, "Conv2D_1x1", buildOptions);
+         else if (useIntelTiled3x3x3)
+            kernel = ctx->makeKernel("INTEL_TILED_3X3X3", prog, "Conv2D_3X3X3", buildOptions);
          else
             kernel = ctx->makeKernel("INTEL_TILED_3X3", prog, "Conv2D_3x3", buildOptions);
       }
@@ -1000,7 +1022,7 @@ public:
       err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &dest);
       err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &w);
       err |= clSetKernelArg(kernel, 3, sizeof(cl_mem), &b);
-      if (!useIntelTiled1x1 && !useIntelTiled3x3)
+      if (!useIntelTiled1x1 && !useIntelTiled3x3 && !useIntelTiled3x3x3)
       {
          err |= clSetKernelArg(kernel, 4, sizeof(cl_int), &srcW);
          err |= clSetKernelArg(kernel, 5, sizeof(cl_int), &srcH);
@@ -1017,15 +1039,15 @@ public:
       {
          int groupCount = srcH;
          cl_uint work_dim = 2;
-         size_t globalSize[2] = { (size_t)(destW*destH/16),  (size_t)(outputs)  };
+         size_t globalSize[2] = { (size_t)((destW*destH+15)/16),  (size_t)(outputs)  };
          size_t localSize[2] = { (size_t)(1),  (size_t)(16)  };
          err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, work_offset, globalSize, localSize, 0, NULL, startKernel());
       }
-      else if (useIntelTiled3x3)
+      else if (useIntelTiled3x3 || useIntelTiled3x3x3)
       {
          int groupCount = srcH;
          cl_uint work_dim = 3;
-         size_t xGroups = (destW+3)/4;
+         size_t xGroups = useIntelTiled3x3x3 ? (destW+2)/3 : (destW+3)/4;
          size_t yGroups = (destH+3)/4;
          size_t outputGroups = outputs/8;
 

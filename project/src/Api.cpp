@@ -932,6 +932,17 @@ void layRelease(value inLayer)
 }
 DEFINE_PRIME1v(layRelease);
 
+
+
+
+void layEnablePerLayerTiming(bool inLayer)
+{
+   Layer::openCLTimingEvents = inLayer;
+}
+DEFINE_PRIME1v(layEnablePerLayerTiming);
+
+
+
 // Movidius device ...
 
 HxString moviGetDeviceName(int inIndex)

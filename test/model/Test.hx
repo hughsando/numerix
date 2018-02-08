@@ -4,16 +4,6 @@ using StringTools;
 
 class Test
 {
-   static function testImage()
-   {
-      var floats = [ 0,0,0, 0,0,0,   0,0,0, 0,0,0, 0,0,0,
-                     0,0,0, 0,0,0,   0,0,0, 0,0,0, 0,0,0,
-                     0,0,0, 1.0,0,0, 0,0,0, 0,0,0, 0,0,0,
-                     0,0,0, 0,0,0,   0,0,0, 0,0,0, 0,0,0 ];
-
-      return Nx.array( floats, Nx.float32, [4,5,3] );
-   }
-
    public static function main()
    {
       var args = Sys.args();
@@ -24,6 +14,7 @@ class Test
       var doTime = !args.remove("-notime");
       var allowResize = !args.remove("-noresize");
       var showResults = args.remove("-showresults");
+      var loop = args.remove("-loop");
 
       for(a in args)
       {
@@ -121,9 +112,22 @@ class Test
          println("Warmup Time : " + Std.int((haxe.Timer.stamp()-t0)*1000) + "ms");
          if (doTime)
          {
+            if (!loop)
+               Layer.enablePerLayerTiming();
+            var max = loop ? 100000000 : 100;
             var t0 = haxe.Timer.stamp();
-            for(go in 0...100)
+            for(go in 0...max)
+            {
+               if (go>0 && (go%100)==0)
+               {
+                  var time = (haxe.Timer.stamp()-t0);
+                  println("Time : " + Std.int(time*10) + "ms");
+                  t0 = haxe.Timer.stamp();
+               }
                result = model.run(val,allowResize);
+            }
+
+            // Final pass displays layer times
             var time = (haxe.Timer.stamp()-t0);
             Layer.showTimes = true;
             result = model.run(val,allowResize);

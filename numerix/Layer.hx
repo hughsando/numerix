@@ -162,6 +162,11 @@ class Layer
       laySetPadInput(handle);
    }
 
+   public static function enablePerLayerTiming(enable = true)
+   {
+      layEnablePerLayerTiming(enable);
+   }
+
    public function toString() return 'Layer($name)';
 
    static var layRun = Loader.load("layRun","oooo");
@@ -170,6 +175,7 @@ class Layer
    static var layGetBoxes = Loader.load("layGetBoxes","oo");
    static var layAccurateTimes = Loader.load("layAccurateTimes","bv");
    static var layGetRunTime = Loader.load("layGetRunTime","od");
+   static var layEnablePerLayerTiming = Loader.load("layEnablePerLayerTiming","bv");
 }
 
 

@@ -7,8 +7,8 @@ class Test
    {
       //testConv();
       //testOpenCl();
-      //testOpenCl_1x1();
-      testOpenCl_3x3();
+      testOpenCl_1x1();
+      //testOpenCl_3x3();
    }
 
    public static function testCreate()
@@ -49,10 +49,10 @@ class Test
       Sys.println("Using CPU implementation");
       var refResult = null;
 
-      var Inputs = 16;
-      var Outputs = 24;
-      var SrcW = 4;
-      var SrcH = 4;
+      var Inputs = 3;
+      var Outputs = 8;
+      var SrcW = 22;
+      var SrcH = 23;
 
       for(mode in 0...platforms.length+1)
       {
@@ -66,7 +66,7 @@ class Test
          for(w in 0...weights.elementCount)
             weights[w] = w%19;
          for(s in 0...src.elementCount)
-            src[s] = s%17;
+            src[s] = s%37;
 
          if (mode>0)
          {
@@ -78,7 +78,7 @@ class Test
          }
 
          var cfg = { activation:'linear', kernelSize:[1,1], filters:16, padding:'same',
-                      allowTransform: false };
+                      allowTransform: false, strides:[2,2] };
 
 
          var model = new Model();
@@ -91,7 +91,9 @@ class Test
 
          var result = model.run(src);
          if (refResult==null)
+         {
             refResult = result;
+         }
          else
          {
             var shape = refResult.shape;
@@ -123,10 +125,10 @@ class Test
       Sys.println("Using CPU implementation");
       var refResult = null;
 
-      var Inputs = 8;
-      var Outputs = 16;
-      var SrcW = 16;
-      var SrcH = 1;
+      var Inputs = 24;
+      var Outputs = 32;
+      var SrcW = 17;
+      var SrcH = 17;
 
       for(mode in 0...platforms.length+1)
       {

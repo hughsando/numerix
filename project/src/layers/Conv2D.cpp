@@ -182,12 +182,13 @@ Tensor *Conv2DBase::run(Tensor *inSrc0, Tensor *inBuffer)
    if (padding==padSame)
    {
       destW = (srcW+strideX-1)/strideX;
-      int padX = (destW - 1)*strideX + filterX - srcW;
-      padOx = padX>>1;
+      //int padX = (destW - 1)*strideX + filterX - srcW;
+      // This is pad-left, right does not really matter
+      padOx = (filterX-1)>>1;
 
       destH = (srcH+strideY-1)/strideY;
-      int padY = (destH - 1)*strideY + filterY - srcH;
-      padOy = padY>>1;
+      //int padY = (destH - 1)*strideY + filterY - srcH;
+      padOy = (filterY-1)>>1;
    }
    else // padValid
    {

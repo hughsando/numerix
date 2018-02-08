@@ -1,45 +1,4 @@
 
-// Copyright (c) 2016-2017 Intel Corporation
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-#define __CAT(x, y) x##y
-#define CAT(x, y) __CAT(x, y)
-
-#define __CAT_FUNC(x, y) FUNC(x##y)
-#define CAT_FUNC(x, y) __CAT_FUNC(x, y)
-
-#define __CAT_FUNC_CALL(x, y) FUNC_CALL(x##y)
-#define CAT_FUNC_CALL(x, y) __CAT_FUNC_CALL(x, y)
-
-#define OFFSET_GLOBAL_PTR(elem_type, ptr, byte_offset) ((__global elem_type*)((__global char*)(ptr) + (byte_offset)))
-#define MULTIPLY_OFFSET(elem_type, byte_offset) ((byte_offset) * sizeof(elem_type))
-
-
-#define ACCUMULATOR_TYPE float
-#define UNIT_TYPE float
-
-#define UNIT_VAL_MAX FLT_MAX
-#define UNIT_VAL_MIN -UNIT_VAL_MAX
-#define UNIT_VAL_ONE 1.0f
-#define UNIT_VAL_ZERO 0.0f
-#define TO_UNIT_TYPE(v) (float)(v)
-
-#define MAKE_VECTOR_TYPE(elem_type, size) CAT(elem_type, size)
-
-
-
-
 #if defined(cl_intel_subgroups)
 #pragma OPENCL EXTENSION  cl_intel_subgroups : enable
 #endif
@@ -48,55 +7,24 @@
 #pragma OPENCL EXTENSION  cl_intel_subgroups_short : enable
 #endif
 
-#define TRANSPOSE_BLOCK_8( _block )   \
-        (float8)( intel_sub_group_shuffle( _block, 0 ), \
-                  intel_sub_group_shuffle( _block, 1 ), \
-                  intel_sub_group_shuffle( _block, 2 ), \
-                  intel_sub_group_shuffle( _block, 3 ), \
-                  intel_sub_group_shuffle( _block, 4 ), \
-                  intel_sub_group_shuffle( _block, 5 ), \
-                  intel_sub_group_shuffle( _block, 6 ), \
-                  intel_sub_group_shuffle( _block, 7 ) );
 
-#define TRANSPOSE_BLOCK_8_FP16( _block )   \
-        (half8)( intel_sub_group_shuffle( _block, 0 ), \
-                  intel_sub_group_shuffle( _block, 1 ), \
-                  intel_sub_group_shuffle( _block, 2 ), \
-                  intel_sub_group_shuffle( _block, 3 ), \
-                  intel_sub_group_shuffle( _block, 4 ), \
-                  intel_sub_group_shuffle( _block, 5 ), \
-                  intel_sub_group_shuffle( _block, 6 ), \
-                  intel_sub_group_shuffle( _block, 7 ) );
+typedef float INPUT0_TYPE;
+typedef float OUTPUT_TYPE;
+typedef float FILTER_TYPE;
+typedef float BIAS_TYPE;
 
-#define TRANSPOSE_BLOCK_8_COL( _block, _col )   \
-        (float8)( intel_sub_group_shuffle( _block.s0, _col ), \
-                  intel_sub_group_shuffle( _block.s1, _col ), \
-                  intel_sub_group_shuffle( _block.s2, _col ), \
-                  intel_sub_group_shuffle( _block.s3, _col ), \
-                  intel_sub_group_shuffle( _block.s4, _col ), \
-                  intel_sub_group_shuffle( _block.s5, _col ), \
-                  intel_sub_group_shuffle( _block.s6, _col ), \
-                  intel_sub_group_shuffle( _block.s7, _col ) );
+#define SRC_W INPUT0_SIZE_X
+#define SRC_H INPUT0_SIZE_Y
+#define DEST_W OUTPUT_SIZE_X
+#define DEST_H OUTPUT_SIZE_Y
 
-#define TRANSPOSE_BLOCK_8_COL_FP16( _block, _col )   \
-        (half8)( intel_sub_group_shuffle( _block.s0, _col ), \
-                  intel_sub_group_shuffle( _block.s1, _col ), \
-                  intel_sub_group_shuffle( _block.s2, _col ), \
-                  intel_sub_group_shuffle( _block.s3, _col ), \
-                  intel_sub_group_shuffle( _block.s4, _col ), \
-                  intel_sub_group_shuffle( _block.s5, _col ), \
-                  intel_sub_group_shuffle( _block.s6, _col ), \
-                  intel_sub_group_shuffle( _block.s7, _col ) );
+typedef const __global float8 *f8Ptr;
+typedef const __global float4 *f4Ptr;
+typedef const __global float2 *f2Ptr;
 
-#define TRANSPOSE_BLOCK_16_FP16(_block)  \
-        (half16)(as_half2(intel_sub_group_shuffle(_block, 0)),  \
-                 as_half2(intel_sub_group_shuffle(_block, 1)),  \
-                 as_half2(intel_sub_group_shuffle(_block, 2)),  \
-                 as_half2(intel_sub_group_shuffle(_block, 3)),  \
-                 as_half2(intel_sub_group_shuffle(_block, 4)),  \
-                 as_half2(intel_sub_group_shuffle(_block, 5)),  \
-                 as_half2(intel_sub_group_shuffle(_block, 6)),  \
-                 as_half2(intel_sub_group_shuffle(_block, 7)));
+#define READ_T8(ptr,element)  as_float(intel_sub_group_block_read((const __global uint*)(ptr + element)))
+#define READ_T8x8(ptr,element)  as_float8(intel_sub_group_block_read8((const __global uint*)(ptr + element)))
+
 
 #define TRANSPOSE_BLOCK_16_FP16_HALF_TYPE(_block)  \
         (half16)(intel_sub_group_shuffle(_block, 0),  \
@@ -133,45 +61,6 @@
                  intel_sub_group_shuffle(_block, 13),  \
                  intel_sub_group_shuffle(_block, 14),  \
                  intel_sub_group_shuffle(_block, 15));
-
-#define DOT_PRODUCT_8( _result, _rowA, colB )    \
-{   \
-        _result.s0 = mad( _rowA, intel_sub_group_shuffle( colB, 0 ), _result.s0 );  \
-        _result.s1 = mad( _rowA, intel_sub_group_shuffle( colB, 1 ), _result.s1 );  \
-        _result.s2 = mad( _rowA, intel_sub_group_shuffle( colB, 2 ), _result.s2 );  \
-        _result.s3 = mad( _rowA, intel_sub_group_shuffle( colB, 3 ), _result.s3 );  \
-        _result.s4 = mad( _rowA, intel_sub_group_shuffle( colB, 4 ), _result.s4 );  \
-        _result.s5 = mad( _rowA, intel_sub_group_shuffle( colB, 5 ), _result.s5 );  \
-        _result.s6 = mad( _rowA, intel_sub_group_shuffle( colB, 6 ), _result.s6 );  \
-        _result.s7 = mad( _rowA, intel_sub_group_shuffle( colB, 7 ), _result.s7 );  \
-}
-
-#define ADD_BIAS_8( _result, _biasVal) \
-{ \
-    _result.s0 += intel_sub_group_shuffle( _biasVal, 0 ); \
-    _result.s1 += intel_sub_group_shuffle( _biasVal, 1 ); \
-    _result.s2 += intel_sub_group_shuffle( _biasVal, 2 ); \
-    _result.s3 += intel_sub_group_shuffle( _biasVal, 3 ); \
-    _result.s4 += intel_sub_group_shuffle( _biasVal, 4 ); \
-    _result.s5 += intel_sub_group_shuffle( _biasVal, 5 ); \
-    _result.s6 += intel_sub_group_shuffle( _biasVal, 6 ); \
-    _result.s7 += intel_sub_group_shuffle( _biasVal, 7 ); \
-}
-
-#define ADD_BIAS_16_FP16( _result, _biasVal) \
-{ \
-    _result.s01 += as_half2(intel_sub_group_shuffle(_biasVal, 0)); \
-    _result.s23 += as_half2(intel_sub_group_shuffle(_biasVal, 1)); \
-    _result.s45 += as_half2(intel_sub_group_shuffle(_biasVal, 2)); \
-    _result.s67 += as_half2(intel_sub_group_shuffle(_biasVal, 3)); \
-    _result.s89 += as_half2(intel_sub_group_shuffle(_biasVal, 4)); \
-    _result.sab += as_half2(intel_sub_group_shuffle(_biasVal, 5)); \
-    _result.scd += as_half2(intel_sub_group_shuffle(_biasVal, 6)); \
-    _result.sef += as_half2(intel_sub_group_shuffle(_biasVal, 7)); \
-}
-
-
-
 
 
 
@@ -225,18 +114,6 @@
     }
 #endif
 
-typedef float INPUT0_TYPE;
-typedef float OUTPUT_TYPE;
-typedef float FILTER_TYPE;
-typedef float BIAS_TYPE;
-
-#define INPUT0_FEATURE_PITCH 1
-#define OUTPUT_FEATURE_PITCH 1
-
-#define GET_DATA_INDEX(O,B,OBASE,Y,X) \
-    OBASE + (Y*OUTPUT_SIZE_X + X) * INPUT0_FEATURE_NUM 
-
-
 #ifdef INTEL_TILED_1X1
 
 __attribute__((intel_reqd_sub_group_size(16)))
@@ -263,9 +140,11 @@ __kernel void Conv2D_1x1(
     // 16 consecutive outputs for out xy...
     float16  output16s;
 
+    const bool validPixel_t = xy_t < DEST_W*DEST_H;
+
 
     // Each thread loads 1 bias...
-    float threadBiasValue = biases[threadId];
+    float threadBiasValue = biases[baseOutputFeature + threadId];
 
     // Then these are shared to other threads
     for(uint i = 0; i < 16; i++)
@@ -273,20 +152,16 @@ __kernel void Conv2D_1x1(
         output16s[i] = intel_sub_group_shuffle(threadBiasValue, i);
     }
 
-    const uint dst_base = xy_t * OUTPUT_FEATURE_NUM + baseOutputFeature;
 
     for (uint k = 0; k < (INPUT0_FEATURE_NUM/8) ; ++k)
     {
         // Load 8 inputs from 16 pixels
-        uint input_idx = inputPixel_t + k * 8;
-
-        // TODO - reading past end of array - need to pad to up to 16 pixels at end of buffer
-
+        uint input_idx_t = inputPixel_t + k * 8;
 
         // this will read pixels: base,  base + 16, base + 32, ... base + 16*7
         //  not what I want, although it seems slightly faster than the ROW method
         //float8 inputs8x16 = ALIGNED_BLOCK_READ8(input, input_idx);
-        float8 inputs8x16 = ALIGNED_ROW_READ8(input, input_idx);
+        float8 inputs8x16 = validPixel_t ? ( ALIGNED_ROW_READ8(input, input_idx_t) ) : 0.0f;
 
         uint weight_idx = outputFeature_t * INPUT0_FEATURE_NUM + k*8;
 
@@ -294,22 +169,21 @@ __kernel void Conv2D_1x1(
         //float8 weights8x16  = ALIGNED_BLOCK_READ8(weights, weight_idx); // Read 8 weights, 16 threads
         float8 weights8x16  = ALIGNED_ROW_READ8(weights, weight_idx); // Read 8 weights, 16 threads
 
+        barrier(CLK_LOCAL_MEM_FENCE);
+
         // MAD 16 lots of 8 pixels, 8 weights  and accumulate into 16
         MULTIPLY_BLOCKS_16x8_8x16(output16s, weights8x16, inputs8x16);
     }
 
     // Don't write past end of array
-    if( xy_t >= INPUT0_SIZE_X * INPUT0_SIZE_Y)
-        return;
-
-    // Write output to this threads pixel
-    for(uint i = 0; i < 16; i++)
+    if (validPixel_t)
     {
-        const uint dst_index = dst_base + i;
-    //#if LEFTOVERS
-        //if(group_f+i < OUTPUT_FEATURE_NUM)
-    //#endif
-        output[dst_index] = ACTIVATION(output16s[i]);
+      const uint dst_base = xy_t * OUTPUT_FEATURE_NUM + baseOutputFeature;
+      // Write output to this threads pixel
+      for(uint i = 0; i < 16; i++)
+      {
+          output[dst_base+i] = ACTIVATION(output16s[i]);
+      }
     }
 }
 
@@ -327,15 +201,8 @@ __kernel void Conv2D_1x1(
 #define TW 4
 #define TH 4
 
-#define SRC_W INPUT0_SIZE_X
-#define SRC_H INPUT0_SIZE_Y
-#define DEST_W OUTPUT_SIZE_X
-#define DEST_H OUTPUT_SIZE_Y
 
-#define READ_T8(ptr,element)  as_float(intel_sub_group_block_read((const __global uint*)(ptr + element)))
-#define READ_T8x8(ptr,element)  as_float8(intel_sub_group_block_read8((const __global uint*)(ptr + element)))
 
-typedef const __global float8 *f8Ptr;
 
 __attribute__((reqd_work_group_size(1, 1, 8)))
 __attribute__((intel_reqd_sub_group_size(8)))
@@ -475,6 +342,146 @@ __kernel void Conv2D_3x3(
 
 
 
+
+
+
+#ifdef INTEL_TILED_3X3X3
+
+// Convolution for 3x3 filter, 6xTY tiles
+// Each workgroup calculates 8 outputs, and has 8 threads
+
+// Output Tile Height
+#define OTW 3
+#define OTH 4
+
+// stride = 2
+
+
+
+__attribute__((reqd_work_group_size(1, 1, 8)))
+__attribute__((intel_reqd_sub_group_size(8)))
+__kernel void Conv2D_3X3X3(
+    const __global float *input,
+    __global float *dest,
+    const __global float *weights,
+    const __global float *bias )
+{
+    const unsigned xTile = get_group_id(0);
+    const unsigned yTile = get_group_id(1);
+    const unsigned outBase = get_group_id(2) * 8;
+
+    // threadId is used for source columnn and output feature index
+    const signed int threadId = get_local_id(2);
+
+    const signed int sx0 = xTile * OTW * 2 - PADX;
+    const signed int sy0 = yTile * OTH * 2 - PADY;
+
+
+    // 4x3 x 3 -> 9 x 7 x 3
+    // Source rows
+    float src[9][3]; // x t8 - only need 7 compnents, so last thread can slack off
+
+
+    #define UNROLL_SRC_ROWS(VAR,loop) { \
+       { const signed int VAR =0; loop; } \
+       { const signed int VAR =1; loop; } \
+       { const signed int VAR =2; loop; } \
+       { const signed int VAR =3; loop; } \
+       { const signed int VAR =4; loop; } \
+       { const signed int VAR =5; loop; } \
+       { const signed int VAR =6; loop; } \
+       { const signed int VAR =7; loop; } \
+       { const signed int VAR =8; loop; } \
+    }
+
+    int  srcOffset = (sy0*SRC_W + sx0 + threadId)*INPUT0_FEATURE_NUM;
+    // Only load valid x, and if threadId is ok ...
+    bool validX = (sx0+threadId>=0) &&  (threadId < 7) && (sx0+threadId<SRC_W );
+    UNROLL_SRC_ROWS(Y, {
+          bool valid = validX && (sy0+Y>=0) && (sy0+Y < SRC_H);
+          src[Y][0] = valid ? input[ srcOffset ]   : 0.0f;
+          src[Y][1] = valid ? input[ srcOffset + 1]: 0.0f;
+          src[Y][2] = valid ? input[ srcOffset + 2]: 0.0f;
+          srcOffset += SRC_W * INPUT0_FEATURE_NUM;
+       });
+
+    #define UNROLL_WIDTH(VAR,loop) { \
+       { const int VAR =0; loop; } \
+       { const int VAR =1; loop; } \
+       { const int VAR =2; loop; } \
+    }
+    #define UNROLL_HEIGHT(VAR,loop) { \
+       { const int VAR =0; loop; } \
+       { const int VAR =1; loop; } \
+       { const int VAR =2; loop; } \
+       { const int VAR =3; loop; } \
+    }
+
+
+    const int dx0 = xTile * OTW;
+    const int dy0 = yTile * OTH;
+
+    int weightBase = (outBase + threadId) * 3 * 3 *3;
+
+    // Load weights
+    union {
+       float w_t8[9][3];
+       struct {
+          float8 w8[3];
+          float2 w2;
+          float  w1;
+       } s;
+    } w;
+    // TODO - reorder weights
+    // For each output, load 9x3 (27) 
+    w.s.w8[0] = *(f8Ptr)( weights + weightBase );
+    w.s.w8[1] = *(f8Ptr)( weights + weightBase + 8);
+    w.s.w8[2] = *(f8Ptr)( weights + weightBase + 16);
+    w.s.w2 =    *(f2Ptr)( weights + weightBase + 24);
+    w.s.w1 =    *       ( weights + weightBase + 26);
+
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+   // Accumulate out
+   #define ACCUMULATE( output8, src, x, w ) \
+        output8 = mad( intel_sub_group_shuffle(src[0],x), w[0], output8 ); \
+        output8 = mad( intel_sub_group_shuffle(src[1],x), w[1], output8 ); \
+        output8 = mad( intel_sub_group_shuffle(src[2],x), w[2], output8 ); \
+
+
+    float biasVal = READ_T8(bias,outBase);
+
+    UNROLL_HEIGHT(Y, {
+          int oy = dy0+Y;
+          UNROLL_WIDTH(X, {
+             int ox = dx0 + X;
+             if ( (ox<DEST_W) && (oy<DEST_H) )
+             {
+                float sum = biasVal;
+
+
+                ACCUMULATE( sum, src[Y*2+0],X*2   , w.w_t8[0] );
+                ACCUMULATE( sum, src[Y*2+0],X*2+1 , w.w_t8[1] );
+                ACCUMULATE( sum, src[Y*2+0],X*2+2 , w.w_t8[2] );
+
+                ACCUMULATE( sum, src[Y*2+1],X*2  , w.w_t8[3] );
+                ACCUMULATE( sum, src[Y*2+1],X*2+1, w.w_t8[4] );
+                ACCUMULATE( sum, src[Y*2+1],X*2+2, w.w_t8[5] );
+
+                ACCUMULATE( sum, src[Y*2+2],X*2  , w.w_t8[6] );
+                ACCUMULATE( sum, src[Y*2+2],X*2+1, w.w_t8[7] );
+                ACCUMULATE( sum, src[Y*2+2],X*2+2, w.w_t8[8] );
+
+                float o = ACTIVATION(sum);
+
+                //dest[( oy*DEST_W+ox)*OUTPUT_FEATURE_NUM + outBase + threadId] = o;
+                intel_sub_group_block_write((__global uint*)( dest + ( oy*DEST_W+ox)*OUTPUT_FEATURE_NUM + outBase) , as_uint(o) );
+             }
+          })
+    } );
+}
+
+#endif
 
 
 

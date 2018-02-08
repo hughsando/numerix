@@ -58,6 +58,7 @@ protected:
 public:
    typedef unsigned char u8;
    static bool accurateTimes;
+   static bool openCLTimingEvents;
 
    Layer();
 

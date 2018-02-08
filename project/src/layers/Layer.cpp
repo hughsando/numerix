@@ -87,6 +87,7 @@ double  GetTimeStamp()
 }
 
 bool Layer::accurateTimes = false;
+bool Layer::openCLTimingEvents = false;
 
 float *Layer::allocFloats(int count,bool inZero)
 {
