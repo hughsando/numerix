@@ -24,6 +24,7 @@ typedef const __global float2 *f2Ptr;
 
 #define READ_T8(ptr,element)  as_float(intel_sub_group_block_read((const __global uint*)(ptr + element)))
 #define READ_T8x8(ptr,element)  as_float8(intel_sub_group_block_read8((const __global uint*)(ptr + element)))
+#define READ_T8x2(ptr,element)  as_float2(intel_sub_group_block_read2((const __global uint*)(ptr + element)))
 
 
 #define TRANSPOSE_BLOCK_16_FP16_HALF_TYPE(_block)  \
@@ -405,6 +406,9 @@ __kernel void Conv2D_3X3X3(
           srcOffset += SRC_W * INPUT0_FEATURE_NUM;
        });
 
+    // TODO - is this needed?
+    //barrier(CLK_LOCAL_MEM_FENCE);
+
     #define UNROLL_WIDTH(VAR,loop) { \
        { const int VAR =0; loop; } \
        { const int VAR =1; loop; } \
@@ -421,7 +425,7 @@ __kernel void Conv2D_3X3X3(
     const int dx0 = xTile * OTW;
     const int dy0 = yTile * OTH;
 
-    int weightBase = (outBase + threadId) * 3 * 3 *3;
+    int weightBase = (outBase ) * 3 * 3 *3;
 
     // Load weights
     union {
@@ -432,21 +436,27 @@ __kernel void Conv2D_3X3X3(
           float  w1;
        } s;
     } w;
-    // TODO - reorder weights
-    // For each output, load 9x3 (27) 
-    w.s.w8[0] = *(f8Ptr)( weights + weightBase );
-    w.s.w8[1] = *(f8Ptr)( weights + weightBase + 8);
-    w.s.w8[2] = *(f8Ptr)( weights + weightBase + 16);
-    w.s.w2 =    *(f2Ptr)( weights + weightBase + 24);
-    w.s.w1 =    *       ( weights + weightBase + 26);
 
-    barrier(CLK_LOCAL_MEM_FENCE);
+    //for(int a=0;a<9;a++)
+    //{
+    //   w.w_t8[a][0] = READ_T8( weights, weightBase    );
+    //   w.w_t8[a][1] = READ_T8( weights, weightBase +8 );
+    //   w.w_t8[a][2] = READ_T8( weights, weightBase +16);
+    //   weightBase += 24;
+    //}
+
+    w.s.w8[0] = READ_T8x8( weights, weightBase );
+    w.s.w8[1] = READ_T8x8( weights, weightBase + 64);
+    w.s.w8[2] = READ_T8x8( weights, weightBase + 128);
+    w.s.w2 =    READ_T8x2( weights, weightBase + 192);
+    w.s.w1 =    READ_T8(   weights, weightBase + 208);
+
 
    // Accumulate out
    #define ACCUMULATE( output8, src, x, w ) \
-        output8 = mad( intel_sub_group_shuffle(src[0],x), w[0], output8 ); \
-        output8 = mad( intel_sub_group_shuffle(src[1],x), w[1], output8 ); \
-        output8 = mad( intel_sub_group_shuffle(src[2],x), w[2], output8 ); \
+        output8 = mad( sub_group_broadcast(src[0],x), w[0], output8 ); \
+        output8 = mad( sub_group_broadcast(src[1],x), w[1], output8 ); \
+        output8 = mad( sub_group_broadcast(src[2],x), w[2], output8 ); \
 
 
     float biasVal = READ_T8(bias,outBase);

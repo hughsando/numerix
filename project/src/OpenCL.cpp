@@ -937,18 +937,20 @@ public:
       if (!ctx)
          TensorThrow("OpenCLConv2D - no current ocl context");
 
+      bool wasI3x3 = useIntelTiled3x3;
+      bool wasI3x3x3 = useIntelTiled3x3x3;
+
       useTiled1x1 = is1x1 && threads;
       useIntelTiled1x1 = is1x1 && (threads>=8) && !(outputs&15) && ctx->useIntelMethod;
       useTiled3x3 = strideX==1 && strideY==1 && filterX==3 && filterY==3 && !(inputs&3) && threads;
       useIntelTiled3x3x3 = filterX==3 && filterY==3 && inputs==3 && threads && strideX==2 && strideY==2 && ctx->useIntelMethod;
-      bool wasI3x3 = useIntelTiled3x3;
 
       //printf("useIntelTiled3x3 ----- %d:  %d %d %d %d %d %d %d\n", useIntelTiled3x3x3,
       //       filterX==3, filterY==3, inputs==3, threads, strideX==2, strideY==2, ctx->useIntelMethod );
 
       useIntelTiled3x3 = strideX==1 && strideY==1 && filterX==3 && filterY==3 && !(inputs&7) && !(outputs&7) && ctx->useIntelMethod;
 
-      if (!wasI3x3 && useIntelTiled3x3)
+      if ( (!wasI3x3 && useIntelTiled3x3) || (!wasI3x3x3 && useIntelTiled3x3x3) )
          rebuildWeights();
 
 
@@ -1095,7 +1097,7 @@ public:
          overrideWeights = 0;
       }
 
-      if (useIntelTiled3x3)
+      if (useIntelTiled3x3 || useIntelTiled3x3x3)
       {
          Shape shape = weights->shape;
          int outs = shape[0];
@@ -1106,11 +1108,12 @@ public:
 
 
          int idx = 0;
+         int inputs = std::min(8,ins);
          for(int oBase=0;oBase<outs;oBase+=8)
             for(int iBase=0; iBase<ins; iBase+=8)
                 for(int y=0;y<h;y++)
                    for(int x=0;x<w;x++)
-                      for(int i=0;i<8;i++)
+                      for(int i=0;i<inputs;i++)
                          for(int o=0;o<8;o++)
                             overrideWeights->setFloatAt( idx++, weights->getFloat(oBase+o,y,x,iBase+i) );
       }
