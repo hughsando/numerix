@@ -53,6 +53,7 @@
      <file name="src/layers/clConv2D.cl" embedName="openclConv2D_cl" if="NX_OPENCL"  />
      <file name="src/layers/clIntelConv2D.cl" embedName="openclIntelConv2D_cl" if="NX_OPENCL"  />
      <file name="src/layers/clMaxPool.cl" embedName="openclMaxPool_cl" if="NX_OPENCL"  />
+     <file name="src/layers/clConcat.cl" embedName="openclConcat_cl" if="NX_OPENCL"  />
 
      <section if="linux||rpi" >
         <compilerflag value="-Isrc/movidius" />

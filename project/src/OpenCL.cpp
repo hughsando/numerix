@@ -11,6 +11,7 @@
 extern const char *openclConv2D_cl;
 extern const char *openclIntelConv2D_cl;
 extern const char *openclMaxPool_cl;
+extern const char *openclConcat_cl;
 
 
 // This allows to to profile layers. 
@@ -741,6 +742,7 @@ class OpenCLConcat : public OpenCLLayer
    cl_kernel  kernel;
    int lastIn0;
    int lastIn1;
+   bool intelMethod;
 
 public:
    OpenCLConcat( )
@@ -751,6 +753,7 @@ public:
 
       lastIn0 = lastIn1 = 0;
       kernel = 0;
+      intelMethod = false;
    }
 
    ~OpenCLConcat()
@@ -763,7 +766,9 @@ public:
       lastIn1 = in1;
       char buildOptions[1024];
       sprintf(buildOptions," -DIN0=%d -DIN1=%d", in0, in1);
-      kernel = ctx->makeKernel("CONCAT", oclConcatProg,"Concat", buildOptions);
+      intelMethod = ctx->useIntelMethod && !(in0 & 15) && !(in1 & 15);
+      const char *prog = intelMethod ? openclConcat_cl : oclConcatProg;
+      kernel = ctx->makeKernel("CONCAT", prog,"Concat", buildOptions);
    }
 
    virtual Tensor *run(Tensor *inSrc0, Tensor *inSrc1, Tensor *inBuffer)
@@ -809,8 +814,11 @@ public:
       err |= clSetKernelArg(kernel, 0, sizeof(cl_mem), &src0);
       err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &src1);
       err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &dest);
-      err |= clSetKernelArg(kernel, 3, sizeof(int), &srcW);
-      err |= clSetKernelArg(kernel, 4, sizeof(int), &srcH);
+      if (!intelMethod)
+      {
+         err |= clSetKernelArg(kernel, 3, sizeof(int), &srcW);
+         err |= clSetKernelArg(kernel, 4, sizeof(int), &srcH);
+      }
 
       if (err)
       {
@@ -821,12 +829,24 @@ public:
       if (!ctx)
          TensorThrow("OpenCLConcat - no current ocl context");
 
-      size_t globalSize[2] = { (size_t)srcW, (size_t)srcH };
+      if (intelMethod)
+      {
+         size_t globalSize[2] = { (size_t)(srcW*srcH), 16 };
+         size_t localSize[2] = { 1, 16 };
+         cl_uint work_dim = 2;
+         err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, 0/*Work offset*/, globalSize, localSize, 0, NULL, startKernel());
+         if (err)
+            TensorThrow("OpenCLConcat - could not clEnqueueNDRangeKernel");
+      }
+      else
+      {
+         size_t globalSize[2] = { (size_t)srcW, (size_t)srcH };
  
-      cl_uint work_dim = 2;
-      err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, 0/*Work offset*/, globalSize, 0, 0, NULL, startKernel());
-      if (err)
-         TensorThrow("OpenCLConcat - could not clEnqueueNDRangeKernel");
+         cl_uint work_dim = 2;
+         err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, 0/*Work offset*/, globalSize, 0, 0, NULL, startKernel());
+         if (err)
+            TensorThrow("OpenCLConcat - could not clEnqueueNDRangeKernel");
+      }
 
       if (Layer::accurateTimes)
       {
