@@ -57,7 +57,11 @@ Conv2DBase::Conv2DBase(int inStrideY, int inStrideX,
       TensorThrow("Conv2D - bias should be one dimensional");
 
    if (inBias && inBias->shape[0]!=outputs)
-      TensorThrow("Conv2D - bias does not match output size");
+   {
+      char buf[1000];
+      sprintf(buf, "Conv2D - bias size (%d) does not match output size(%d)", inBias->shape[0], outputs);
+      TensorThrow(buf);
+   }
 
 
    weights = inWeights->incRef();

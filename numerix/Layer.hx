@@ -147,6 +147,11 @@ class Layer
       return resultBuffer;
    }
 
+   public function setActivation(inActication:Int)
+   {
+      throw this + " can not set activation";
+   }
+
    public function getBoxes() : Array< Box >
    {
       return layGetBoxes(handle);

@@ -13,6 +13,13 @@ class Concat extends Layer
       handle = layCreateConcat();
    }
 
+   override public function setActivation(inActication:Int)
+   {
+      for( i in inputs)
+         i.setActivation(inActication);
+   }
+
+
    public function bypass(layer:Layer)
    {
       var slot = inputs.indexOf(layer);

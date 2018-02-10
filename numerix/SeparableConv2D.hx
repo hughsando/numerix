@@ -13,7 +13,7 @@ class SeparableConv2D extends Conv2D
       bias = inWeights[2];
       release();
 
-      handle = Conv2D.layCreateConv2D(strides, activation, padding, weights,pweights,bias,false);
+      handle = Conv2D.layCreateConv2D(strides, activation, padding, weights,pweights,bias,false,isDeconvolution);
    }
 
    override public function toString() return 'SeparableConv2D($name:$kernelSize x $filters $activation $weights %pweights $bias)';

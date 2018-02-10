@@ -33,7 +33,12 @@ public:
          TensorThrow("Concat only supports H*W*C tensors");
 
       if (sin0[0]!=sin1[0] || sin0[1]!=sin1[1])
-         TensorThrow("Concat - mismatch image sizes");
+      {
+         char buf[1000];
+         sprintf(buf, "Concat - mismatch image sizes %dx%dx%d + %dx%dx%d",
+                 sin0[0], sin0[1],sin0[2], sin1[0], sin1[1], sin1[2] );
+         TensorThrow(buf);
+      }
 
       srcH = sin0[0];
       srcW = sin0[1];

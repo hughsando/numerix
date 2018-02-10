@@ -10,6 +10,7 @@ class Conv2D extends Layer
    public var strides(default,null):Array<Int>;
    public var filters(default,null):Int;
    public var useBias(default,null):Bool;
+   public var isDeconvolution(default,null):Bool;
    public var activation(default,null):Int;
    public var padding(default,null):Int;
    public var weights(default,null):Tensor;
@@ -35,6 +36,7 @@ class Conv2D extends Layer
       strides = config.strides;
       filters = config.filters;
       useBias = config.useBias;
+      isDeconvolution = config.deconvolution == true;
       inputChannels = 0;
       if (config.allowTransform==null)
          allowTransform = defaultAllowTransform;
@@ -63,7 +65,7 @@ class Conv2D extends Layer
          throw 'Unknown padding $pad';
    }
 
-   public function setActivation(inActication:Int)
+   override public function setActivation(inActication:Int)
    {
       activation = inActication;
       layConv2DSetActication(handle,inActication);
@@ -90,7 +92,7 @@ class Conv2D extends Layer
       bias = inWeights[1];
       release();
 
-      handle = layCreateConv2D(strides, activation, padding, weights, null, bias, allowTransform);
+      handle = layCreateConv2D(strides, activation, padding, weights, null, bias, allowTransform, isDeconvolution);
       if (scales!=null)
          layConv2DSetNorm(handle, scales, means, vars);
    }
@@ -114,7 +116,7 @@ class Conv2D extends Layer
 
 
 
-   static var layCreateConv2D = Loader.load("layCreateConv2D","oiiooobo");
+   static var layCreateConv2D = Loader.load("layCreateConv2D","oiiooobbo");
    static var layConv2DSetNorm = Loader.load("layConv2DSetNorm","oooov");
    static var layConv2DSetActication = Loader.load("layConv2DSetActication","oiv");
 

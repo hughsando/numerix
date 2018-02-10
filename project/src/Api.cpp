@@ -645,7 +645,7 @@ value allocLayer(Layer *inLayer)
    return result;
 }
 
-value layCreateConv2D(value inStrides, int inActivation, int inPadding, value inWeights, value inPWeights, value inBias, bool inAllowTransform)
+value layCreateConv2D(value inStrides, int inActivation, int inPadding, value inWeights, value inPWeights, value inBias, bool inAllowTransform, bool isDeconvolution)
 {
    TO_TENSOR_NAME(inWeights, weights);
    if (!weights)
@@ -666,6 +666,9 @@ value layCreateConv2D(value inStrides, int inActivation, int inPadding, value in
       sx = strides.size() > 1 ? strides[1] : sy;
    }
 
+   if (isDeconvolution)
+      printf("TODO - isDeconvolution\n");
+
    Layer *layer = 0;
    Activation activation = (Activation)inActivation;
    Padding padding = (Padding)inPadding;
@@ -685,7 +688,7 @@ value layCreateConv2D(value inStrides, int inActivation, int inPadding, value in
 
    return allocLayer(layer);
 }
-DEFINE_PRIME7(layCreateConv2D);
+DEFINE_PRIME8(layCreateConv2D);
 
 
 
@@ -1227,6 +1230,7 @@ static void loadCaffeNet(caffe::NetParameter net,value m,bool weightsOnly )
    knownTypes["Softmax"] = true;
    knownTypes["Scale"] = true;
    knownTypes["BatchNorm"] = true;
+   knownTypes["EuclideanLoss"] = true;
 
    value tops = make_string_array(net.input());
    if (!val_is_null(tops))
@@ -1238,14 +1242,15 @@ static void loadCaffeNet(caffe::NetParameter net,value m,bool weightsOnly )
       val_array_push(m,  lay);
    }
 
+   bool usingImageData = false;
+
    //printf("Layers %d\n", n);
    for(int i=0;i<n;i++)
    {
       auto &layer = net.layer(i);
-      const std::string layer_type = layer.type();
+      std::string layer_type = layer.type();
 
       value lay = alloc_empty_object();
-      alloc_field(lay, _id_type, alloc_string( layer_type.c_str() ) );
 
       std::string name = layer.name();
       alloc_field(lay, _id_name, alloc_string(name.c_str()));
@@ -1287,13 +1292,54 @@ static void loadCaffeNet(caffe::NetParameter net,value m,bool weightsOnly )
          alloc_field(lay, val_id("shapes"), shapes);
       }
 
+      bool included = true;
+      if (layer.include_size()>0)
+      {
+         included = false;
+         for(int i=0;i<layer.include_size();i++)
+            if ( layer.include(i).phase()==caffe::TEST)
+               included = true;
+      }
 
-      if (knownTypes[layer_type])
+      if (!included)
+      {
+         //Ignore
+         //printf("Skip layer\n");
+         continue;
+      }
+      else if (knownTypes[layer_type])
       {
          // ignore
       }
+      else if (layer_type=="ImageData")
+      {
+         if (usingImageData)
+         {
+            //printf("Ignoring second ImageData\n");
+            continue;
+         }
+         else
+         {
+            usingImageData = true;
+            layer_type = "Input";
+            auto &param = layer.image_data_param();
+
+            if (param.has_new_width() && param.has_new_height())
+            {
+               value array = alloc_array(3);
+               // which order?
+               val_array_set_i(array, 0, alloc_int(3) );
+               val_array_set_i(array, 1, alloc_int(param.new_height()));
+               val_array_set_i(array, 2, alloc_int(param.new_width()));
+               alloc_field(lay, val_id("input_dim"),array);
+            }
+         }
+      }
       else if (layer_type=="Input")
       {
+         if (usingImageData)
+            TensorThrow("Caffe - both Input and ImageData specified");
+
          auto &param = layer.input_param();
          if (param.shape_size()>0)
          {
@@ -1301,8 +1347,12 @@ static void loadCaffeNet(caffe::NetParameter net,value m,bool weightsOnly )
             alloc_field(lay, val_id("input_dim"),make_int_array(shape.dim()));
          }
       }
-      else if (layer_type=="Convolution")
+      else if (layer_type=="Convolution" || layer_type=="Deconvolution" )
       {
+         alloc_field(lay, val_id("deconvolution"), alloc_bool( layer_type=="Deconvolution") );
+
+         layer_type = "Convolution";
+
          auto &param = layer.convolution_param();
          alloc_field(lay, val_id("filters"), alloc_int(param.num_output()));
          alloc_field(lay, val_id("pad"), make_int_array(param.pad()));
@@ -1373,12 +1423,12 @@ static void loadCaffeNet(caffe::NetParameter net,value m,bool weightsOnly )
          auto &param = layer.inner_product_param();
          alloc_field(lay, val_id("transpose"), alloc_bool(param.transpose()));
       }
-
       else
       {
          printf("Unknown layer type %s\n", layer_type.c_str() );
       }
 
+      alloc_field(lay, _id_type, alloc_string( layer_type.c_str() ) );
 
       val_array_push(m,  lay);
    }

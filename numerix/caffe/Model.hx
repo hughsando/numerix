@@ -119,18 +119,34 @@ class Model extends numerix.Model
                else if (padSize== Std.int( (size[0]-1)/2 ))
                   cfg.padding='same';
                else
-                  throw 'Convolution - could not calculate padding - $padSize / $size' + ((size[0]-1)/2);
+               {
+                  // Not quite sure what this means for deconvolution
+                  if (!layer.deconvolution)
+                      Sys.println('Warning: kernelSize=$size, padSize=$padSize - using "same"');
+                  cfg.padding = 'same';
+               }
+
+               cfg.deconvolution = layer.deconvolution;
 
                if (inputLayers.length!=1 || inputLayers[0]==null)
                   throw "Convolution - expected 1 input layer";
 
                var lay = new Conv2D(cfg, inputLayers[0]);
+
                layerMap.set(outName,lastLayer = lay);
 
                var weights:Array<Dynamic> = layer.weights;
                var tensors:Array<Tensor> = weights.map( Tensor.fromHandle );
                if (tensors[0]!=null)
-                  tensors[0] = tensors[0].reorder([0,2,3,1]);
+               {
+                  //trace("Reorder weights " + tensors[0].shape );
+                  if (layer.deconvolution)
+                     // C-O-H-W ->  O-H-W-C
+                     tensors[0] = tensors[0].reorder([1,2,3,0]);
+                  else
+                     // O-C-H-W ->  O-H-W-C
+                     tensors[0] = tensors[0].reorder([0,2,3,1]);
+               }
                lay.setWeights(tensors);
 
                //trace(tensors[0]);
@@ -140,19 +156,23 @@ class Model extends numerix.Model
 
 
             case "ReLU":
-               var conv:Conv2D = cast inputLayers[0];
-               if (conv==null)
-                  throw "ReLU must follow a Convolution layer";
-               conv.setActivation(Layer.ACT_RELU);
-               layerMap.set(outName,lastLayer = conv);
+               if (inputLayers.length!=1)
+                  throw "ReLU must follow a single layer";
+
+               inputLayers[0].setActivation(Layer.ACT_RELU);
+               layerMap.set(outName,lastLayer = inputLayers[0]);
                doAdd =false;
 
+
+            case "EuclideanLoss":
+               doAdd =false;
 
             case "Dropout":
                if (inputLayers.length!=1)
                   throw "Dropout - expected single input";
                layerMap.set(outName,lastLayer = inputLayers[0]);
                doAdd =false;
+
 
 
             case "Split":
@@ -257,7 +277,6 @@ class Model extends numerix.Model
             addLayer(lastLayer);
       }
    }
-
 
    static var caffeLoad = Loader.load("caffeLoad","sso");
 }
