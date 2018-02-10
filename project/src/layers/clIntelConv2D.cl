@@ -3,9 +3,6 @@
 #pragma OPENCL EXTENSION  cl_intel_subgroups : enable
 #endif
 
-#if defined(cl_intel_subgroups_short)
-#pragma OPENCL EXTENSION  cl_intel_subgroups_short : enable
-#endif
 
 
 typedef float INPUT0_TYPE;
