@@ -26,7 +26,7 @@ void oclGetDeviceProps(void *inDevice, OclProps &outProps, int &outComputeUnits)
 
 class Layer;
 
-Layer *oclCreateConv2D(int inStrideY, int inStrideX,
+Layer *oclCreateConv2D(int inStrideY, int inStrideX, bool isDeconvolution,
                        Activation activation, Padding padding,
                        Tensor *weights, Tensor *bias);
 

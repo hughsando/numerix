@@ -266,10 +266,10 @@ class CudaConv2D : public Conv2DBase
 
 
 public:
-   CudaConv2D(int inStrideY, int inStrideX,
+   CudaConv2D(int inStrideY, int inStrideX, bool inIsDeconvolution,
           Activation inActivation, Padding inPadding,
           Tensor *inWeights, Tensor *inBias)
-      : Conv2DBase(inStrideY, inStrideX, inActivation, inPadding,  inWeights, 0, inBias)
+      : Conv2DBase(inStrideY, inStrideX, inIsDeconvolution, inActivation, inPadding,  inWeights, 0, inBias)
    {
       cudnnCheck( cudnnCreateTensorDescriptor(&srcDesc) );
       cudnnCheck( cudnnCreateTensorDescriptor(&destDesc) );
@@ -428,11 +428,11 @@ public:
    }
 };
 
-Layer *gpuCreateConv2D(int inStrideY, int inStrideX,
+Layer *gpuCreateConv2D(int inStrideY, int inStrideX, bool inIsDeconvolution,
                        Activation activation, Padding padding,
                        Tensor *weights, Tensor *bias)
 {
-   return new CudaConv2D(inStrideY, inStrideX, activation, padding, weights, bias);
+   return new CudaConv2D(inStrideY, inStrideX, inIsDeconvolution, activation, padding, weights, bias);
 }
 
 

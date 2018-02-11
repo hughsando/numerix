@@ -22,7 +22,7 @@ void gpuDownloadConvert(unsigned char *buffer, const GpuData *inData, int n, boo
 
 class Layer;
 
-Layer *gpuCreateConv2D(int inStrideY, int inStrideX,
+Layer *gpuCreateConv2D(int inStrideY, int inStrideX, bool isDeconvolution,
                        Activation activation, Padding padding,
                        Tensor *weights, Tensor *bias);
 

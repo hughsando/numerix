@@ -675,16 +675,16 @@ value layCreateConv2D(value inStrides, int inActivation, int inPadding, value in
 
    #ifdef NX_OPENCL
    if (!layer && !pweights && OclContext::hasCurrent())
-      layer = oclCreateConv2D(sx,sy, activation, padding, weights, bias);
+      layer = oclCreateConv2D(sx,sy, isDeconvolution, activation, padding, weights, bias);
    #endif
 
    #ifdef NX_GPU
    if (!layer && enableGpu && !pweights && gpuInit())
-      layer = gpuCreateConv2D(sx,sy, activation, padding, weights, bias);
+      layer = gpuCreateConv2D(sx,sy, isDeconvolution, activation, padding, weights, bias);
    #endif
 
    if (!layer)
-      layer = Layer::createConv2D(sx, sy, activation, padding, weights, pweights, bias, inAllowTransform);
+      layer = Layer::createConv2D(sx, sy, isDeconvolution, activation, padding, weights, pweights, bias, inAllowTransform);
 
    return allocLayer(layer);
 }

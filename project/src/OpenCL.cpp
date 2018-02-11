@@ -892,10 +892,10 @@ class OpenCLConv2D : public Conv2DBase
 
 
 public:
-   OpenCLConv2D(int inStrideY, int inStrideX,
+   OpenCLConv2D(int inStrideY, int inStrideX, bool inIsDeconvolution,
           Activation inActivation, Padding inPadding,
           Tensor *inWeights, Tensor *inBias)
-      : Conv2DBase(inStrideY, inStrideX, inActivation, inPadding,  inWeights, 0, inBias)
+      : Conv2DBase(inStrideY, inStrideX, inIsDeconvolution,inActivation, inPadding,  inWeights, 0, inBias)
    {
       kernel = 0;
       useTiled3x3 = false;
@@ -1156,11 +1156,11 @@ public:
 
 };
 
-Layer *oclCreateConv2D(int inStrideY, int inStrideX,
+Layer *oclCreateConv2D(int inStrideY, int inStrideX, bool inIsDeconvolution,
                        Activation activation, Padding padding,
                        Tensor *weights, Tensor *bias)
 {
-   return new OpenCLConv2D(inStrideY, inStrideX, activation, padding, weights, bias);
+   return new OpenCLConv2D(inStrideY, inStrideX, inIsDeconvolution, activation, padding, weights, bias);
 }
 
 

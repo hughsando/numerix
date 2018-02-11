@@ -63,7 +63,7 @@ public:
    Layer();
 
 
-   static Layer *createConv2D(int inStrideY, int inStrideX,
+   static Layer *createConv2D(int inStrideY, int inStrideX, bool inIsDeconvolution,
                               Activation activation, Padding padding,
                               Tensor *weights, Tensor *pweights, Tensor *bias,
                               bool inAllowTransform);
@@ -130,6 +130,7 @@ protected:
    int        outputs;
    int        diSize;
    bool       padInputsWithZero;
+   bool       isDeconvolution;
 
    int        srcW;
    int        srcH;
@@ -152,7 +153,7 @@ protected:
 
 
 public:
-   Conv2DBase(int inStrideY, int inStrideX,
+   Conv2DBase(int inStrideY, int inStrideX, bool isDeconvolution,
           Activation inActivation, Padding inPadding,
           Tensor *inWeights, Tensor *inPWeights, Tensor *inBias);
 

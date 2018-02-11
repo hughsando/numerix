@@ -10,7 +10,7 @@ namespace numerix
 
 // ----- Conv2DBase ---------------
 
-Conv2DBase::Conv2DBase(int inStrideY, int inStrideX,
+Conv2DBase::Conv2DBase(int inStrideY, int inStrideX, bool inIsDeconvolution,
        Activation inActivation, Padding inPadding,
        Tensor *inWeights, Tensor *inPWeights, Tensor *inBias)
 {
@@ -18,6 +18,7 @@ Conv2DBase::Conv2DBase(int inStrideY, int inStrideX,
    strideX = inStrideX;
    activation = inActivation;
    padding = inPadding;
+   isDeconvolution = inIsDeconvolution;
    diSize = 0;
    padInputsWithZero = false;
    weightsOriginal = 0;
@@ -183,7 +184,14 @@ Tensor *Conv2DBase::run(Tensor *inSrc0, Tensor *inBuffer)
    padOx = 0;
    padOy = 0;
 
-   if (padding==padSame)
+   if (isDeconvolution)
+   {
+      destW = (srcW)*(strideX);
+      destH = (srcH)*(strideY);
+      padOx = (filterX/strideX)>>1;
+      padOy = (filterY/strideY)>>1;
+   }
+   else if (padding==padSame)
    {
       destW = (srcW+strideX-1)/strideX;
       //int padX = (destW - 1)*strideX + filterX - srcW;
@@ -241,10 +249,10 @@ class Conv2D : public Conv2DBase
 
 
 public:
-   Conv2D(int inStrideY, int inStrideX,
+   Conv2D(int inStrideY, int inStrideX,bool inIsDeconvolution,
           Activation inActivation, Padding inPadding,
           Tensor *inWeights, Tensor *inPWeights, Tensor *inBias)
-      : Conv2DBase(inStrideY, inStrideX, inActivation, inPadding,  inWeights, inPWeights, inBias)
+      : Conv2DBase(inStrideY, inStrideX, inIsDeconvolution, inActivation, inPadding,  inWeights, inPWeights, inBias)
    {
       interlacedWeights = false;
       interlacedCount = 0;
@@ -252,7 +260,7 @@ public:
       alignedWeights = 0;
 
       #ifdef NUMERIX_SIMD
-      interlacedWeights = (outputs & 0x3)==0  && !pweights && (!is1x1 || is1x1Aligned);
+      interlacedWeights = (outputs & 0x3)==0  && !pweights && (!is1x1 || is1x1Aligned) && !isDeconvolution;
       #endif
 
       rebuildWeights();
@@ -308,7 +316,9 @@ public:
       else
       {
          int threads = GetWorkerCount();
-         int paddedSize = (filterX*filterY*inputs + 3) & ~0x3;
+         int FX = isDeconvolution ? filterX/strideX : filterX;
+         int FY = isDeconvolution ? filterY/strideY : filterY;
+         int paddedSize = (FX*FY*inputs + 3) & ~0x3;
          for(int i=0;i<threads;i++)
          {
             srcBuffers.push_back( allocFloats(paddedSize,true) );
@@ -403,7 +413,7 @@ public:
       src0->cpuRead();
       destTensor->cpuWrite();
 
-      runThreaded();
+      runThreaded( isDeconvolution );
       src0 = 0;
       destTensor = 0;
       endRun();
@@ -415,8 +425,10 @@ public:
    {
       if (is1x1)
          runThread1x1(threadId);
+      else if (isDeconvolution)
+         runThreadMulti<true>(threadId);
       else
-         runThreadMulti(threadId);
+         runThreadMulti<false>(threadId);
    }
 
    void runThread1x1(int threadId)
@@ -503,6 +515,7 @@ public:
       }
    }
 
+   template<bool DECONV>
    void runThreadMulti(int threadId)
    {
       const float *b = bias ? (const float *)bias->cpuRead() : 0;
@@ -510,16 +523,32 @@ public:
       const int *destStride = &destTensor->strides[0];
       float *di = pweights ? &diBuffers[threadId][0] : 0;
 
-      int featureSize = filterX*filterY*inputs;
-      int filters = filterX*filterY;
+      int FX = DECONV ? filterX/strideX : filterX;
+      int FY = DECONV ? filterY/strideY : filterY;
+      int PX = padOx;
+      int PY = padOy;
 
-      int filterW = filterX*inputs;
+      int filters = FX*FY;
+      int featureSize = filters*inputs;
+
+      int filterW = FX*inputs;
       int filterFours = filterW>>2;
       int filterSixteens = filterW>>4;
       float *srcPtr = &srcBuffers[threadId][0];
       int filterRow = filterW*sizeof(float);
 
       const float *sIn = (float *)src0->cpuRead();
+
+      /*
+      printf("IN:\n");
+      for(int y=0;y<srcH;y++)
+      {
+         printf(" %d] ", y);
+         for(int x=0;x<srcW;x++)
+            printf(" %f", sIn[ y*srcW + x] );
+         printf("\n");
+      }
+      */
 
       while(true)
       {
@@ -529,53 +558,149 @@ public:
 
 
          float *dest = (float *)destTensor->cpuWrite() + destW*outputs*y;
-         int srcY = y*strideY;
 
-         int dyMin = std::max(padOy-srcY,0);
-         int dyMax = std::min(srcH+padOy-srcY,filterY);
+         int srcY = DECONV ? y/strideY : y*strideY;
 
-         if (dyMin>0)
-            memset(srcPtr,0,filterRow*dyMin);
+         #if 1
+         // Unclipped filter position
+         int srcFy0 =  srcY - PY;
+         // First valid filter position
+         int fy0 = std::max(-srcFy0,0);
+         // Last valid filter position
+         int fy1 = std::min(srcH,srcFy0+FY)-srcFy0;
 
-         if (dyMax<filterY)
-            memset(srcPtr+dyMax*filterW,0,filterRow*(filterY-dyMax) );
+         if (fy0>0)
+            memset(srcPtr,0,fy0*filterRow);
+
+         if (fy1<FY)
+            memset(srcPtr+fy1*filterW,0,filterRow*(FY-fy1) );
+         #else
+
+
+
+         int fy0 = std::max(padOy-srcY,0);
+         int fy1 = std::min(srcH+padOy-srcY,filterY);
+
+         if (fy0>0)
+            memset(srcPtr,0,filterRow*fy0);
+
+         if (fy1<filterY)
+            memset(srcPtr+fy1*filterW,0,filterRow*(filterY-fy1) );
+         #endif
+
+
+
 
          for(int x=0;x<destW;x++)
          {
-            int srcX = x*strideX;
+            int srcX = DECONV ? x/strideX : x*strideX;
 
-            int dxMin = std::max(padOx-srcX,0);
-            int dxMax = std::min(srcW+padOx-srcX,filterX);
-            int xRange = dxMax-dxMin;
+            #if 1
+            // Unclipped filter position
+            int srcFx0 =  srcX - PX;
+            // First valid filter position
+            int fx0 = std::max(-srcFx0,0);
+            // Last valid filter position
+            int fx1 = std::min(srcW,srcFx0+FX)-srcFx0;
 
-            const float *s = sIn + (srcY+dyMin-padOy)*srcStride[0] + (srcX+dxMin-padOx)*srcStride[1];
+            int xElems = (fx1-fx0)*inputs;
 
-            for(int dy=dyMin;dy<dyMax;dy++)
+            const float *copySrcFrom = sIn + (srcFy0+fy0)*srcStride[0] + (srcFx0+fx0)*srcStride[1];
+
+            for(int fy=fy0;fy<fy1;fy++)
+            {
+               float *srcBuffFill = srcPtr + fy*filterW;
+
+               if (fx0>0)
+               {
+                  memset(srcBuffFill, 0, fx0*inputs*sizeof(float));
+                  srcBuffFill +=fx0*inputs;
+               }
+
+               memcpy(srcBuffFill, copySrcFrom, xElems*sizeof(float));
+               copySrcFrom+= srcStride[0];
+
+               if (fx1<FX)
+                  memset(srcBuffFill + xElems, 0, (FX-fx1)*inputs*sizeof(float));
+            }
+            #else
+
+            int fx0 = std::max(padOx-srcX,0);
+            int fx1 = std::min(srcW+padOx-srcX,filterX);
+            int xRange = fx1-fx0;
+
+            const float *s = sIn + (srcY+fy0-padOy)*srcStride[0] + (srcX+fx0-padOx)*srcStride[1];
+
+            for(int dy=fy0;dy<fy1;dy++)
             {
                float *sp = srcPtr + filterW*dy;
 
-               if (dxMin>0)
+               if (fx0>0)
                {
-                  memset(sp, 0, dxMin*inputs*sizeof(float));
-                  sp +=dxMin*inputs;
+                  memset(sp, 0, fx0*inputs*sizeof(float));
+                  sp +=fx0*inputs;
                }
 
                memcpy(sp, s, xRange*inputs*sizeof(float));
                s+= srcStride[0];
 
-               if (dxMax<filterX)
-                  memset(sp + (dxMax-dxMin)*inputs, 0, (filterX-dxMax)*inputs*sizeof(float));
+               if (fx1<filterX)
+                  memset(sp + (fx1-fx0)*inputs, 0, (filterX-fx1)*inputs*sizeof(float));
             }
+            #endif
 
 
-            const float *w = alignedWeights;
+
+            if (DECONV)
+            {
+               // Forward conv calculates destination
+               //
+               //  O dx,dy = Sum fx,fy     S(dx*stX+fx-padX,dy*stY+fy-padY)*W(fx,fy)
+               //
+               //  srcX = dx*stX+fx-padX
+               //  dx = (srcX+padX-fx)/stX
+               //
+               //  reversing the roles of O and S
+               int fy0 = (y % FY);
+               int fx0 = (x % FX);
+
+               for(int o=0;o<outputs;o++)
+               {
+                  const float *s = srcPtr;
+                  const float *wO = alignedWeights + o*filterY*filterX*inputs;
+                  float sum = b?b[o]:0.0f;
+
+                  for(int fy=0;fy<filterY;fy+=FY)
+                  {
+                     int wy = filterY - 1 - (fy0 + fy);
+                     for(int fx=0;fx<filterX;fx+=FX)
+                     {
+                        int wx = filterX - 1 - (fx0 + fx);
+                        //printf(" <%d,%d> : %f ", wx,wy, s[0]);
+                        const float *w = wO + (wy*filterX+wx)*inputs;
+                        for(int i=0;i<inputs;i++)
+                           sum += s[i] * w[i];
+                        s += inputs;
+                     }
+                     //printf("\n = %f\n", sum);
+                  }
+                  if (activation==actRelu)
+                     *dest++ = std::max( sum, 0.0f );
+                  else if (activation==actLeaky)
+                     *dest++ = std::max( sum, sum*0.1f );
+                  else
+                     *dest++ = sum;
+               }
+            }
+            else
             if (pweights)
             {
+               const float *dw = alignedWeights;
                for(int d=0;d<diSize;d++)
                {
                   int srcOff = d; // todo - depth_multiplier > 1
-                  di[d] = dotSkip(w, srcPtr+srcOff, filters, inputs);
-                  w+=filters;
+                  di[d] = dotSkip(dw, srcPtr+srcOff, filters, inputs);
+                  dw+=filters;
                }
 
                const float *w = (const float *)pweights->cpuRead();
@@ -588,6 +713,7 @@ public:
             }
             else
             {
+               const float *w = alignedWeights;
                if (interlacedWeights)
                {
                   int bid = 0;
@@ -660,7 +786,7 @@ public:
    Conv2DWinograd(int inStrideY, int inStrideX,
           Activation inActivation, Padding inPadding,
           Tensor *inWeights, Tensor *inBias)
-      : Conv2DBase(inStrideY, inStrideX, inActivation, inPadding,  inWeights, 0, inBias)
+      : Conv2DBase(inStrideY, inStrideX, false,inActivation, inPadding,  inWeights, 0, inBias)
    {
       //printf("winograd!\n");
       rebuildWeights();
@@ -1278,7 +1404,7 @@ public:
 
 
 
-Layer *Layer::createConv2D(int strideY, int strideX,
+Layer *Layer::createConv2D(int strideY, int strideX, bool inIsDeconvolution,
                     Activation activation, Padding padding,
                     Tensor *weights, Tensor *pweights, Tensor *bias,
                     bool inAllowTransform)
@@ -1287,11 +1413,11 @@ Layer *Layer::createConv2D(int strideY, int strideX,
 
    #ifdef NUMERIX_WINOGRAD
    if (inAllowTransform && filter.size()==4 && (filter[0]&3)==0 && filter[1]==3 && filter[2]==3 && (filter[3]&3)==0 &&
-       pweights==0 && strideX==1 &&  strideY==1)
+       pweights==0 && strideX==1 &&  strideY==1 && !inIsDeconvolution)
       return new Conv2DWinograd(strideY, strideX, activation, padding, weights, bias);
    #endif
 
-   return new Conv2D(strideY, strideX, activation, padding, weights, pweights, bias);
+   return new Conv2D(strideY, strideX, inIsDeconvolution, activation, padding, weights, pweights, bias);
 }
 
 } // end namespace numerix
