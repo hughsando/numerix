@@ -138,6 +138,7 @@ class Layer
             }
             else
                println(' $this $diff'+"ms");
+           //println(" = " + resultBuffer.min + " " + resultBuffer.max );
          }
       }
 

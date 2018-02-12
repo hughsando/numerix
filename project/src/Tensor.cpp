@@ -101,11 +101,11 @@ void Tensor::printSub(const std::string &indent, int offset, int dim, int inMaxE
       else
       {
          for(int i=0;i<elems;i++)
-            printf("%f ", getFloatAt(offset + i));
+            printf("%g ", getFloatAt(offset + i));
          if (dotdotdot)
          {
             printf("... ");
-            printf("%f", getFloatAt(offset +  size-1) );
+            printf("%g", getFloatAt(offset +  size-1) );
          }
       }
       printf("]\n");

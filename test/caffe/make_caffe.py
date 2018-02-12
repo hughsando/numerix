@@ -11,7 +11,7 @@ W = 3
 
 net = caffe.NetSpec()
 net.data = L.Input(shape=[dict(dim=[O, I, H, W])])
-net.deconv = L.Deconvolution(net.data, convolution_param=dict(kernel_size=4, stride=2,num_output=1, pad=1), name="mydeconv" )
+net.deconv = L.Deconvolution(net.data, convolution_param=dict(kernel_size=2, stride=2,num_output=1, pad=0), name="mydeconv" )
 
 #net.relu = L.ReLU(net.conv)
 #net.maxp = L.Pooling(net.relu,pool=P.Pooling.MAX, kernel_size=2, stride=2, pad=0 )
@@ -34,12 +34,12 @@ np.random.seed( 4 )
 
 def randomize(name):
    param = net.params[name][0]
-   #param.data[:,:,:,:] = np.random.random_sample( list(param.data.shape) ) - 0.5
-   for x in range(W):
-      for y in range(H):
-         param.data[0,0,y,x] = (y+1)*10+(x+1);
+   param.data[:,:,:,:] = np.random.random_sample( list(param.data.shape) ) - 0.5
+   #for y in range(2):
+   #   for x in range(2):
+   #      param.data[0,0,y,x] = (y+1)*10+(x+1);
    param = net.params[name][1]
-   #param.data[:] = np.random.rand( param.data.size ) - 0.5
+   param.data[:] = np.random.rand( param.data.size ) - 0.5
 
 randomize('mydeconv')
 #randomize('myconv2')
@@ -47,11 +47,11 @@ randomize('mydeconv')
 net.save("mynet.caffemodel");
 
 inp = np.zeros( shape=(O,I,H,W) )
-#for chan in range(I):
-#    for y in range(H):
-#        for x in range(W):
-#            inp[0,chan,y,x] = ( ((chan*9+12)%13) + ((y*39 + 6)%17) + ((x*37 + 8)%19)  ) * 0.1
-inp[0,0,1,1] = 1
+for chan in range(I):
+    for y in range(H):
+        for x in range(W):
+            inp[0,chan,y,x] = ( ((chan*9+12)%13) + ((y*39 + 6)%17) + ((x*37 + 8)%19)  ) * 0.1
+#inp[0,0,1,1] = 1
 
 net.blobs[ net.inputs[0] ].data[0] = inp
 

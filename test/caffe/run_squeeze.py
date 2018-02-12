@@ -4,13 +4,14 @@ from caffe import layers as L
 from caffe import params as P
 from PIL import Image
 
-model = "../model/data/squeezenet_v1.1";
+#model = "../model/data/squeezenet_v1.1"
+model = "../model/data/v22_train"
 
 net = caffe.Net(model+".prototxt", model+".caffemodel", caffe.TEST)
 
-im = np.array(Image.open('../model/data/eagle_227.png'))
+im = np.array(Image.open('../model/data/Person.png'))[:,:,0:3]
 
-im = im - np.array([104,117,123]);
+#im = im - np.array([104,117,123]);
 im = np.moveaxis(im,2,0)
 print(im.shape)
 
@@ -33,4 +34,5 @@ if False:
         else:
             print( k,shape," =>", data[ shape[0]-1])
 
-print( result.argmax(), "=", result[ result.argmax() ]);
+#print( result.argmax(), "=", result[ result.argmax() ]);
+print( result.min(), "...", result.max() );

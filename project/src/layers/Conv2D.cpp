@@ -188,8 +188,8 @@ Tensor *Conv2DBase::run(Tensor *inSrc0, Tensor *inBuffer)
    {
       destW = (srcW)*(strideX);
       destH = (srcH)*(strideY);
-      padOx = (filterX/strideX)>>1;
-      padOy = (filterY/strideY)>>1;
+      padOx = filterX==strideX ? 0 : (strideX)>>1;
+      padOy = filterY==strideY ? 0 : (strideY)>>1;
    }
    else if (padding==padSame)
    {
@@ -246,6 +246,8 @@ class Conv2D : public Conv2DBase
    float      *alignedWeights;
    float      *alignedBias;
    int        alignedWeightSize;
+   int        strideShiftX;
+   int        strideShiftY;
 
 
 public:
@@ -258,6 +260,18 @@ public:
       interlacedCount = 0;
       alignedBias = 0;
       alignedWeights = 0;
+
+      strideShiftX = 1;
+      strideShiftY = 1;
+      if (isDeconvolution)
+      {
+         while( 1<<strideShiftX < strideX)
+            strideShiftX++;
+         while( 1<<strideShiftY < strideY)
+            strideShiftY++;
+         if ( (1<<strideShiftX)!=strideX || (1<<strideShiftY)!=strideY)
+            TensorThrow("Deconvolution - only power-of-2 supported");
+      }
 
       #ifdef NUMERIX_SIMD
       interlacedWeights = (outputs & 0x3)==0  && !pweights && (!is1x1 || is1x1Aligned) && !isDeconvolution;
@@ -413,7 +427,7 @@ public:
       src0->cpuRead();
       destTensor->cpuWrite();
 
-      runThreaded( isDeconvolution );
+      runThreaded( );
       src0 = 0;
       destTensor = 0;
       endRun();
@@ -525,8 +539,6 @@ public:
 
       int FX = DECONV ? filterX/strideX : filterX;
       int FY = DECONV ? filterY/strideY : filterY;
-      int PX = padOx;
-      int PY = padOy;
 
       int filters = FX*FY;
       int featureSize = filters*inputs;
@@ -539,17 +551,6 @@ public:
 
       const float *sIn = (float *)src0->cpuRead();
 
-      /*
-      printf("IN:\n");
-      for(int y=0;y<srcH;y++)
-      {
-         printf(" %d] ", y);
-         for(int x=0;x<srcW;x++)
-            printf(" %f", sIn[ y*srcW + x] );
-         printf("\n");
-      }
-      */
-
       while(true)
       {
          int y = getNextJob();
@@ -559,11 +560,10 @@ public:
 
          float *dest = (float *)destTensor->cpuWrite() + destW*outputs*y;
 
-         int srcY = DECONV ? y/strideY : y*strideY;
-
-         #if 1
          // Unclipped filter position
-         int srcFy0 =  srcY - PY;
+            // Use bit shift to preserve sign
+         int srcFy0 = DECONV ? (y-padOy)>>strideShiftY : y*strideY-padOy;
+
          // First valid filter position
          int fy0 = std::max(-srcFy0,0);
          // Last valid filter position
@@ -574,30 +574,15 @@ public:
 
          if (fy1<FY)
             memset(srcPtr+fy1*filterW,0,filterRow*(FY-fy1) );
-         #else
-
-
-
-         int fy0 = std::max(padOy-srcY,0);
-         int fy1 = std::min(srcH+padOy-srcY,filterY);
-
-         if (fy0>0)
-            memset(srcPtr,0,filterRow*fy0);
-
-         if (fy1<filterY)
-            memset(srcPtr+fy1*filterW,0,filterRow*(filterY-fy1) );
-         #endif
-
-
 
 
          for(int x=0;x<destW;x++)
          {
-            int srcX = DECONV ? x/strideX : x*strideX;
-
-            #if 1
             // Unclipped filter position
-            int srcFx0 =  srcX - PX;
+            // Use bit shift to preserve sign
+            int srcFx0 = DECONV ? (x-padOx)>>strideShiftX: x*strideX-padOx;
+            //if (y==0) printf(" fx0(%d) %d : %d\n", padOx, x, srcFx0);
+
             // First valid filter position
             int fx0 = std::max(-srcFx0,0);
             // Last valid filter position
@@ -618,71 +603,34 @@ public:
                }
 
                memcpy(srcBuffFill, copySrcFrom, xElems*sizeof(float));
+               //if (x==1 && y==1)
+               //   printf(" -> %f %f\n", srcBuffFill[0], srcBuffFill[1]);
                copySrcFrom+= srcStride[0];
 
                if (fx1<FX)
                   memset(srcBuffFill + xElems, 0, (FX-fx1)*inputs*sizeof(float));
             }
-            #else
-
-            int fx0 = std::max(padOx-srcX,0);
-            int fx1 = std::min(srcW+padOx-srcX,filterX);
-            int xRange = fx1-fx0;
-
-            const float *s = sIn + (srcY+fy0-padOy)*srcStride[0] + (srcX+fx0-padOx)*srcStride[1];
-
-            for(int dy=fy0;dy<fy1;dy++)
-            {
-               float *sp = srcPtr + filterW*dy;
-
-               if (fx0>0)
-               {
-                  memset(sp, 0, fx0*inputs*sizeof(float));
-                  sp +=fx0*inputs;
-               }
-
-               memcpy(sp, s, xRange*inputs*sizeof(float));
-               s+= srcStride[0];
-
-               if (fx1<filterX)
-                  memset(sp + (fx1-fx0)*inputs, 0, (filterX-fx1)*inputs*sizeof(float));
-            }
-            #endif
-
 
 
             if (DECONV)
             {
-               // Forward conv calculates destination
-               //
-               //  O dx,dy = Sum fx,fy     S(dx*stX+fx-padX,dy*stY+fy-padY)*W(fx,fy)
-               //
-               //  srcX = dx*stX+fx-padX
-               //  dx = (srcX+padX-fx)/stX
-               //
-               //  reversing the roles of O and S
-               int fy0 = (y % FY);
-               int fx0 = (x % FX);
-
                for(int o=0;o<outputs;o++)
                {
                   const float *s = srcPtr;
                   const float *wO = alignedWeights + o*filterY*filterX*inputs;
                   float sum = b?b[o]:0.0f;
 
-                  for(int fy=0;fy<filterY;fy+=FY)
+                  for(int fy=0;fy<FY;fy++)
                   {
-                     int wy = filterY - 1 - (fy0 + fy);
-                     for(int fx=0;fx<filterX;fx+=FX)
+                     int wy = (y+padOx-srcFy0*strideY+fy*strideY) % filterY;
+                     for(int fx=0;fx<FX;fx++)
                      {
-                        int wx = filterX - 1 - (fx0 + fx);
-                        //printf(" <%d,%d> : %f ", wx,wy, s[0]);
+                        int wx = (x+padOy-srcFx0*strideX+fx*strideX) % filterX;
                         const float *w = wO + (wy*filterX+wx)*inputs;
                         for(int i=0;i<inputs;i++)
                            sum += s[i] * w[i];
                         s += inputs;
                      }
-                     //printf("\n = %f\n", sum);
                   }
                   if (activation==actRelu)
                      *dest++ = std::max( sum, 0.0f );
@@ -692,8 +640,7 @@ public:
                      *dest++ = sum;
                }
             }
-            else
-            if (pweights)
+            else if (pweights)
             {
                const float *dw = alignedWeights;
                for(int d=0;d<diSize;d++)

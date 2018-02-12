@@ -666,9 +666,6 @@ value layCreateConv2D(value inStrides, int inActivation, int inPadding, value in
       sx = strides.size() > 1 ? strides[1] : sy;
    }
 
-   if (isDeconvolution)
-      printf("TODO - isDeconvolution\n");
-
    Layer *layer = 0;
    Activation activation = (Activation)inActivation;
    Padding padding = (Padding)inPadding;

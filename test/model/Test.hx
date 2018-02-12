@@ -182,6 +182,18 @@ class Test
          #if nme
          if (result.channels==3)
             NmeTools.saveImageF32(result, "result.png", NmeTools.TRANS_UNIT_SCALE );
+         else if (result.channels==1)
+         {
+            var shape = result.shape;
+            var h = shape[0];
+            var w = shape[1];
+            var ints = new Array<Int>();
+            for(idx in 0...w*h)
+               ints[idx] = result[idx]>0.5 ? 0xffffffff : 0;
+            var bmp = new nme.display.BitmapData(w,h,true);
+            bmp.setVector(new nme.geom.Rectangle(0,0,w,h),ints);
+            bmp.encode(nme.bare.Surface.PNG).writeFile("result.png");
+         }
          #end
       }
    }
