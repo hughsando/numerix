@@ -2,12 +2,10 @@ package numerix;
 import numerix.*;
 import Sys.println;
 import haxe.Timer;
+import numerix.Padding;
 
 class Layer
 {
-   static public inline var PAD_SAME = 0;
-   static public inline var PAD_VALID = 1;
-
    static public inline var ACT_LINEAR = 0;
    static public inline var ACT_RELU = 1;
    static public inline var ACT_SIGMOID = 2;
@@ -167,6 +165,18 @@ class Layer
    {
       laySetPadInput(handle);
    }
+
+
+   public static function encodePadding(padding:Padding) : Int
+   {
+      return  switch( padding )
+      {
+         case PadSame : 0;
+         case PadValid : 1;
+         case PadCustom(p) : 10000 + p;
+      }
+   }
+
 
    public static function enablePerLayerTiming(enable = true)
    {

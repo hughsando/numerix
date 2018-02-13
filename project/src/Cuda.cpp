@@ -278,8 +278,8 @@ public:
 
       cudnnCheck( cudnnCreateConvolutionDescriptor(&convDesc) );
 
-      padX = inPadding==padValid ? 0 : ( (filterX-1)/2 );
-      padY = inPadding==padValid ? 0 : ( (filterY-1)/2 );
+      padX = inPadding.type==Padding::padValid ? 0 : ( (filterX-1)/2 );
+      padY = inPadding.type==Padding::padValid ? 0 : ( (filterY-1)/2 );
 
       #if(CUDNN_MAJOR >= 6)
       // cudnn 6.0
@@ -469,8 +469,8 @@ public:
       strideY = inStepY;
       padding = inPadding;
 
-      padX = padding==padValid ? 0 : ( (filterX-1)/2 );
-      padY = padding==padValid ? 0 : ( (filterY-1)/2 );
+      padX = padding.type==Padding::padValid ? 0 : ( (filterX-1)/2 );
+      padY = padding.type==Padding::padValid ? 0 : ( (filterY-1)/2 );
 
 
       cudnnCheck( cudnnCreateTensorDescriptor(&srcDesc) );

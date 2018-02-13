@@ -6,9 +6,6 @@
 namespace numerix
 {
 
-
-
-
 #undef min
 #undef max
 

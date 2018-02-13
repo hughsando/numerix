@@ -191,22 +191,12 @@ Tensor *Conv2DBase::run(Tensor *inSrc0, Tensor *inBuffer)
       padOx = filterX==strideX ? 0 : (strideX)>>1;
       padOy = filterY==strideY ? 0 : (strideY)>>1;
    }
-   else if (padding==padSame)
+   else
    {
-      destW = (srcW+strideX-1)/strideX;
-      //int padX = (destW - 1)*strideX + filterX - srcW;
-      // This is pad-left, right does not really matter
-      padOx = (filterX-1)>>1;
+      padding.get(srcW, strideX, filterX, destW, padOx);
+      padding.get(srcH, strideY, filterY, destH, padOy);
+   }
 
-      destH = (srcH+strideY-1)/strideY;
-      //int padY = (destH - 1)*strideY + filterY - srcH;
-      padOy = (filterY-1)>>1;
-   }
-   else // padValid
-   {
-      destW = (srcW-filterX+1 + strideX-1)/strideX;
-      destH = (srcH-filterY+1 + strideY-1)/strideY;
-   }
 
    bool match = false;
    if (inBuffer && inBuffer->shape.size()==3 && inBuffer->type==Float32)
@@ -460,9 +450,23 @@ public:
          if (y>=destH)
             break;
 
-         const float *src = (const float *)src0->cpuRead() + srcW*inputs*y*strideY;
          float *dest = (float *)destTensor->cpuWrite() + destW*outputs*y;
-         for(int x=0;x<destW;x++)
+         if (y<padOy||y-padOy>=srcH)
+         {
+            memset(dest, 0, destW*outputs*sizeof(float));
+            continue;
+         }
+
+         if (padOx)
+         {
+            memset(dest, 0, padOx*outputs*sizeof(float));
+            dest += padOx*outputs;
+            memset(dest + srcW*outputs, 0, (destW-srcW-padOx)*outputs*sizeof(float));
+         }
+
+         const float *src = (const float *)src0->cpuRead() + srcW*inputs*(y-padOy)*strideY;
+
+         for(int x=0;x<srcW;x++)
          {
             if (interlacedWeights)
             {

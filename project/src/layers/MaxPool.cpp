@@ -56,7 +56,7 @@ public:
       padOx = 0;
       padOy = 0;
 
-      if (padding==padSame)
+      if (padding.type==Padding::padSame)
       {
          destW = (srcW+strideX-1)/strideX;
          int padX = (destW - 1)*strideX + filterX - srcW;

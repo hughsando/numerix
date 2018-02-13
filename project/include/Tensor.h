@@ -13,6 +13,7 @@ namespace numerix
 
 class Tensor;
 
+
 enum Activation
 {
    actLinear,
@@ -21,11 +22,56 @@ enum Activation
    actLeaky,
 };
 
-enum Padding
+struct Padding
 {
-   padSame,
-   padValid,
+   enum Type
+   {
+      padSame,
+      padValid,
+      padCustom,
+   };
+   Type type;
+   int  custom;
+
+   Padding() : type(padSame), custom(0) { }
+   Padding(const Padding &p) : type(p.type), custom(p.custom) { }
+   explicit Padding(int encoded)
+   {
+      custom = 0;
+      if (encoded==0)
+         type = padSame;
+      else if (encoded==1)
+         type = padValid;
+      else
+      {
+         type = padCustom;
+         custom = encoded - 10000;
+      }
+   }
+
+   void get(int src, int stride, int filter, int &outDest, int &outPad)
+   {
+      if (type==padCustom)
+      {
+         outPad = custom;
+         outDest = src*stride + outPad*2;
+      }
+      else if (type==padSame)
+      {
+         outDest = (src+stride-1)/stride;
+         //int padX = (destW - 1)*strideX + filterX - srcW;
+         // This is pad-left, right does not really matter
+         outPad = (filter-1)>>1;
+      }
+      else // padValid
+      {
+         outDest = (src-filter+1 + stride-1)/stride;
+         outPad = 0;
+      }
+   }
 };
+
+
 
 }// end namespace numerix
 

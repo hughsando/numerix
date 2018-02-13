@@ -546,8 +546,8 @@ public:
       strideY = inStepY;
       padding = inPadding;
 
-      padX = padding==padValid ? 0 : ( (filterX-1)/2 );
-      padY = padding==padValid ? 0 : ( (filterY-1)/2 );
+      padX = padding.type==Padding::padValid ? 0 : ( (filterX-1)/2 );
+      padY = padding.type==Padding::padValid ? 0 : ( (filterY-1)/2 );
 
       OpenCLContext *ctx = (OpenCLContext *)gOclContext;
       if (!ctx)
@@ -591,7 +591,8 @@ public:
 
       int destW = 0;
       int destH = 0;
-      if (padding==padSame)
+      
+      if (padding.type==Padding::padSame)
       {
          destW = (srcW+strideX-1)/strideX;
          destH = (srcH+strideY-1)/strideY;
@@ -905,8 +906,9 @@ public:
       useIntelTiled3x3x3 = false;
       threads = 16;
       overrideWeights = 0;
-      padX = padding==padValid ? 0 : ( (filterX-1)/2 );
-      padY = padding==padValid ? 0 : ( (filterY-1)/2 );
+
+      padX = padding.type==Padding::padValid ? 0 : ( (filterX-1)/2 );
+      padY = padding.type==Padding::padValid ? 0 : ( (filterY-1)/2 );
    }
 
    ~OpenCLConv2D()
@@ -937,7 +939,7 @@ public:
             break;
       }
       char argBuf[1000];
-      int dMin = padding==padValid ? 0 : (-filterX)/2;
+      int dMin = padding.type==Padding::padValid ? 0 : (-filterX)/2;
       int dMax = dMin + filterX;
 
 

@@ -1,4 +1,5 @@
 package numerix;
+import numerix.Padding;
 
 class MaxPool extends Layer
 {
@@ -6,7 +7,7 @@ class MaxPool extends Layer
 
    public var kernelSize(default,null):Array<Int>;
    public var strides(default,null):Array<Int>;
-   public var padding(default,null):Int;
+   public var padding(default,null):Padding;
 
    public function new(config:Dynamic, input:Layer)
    {
@@ -21,13 +22,15 @@ class MaxPool extends Layer
 
       var pad:String = config.padding;
       if (pad=="same")
-         padding = Layer.PAD_SAME;
+         padding = PadSame;
       else if (pad=="valid")
-         padding = Layer.PAD_VALID;
+         padding = PadValid;
+      else if (pad=="custom")
+         padding = PadCustom(config.pad);
       else
          throw 'Unknown padding $pad';
 
-      handle = layCreateMaxPool(kernelSize, strides, padding);
+      handle = layCreateMaxPool(kernelSize, strides, Layer.encodePadding(padding) );
    }
 
 

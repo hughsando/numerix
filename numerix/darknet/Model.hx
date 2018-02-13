@@ -4,6 +4,7 @@ import Sys.println;
 import haxe.io.Bytes;
 import numerix.Tensor;
 import numerix.Nx;
+import numerix.Padding;
 import cpp.NativeMath.idiv;
 
 class Params
@@ -141,7 +142,7 @@ class Model extends numerix.Model
             config.kernelSize = [ size,size ];
             var stride:Int = config.stride;
             config.strides = [ stride,stride ];
-            config.padding = config.pad==1 ? "same" : "valid";
+            config.padding = config.pad==1 ? PadSame : PadValid;
             config.useBias = true;
             if (config.activation==null)
                config.activation = "logistic";
@@ -178,7 +179,7 @@ class Model extends numerix.Model
             //println('Conv2D $weights $bias');
 
             conv2D.setWeights([weights,bias]);
-            if (conv2D.padding==Layer.PAD_SAME)
+            if (conv2D.padding==PadSame)
             {
                return new Params(
                    idiv(params.w + stride-1,stride),
@@ -198,10 +199,10 @@ class Model extends numerix.Model
             config.kernelSize = [ size,size ];
             var stride:Int = config.stride;
             config.strides = [ stride,stride ];
-            config.padding = 'same';
+            config.padding = PadSame;
             //println('Maxpool ${params.w},${params.h},${params.channels}');
             var maxPool = new MaxPool(config, params.layer);
-            if (maxPool.padding==Layer.PAD_SAME)
+            if (maxPool.padding==PadSame)
             {
                return new Params(
                  idiv(params.w + stride-1,stride),

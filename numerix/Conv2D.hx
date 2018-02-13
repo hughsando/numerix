@@ -1,5 +1,7 @@
 package numerix;
 
+import numerix.Padding;
+
 class Conv2D extends Layer
 {
    static var conv2DId = 0;
@@ -12,7 +14,7 @@ class Conv2D extends Layer
    public var useBias(default,null):Bool;
    public var isDeconvolution(default,null):Bool;
    public var activation(default,null):Int;
-   public var padding(default,null):Int;
+   public var padding(default,null):Padding;
    public var weights(default,null):Tensor;
    public var bias(default,null):Tensor;
    public var allowTransform(default,null):Bool;
@@ -58,9 +60,11 @@ class Conv2D extends Layer
 
       var pad:String = config.padding;
       if (pad=="same")
-         padding = Layer.PAD_SAME;
+         padding = PadSame;
       else if (pad=="valid")
-         padding = Layer.PAD_VALID;
+         padding = PadValid;
+      else if (pad=="custom")
+         padding = PadCustom( config.pad );
       else
          throw 'Unknown padding $pad';
    }
@@ -92,7 +96,7 @@ class Conv2D extends Layer
       bias = inWeights[1];
       release();
 
-      handle = layCreateConv2D(strides, activation, padding, weights, null, bias, allowTransform, isDeconvolution);
+      handle = layCreateConv2D(strides, activation, Layer.encodePadding(padding), weights, null, bias, allowTransform, isDeconvolution);
       if (scales!=null)
          layConv2DSetNorm(handle, scales, means, vars);
    }

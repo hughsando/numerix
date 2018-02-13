@@ -120,10 +120,12 @@ class Model extends numerix.Model
                   cfg.padding='same';
                else
                {
+                  cfg.padding='custom';
+                  cfg.pad = padSize;
                   // Not quite sure what this means for deconvolution
-                  if (!layer.deconvolution)
-                      Sys.println('Warning: kernelSize=$size, padSize=$padSize - using "same"');
-                  cfg.padding = 'same';
+                  //if (!layer.deconvolution)
+                  //    Sys.println('Warning: kernelSize=$size, padSize=$padSize - using "same"');
+                  //cfg.padding = 'same';
                }
 
                cfg.deconvolution = layer.deconvolution;

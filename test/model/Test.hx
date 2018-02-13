@@ -93,12 +93,14 @@ class Test
          val = NmeTools.loadImageF32( bmpname, scaling );
          var pixels = val.width * val.height;
          var idx = 0;
+         /*
          for(p in 0...pixels)
          {
             val[idx] = val[idx]-104; idx++;
             val[idx] = val[idx]-117; idx++;
             val[idx] = val[idx]-123; idx++;
          }
+         */
       }
       #end
 

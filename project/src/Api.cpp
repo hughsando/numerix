@@ -668,7 +668,7 @@ value layCreateConv2D(value inStrides, int inActivation, int inPadding, value in
 
    Layer *layer = 0;
    Activation activation = (Activation)inActivation;
-   Padding padding = (Padding)inPadding;
+   Padding padding(inPadding);
 
    #ifdef NX_OPENCL
    if (!layer && !pweights && OclContext::hasCurrent())
@@ -738,7 +738,7 @@ value layCreateMaxPool(value inSize, value inStrides, int inPadding)
    }
 
    Layer *layer = 0;
-   Padding padding = (Padding)inPadding;
+   Padding padding(inPadding);
    #ifdef NX_OPENCL
    if (OclContext::hasCurrent())
       layer = oclCreateMaxPool(sx, sy, stepX, stepY, padding);
