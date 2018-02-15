@@ -5,11 +5,16 @@ from caffe import params as P
 from PIL import Image
 
 #model = "../model/data/squeezenet_v1.1"
-model = "../model/data/v3_train"
+
+if False:
+    model = "../model/data/v3_train"
+    im = np.array(Image.open('../model/data/Person_454.png'))[:,:,0:3]
+else:
+    model = "../model/data/v22_train"
+    im = np.array(Image.open('../model/data/Person.png'))[:,:,0:3]
 
 net = caffe.Net(model+".prototxt", model+".caffemodel", caffe.TEST)
 
-im = np.array(Image.open('../model/data/Person_454.png'))[:,:,0:3]
 
 #im = im - np.array([104,117,123]);
 im = np.moveaxis(im,2,0)

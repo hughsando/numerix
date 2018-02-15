@@ -331,8 +331,50 @@ public:
          }
       }
 
+      if (isDeconvolution)
+         createDeconvWeights();
+
       if (interlacedWeights)
          createInterlacedWeights();
+   }
+
+   void createDeconvWeights()
+   {
+      int FX = filterX/strideX;
+      int FY = filterY/strideY;
+      alignedWeightSize = FX*FY*inputs;
+
+      const float *wSrc = (const float *)weights->cpuRead();
+
+      alignedWeightsBuffer = allocFloats(alignedWeightSize*strideX*strideY*outputs);
+
+      // y-srcFy0 % filterY
+      //float *wDest = alignedWeightsBuffer + outputs*alignedWeightSize*( fyBase*filterY + fxBase );
+      float *wDest = alignedWeightsBuffer;
+      for(int fyBase=0;fyBase<filterY;fyBase++)
+      {
+         for(int fxBase=0;fxBase<filterX;fxBase++)
+         {
+            for(int o=0;o<outputs;o++)
+            {
+               const float *wO = alignedWeights + o*inputs*filterX*filterY;
+
+               for(int fy=0;fy<FY;fy++)
+               {
+                  int wy = (fyBase+fy*strideY) % filterY;
+                  for(int fx=0;fx<FX;fx++)
+                  {
+                     int wx = (fxBase+fx*strideX) % filterX;
+                     const float *w = wO + (wy*filterY+wx)*inputs;
+                     for(int i=0;i<inputs;i++)
+                        *wDest++ = w[i];
+                  }
+               }
+            }
+         }
+      }
+
+      alignedWeights = alignedWeightsBuffer;
    }
 
 
@@ -416,6 +458,16 @@ public:
       destTensor = output;
       src0->cpuRead();
       destTensor->cpuWrite();
+
+      /*
+      if (isDeconvolution)
+      {
+         int FX = filterX/strideX;
+         int FY = filterY/strideY;
+         printf("Deconv x %d,%d -> %d\n", filterX, strideX, FX);
+      }
+      */
+
 
       runThreaded( );
       src0 = 0;
@@ -618,18 +670,23 @@ public:
 
             if (DECONV)
             {
+               int fxBase = (x+padOx-srcFx0*strideX) % filterX;
+               int fyBase = (y+padOy-srcFy0*strideY) % filterY;
+
+               #if 0
                for(int o=0;o<outputs;o++)
                {
                   const float *s = srcPtr;
                   const float *wO = alignedWeights + o*filterY*filterX*inputs;
                   float sum = b?b[o]:0.0f;
 
+                  // Natural weight order
                   for(int fy=0;fy<FY;fy++)
                   {
-                     int wy = (y+padOx-srcFy0*strideY+fy*strideY) % filterY;
+                     int wy = (fyBase+fy*strideY) % filterY;
                      for(int fx=0;fx<FX;fx++)
                      {
-                        int wx = (x+padOy-srcFx0*strideX+fx*strideX) % filterX;
+                        int wx = (fxBase+fx*strideX) % filterX;
                         const float *w = wO + (wy*filterX+wx)*inputs;
                         for(int i=0;i<inputs;i++)
                            sum += s[i] * w[i];
@@ -643,6 +700,17 @@ public:
                   else
                      *dest++ = sum;
                }
+               #else
+
+               const float *w = alignedWeights + outputs*alignedWeightSize*( fyBase*filterY + fxBase );
+
+               for(int o=0;o<outputs;o++)
+               {
+                  float sum = dot(b?b[o]:0.0f, w, srcPtr, featureSize, activation);
+                  *dest++ = sum;
+                  w+=alignedWeightSize;
+               }
+               #endif
             }
             else if (pweights)
             {
@@ -1266,7 +1334,6 @@ public:
    {
       const int *srcStride = &src0->strides[0];
       const int *destStride = &destTensor->strides[0];
-
 
       int tilesX = (srcW + 5)/6;
       int tilesY = (srcH + 5)/6;
