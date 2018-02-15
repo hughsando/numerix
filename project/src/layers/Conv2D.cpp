@@ -469,7 +469,7 @@ public:
       */
 
 
-      runThreaded( );
+      runThreaded();
       src0 = 0;
       destTensor = 0;
       endRun();
@@ -482,9 +482,9 @@ public:
       if (is1x1)
          runThread1x1(threadId);
       else if (isDeconvolution)
-         runThreadMulti<true>(threadId);
+         runThreadMultiDeconv(threadId);
       else
-         runThreadMulti<false>(threadId);
+         runThreadMulti(threadId);
    }
 
    void runThread1x1(int threadId)
@@ -585,60 +585,80 @@ public:
       }
    }
 
-   template<bool DECONV>
-   void runThreadMulti(int threadId)
+
+
+
+
+   void runThreadMultiDeconv(int threadId)
    {
       const float *b = bias ? (const float *)bias->cpuRead() : 0;
       const int *srcStride = &src0->strides[0];
       const int *destStride = &destTensor->strides[0];
-      float *di = pweights ? &diBuffers[threadId][0] : 0;
 
-      int FX = DECONV ? filterX/strideX : filterX;
-      int FY = DECONV ? filterY/strideY : filterY;
+      int FX = filterX/strideX;
+      int FY = filterY/strideY;
 
       int filters = FX*FY;
       int featureSize = filters*inputs;
-
       int filterW = FX*inputs;
-      int filterFours = filterW>>2;
-      int filterSixteens = filterW>>4;
       float *srcPtr = &srcBuffers[threadId][0];
       int filterRow = filterW*sizeof(float);
 
       const float *sIn = (float *)src0->cpuRead();
 
+      /*
+        Source pixels
+
+
+        srcFx0 =(destX-padOx)>>strideShiftX;
+        srcFx1 =(destX-padOx+filterX)>>strideShiftX;
+
+        destX0 = (sx<<strideShiftX) + padOx
+        destX1 = destX0 + FX
+
+      */
+      int srcX0 = (-padOx)<<strideShiftX;
+      int srcX1 = ( (destW-1-padOx)<<strideShiftX ) + 1;
+
+      int srcY0 = (-padOy)<<strideShiftY;
+      int srcY1 = ( (destH-1-padOy)<<strideShiftY ) + 1;
+
+
+      float *dest0 = (float *)destTensor->cpuWrite();
+
       while(true)
       {
-         int y = getNextJob();
-         if (y>=destH)
+         int srcFy0 = getNextJob() + srcY0;
+         if (srcFy0>=srcY1)
             break;
 
+         int destY0 = (srcFy0<<strideShiftY) + padOy;
+         int destY1 = destY0 + filterY;
+         if (destY0<0) destY0 = 0;
+         if (destY1>destH) destY1 = destH;
 
-         float *dest = (float *)destTensor->cpuWrite() + destW*outputs*y;
-
-         // Unclipped filter position
-            // Use bit shift to preserve sign
-         int srcFy0 = DECONV ? (y-padOy)>>strideShiftY : y*strideY-padOy;
 
          // First valid filter position
          int fy0 = std::max(-srcFy0,0);
          // Last valid filter position
          int fy1 = std::min(srcH,srcFy0+FY)-srcFy0;
 
-         if (fy0>0)
-            memset(srcPtr,0,fy0*filterRow);
-
-         if (fy1<FY)
-            memset(srcPtr+fy1*filterW,0,filterRow*(FY-fy1) );
-
-
-         for(int x=0;x<destW;x++)
+         if (fy0<fy1)
          {
-            // Unclipped filter position
-            // Use bit shift to preserve sign
-            int srcFx0 = DECONV ? (x-padOx)>>strideShiftX: x*strideX-padOx;
-            //if (y==0) printf(" fx0(%d) %d : %d\n", padOx, x, srcFx0);
+            if (fy0>0)
+               memset(srcPtr,0,fy0*filterRow);
 
+            if (fy1<FY)
+               memset(srcPtr+fy1*filterW,0,filterRow*(FY-fy1) );
+         }
+         else
+         {
+            memset(srcPtr, 0, FX*FY*inputs*sizeof(float));
+         }
+
+
+         for(int srcFx0=srcX0; srcFx0<srcX1; srcFx0++)
+         {
             // First valid filter position
             int fx0 = std::max(-srcFx0,0);
             // Last valid filter position
@@ -646,32 +666,56 @@ public:
 
             int xElems = (fx1-fx0)*inputs;
 
-            const float *copySrcFrom = sIn + (srcFy0+fy0)*srcStride[0] + (srcFx0+fx0)*srcStride[1];
-
-            for(int fy=fy0;fy<fy1;fy++)
+            if (xElems<=0 || fy1<=fy0)
             {
-               float *srcBuffFill = srcPtr + fy*filterW;
+               // todo - skip rest
+               memset(srcPtr, 0, FX*FY*inputs*sizeof(float));
+            }
+            else
+            {
+               const float *copySrcFrom = sIn + (srcFy0+fy0)*srcStride[0] + (srcFx0+fx0)*srcStride[1];
 
-               if (fx0>0)
+               for(int fy=fy0;fy<fy1;fy++)
                {
-                  memset(srcBuffFill, 0, fx0*inputs*sizeof(float));
-                  srcBuffFill +=fx0*inputs;
+                  float *srcBuffFill = srcPtr + fy*filterW;
+
+                  if (fx0>0)
+                  {
+                     memset(srcBuffFill, 0, fx0*inputs*sizeof(float));
+                     srcBuffFill +=fx0*inputs;
+                  }
+
+                  memcpy(srcBuffFill, copySrcFrom, xElems*sizeof(float));
+                  //if (x==1 && y==1)
+                  //   printf(" -> %f %f\n", srcBuffFill[0], srcBuffFill[1]);
+                  copySrcFrom+= srcStride[0];
+
+                  if (fx1<FX)
+                     memset(srcBuffFill + xElems, 0, (FX-fx1)*inputs*sizeof(float));
                }
-
-               memcpy(srcBuffFill, copySrcFrom, xElems*sizeof(float));
-               //if (x==1 && y==1)
-               //   printf(" -> %f %f\n", srcBuffFill[0], srcBuffFill[1]);
-               copySrcFrom+= srcStride[0];
-
-               if (fx1<FX)
-                  memset(srcBuffFill + xElems, 0, (FX-fx1)*inputs*sizeof(float));
             }
 
+            int destX0 = (srcFx0<<strideShiftX) + padOx;
+            int destX1 = std::min(destX0 + strideX,destW);
+            if (destX0<0) destX0 = 0;
 
-            if (DECONV)
+            for(int y=destY0; y<destY1; y++)
             {
-               int fxBase = (x+padOx-srcFx0*strideX) % filterX;
-               int fyBase = (y+padOy-srcFy0*strideY) % filterY;
+               float *dest = dest0 + (destW*y + destX0) * outputs;
+               for(int x=destX0; x<destX1;x++)
+               {
+                  int fxBase = (x+padOx-srcFx0*strideX) % filterX;
+                  int fyBase = (y+padOy-srcFy0*strideY) % filterY;
+
+                  const float *w = alignedWeights + outputs*alignedWeightSize*( fyBase*filterY + fxBase );
+
+                  for(int o=0;o<outputs;o++)
+                  {
+                     float sum = dot(b?b[o]:0.0f, w, srcPtr, featureSize, activation);
+                     *dest++ = sum;
+                     w+=alignedWeightSize;
+                  }
+               }
 
                #if 0
                for(int o=0;o<outputs;o++)
@@ -700,19 +744,93 @@ public:
                   else
                      *dest++ = sum;
                }
-               #else
-
-               const float *w = alignedWeights + outputs*alignedWeightSize*( fyBase*filterY + fxBase );
-
-               for(int o=0;o<outputs;o++)
-               {
-                  float sum = dot(b?b[o]:0.0f, w, srcPtr, featureSize, activation);
-                  *dest++ = sum;
-                  w+=alignedWeightSize;
-               }
                #endif
             }
-            else if (pweights)
+         }
+      }
+   }
+
+
+
+   void runThreadMulti(int threadId)
+   {
+      const float *b = bias ? (const float *)bias->cpuRead() : 0;
+      const int *srcStride = &src0->strides[0];
+      const int *destStride = &destTensor->strides[0];
+      float *di = pweights ? &diBuffers[threadId][0] : 0;
+
+      int filters = filterX*filterY;
+      int featureSize = filters*inputs;
+
+      int filterW = filterX*inputs;
+      int filterFours = filterW>>2;
+      int filterSixteens = filterW>>4;
+      float *srcPtr = &srcBuffers[threadId][0];
+      int filterRow = filterW*sizeof(float);
+
+      const float *sIn = (float *)src0->cpuRead();
+
+      while(true)
+      {
+         int y = getNextJob();
+         if (y>=destH)
+            break;
+
+
+         float *dest = (float *)destTensor->cpuWrite() + destW*outputs*y;
+
+         // Unclipped filter position
+            // Use bit shift to preserve sign
+         int srcFy0 = y*strideY-padOy;
+
+         // First valid filter position
+         int fy0 = std::max(-srcFy0,0);
+         // Last valid filter position
+         int fy1 = std::min(srcH,srcFy0+filterY)-srcFy0;
+
+         if (fy0>0)
+            memset(srcPtr,0,fy0*filterRow);
+
+         if (fy1<filterY)
+            memset(srcPtr+fy1*filterW,0,filterRow*(filterY-fy1) );
+
+
+         for(int x=0;x<destW;x++)
+         {
+            // Unclipped filter position
+            // Use bit shift to preserve sign
+            int srcFx0 = x*strideX-padOx;
+            //if (y==0) printf(" fx0(%d) %d : %d\n", padOx, x, srcFx0);
+
+            // First valid filter position
+            int fx0 = std::max(-srcFx0,0);
+            // Last valid filter position
+            int fx1 = std::min(srcW,srcFx0+filterX)-srcFx0;
+
+            int xElems = (fx1-fx0)*inputs;
+
+            const float *copySrcFrom = sIn + (srcFy0+fy0)*srcStride[0] + (srcFx0+fx0)*srcStride[1];
+
+            for(int fy=fy0;fy<fy1;fy++)
+            {
+               float *srcBuffFill = srcPtr + fy*filterW;
+
+               if (fx0>0)
+               {
+                  memset(srcBuffFill, 0, fx0*inputs*sizeof(float));
+                  srcBuffFill +=fx0*inputs;
+               }
+
+               memcpy(srcBuffFill, copySrcFrom, xElems*sizeof(float));
+               //if (x==1 && y==1)
+               //   printf(" -> %f %f\n", srcBuffFill[0], srcBuffFill[1]);
+               copySrcFrom+= srcStride[0];
+
+               if (fx1<filterX)
+                  memset(srcBuffFill + xElems, 0, (filterX-fx1)*inputs*sizeof(float));
+            }
+
+            if (pweights)
             {
                const float *dw = alignedWeights;
                for(int d=0;d<diSize;d++)
@@ -975,6 +1093,7 @@ public:
    Tensor *src0;
    Tensor *destTensor;
 
+   // Winograd
    virtual void doRun(Tensor *input, Tensor *output)
    {
       startRun();
