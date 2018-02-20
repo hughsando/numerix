@@ -7,11 +7,25 @@ class Test
    public static function main()
    {
       numerix.Model.enableGpu(false);
+
+      var args = Sys.args();
+      if (args.remove("-opencl"))
+      {
+         var platforms = numerix.opencl.ClCtx.platforms;
+         // todo - 
+         var platform = platforms[1];
+         Sys.println("Using opencl platform " + platform.name);
+         var devices = null;
+         var devices = [ platform.devices[0] ];
+         var ctx = new numerix.opencl.ClCtx(platform,devices);
+         trace( ctx );
+      }
+
       var modelname = "mynet.caffemodel";
       var model = numerix.Model.load(modelname);
 
-      var O = 1;
-      var I = 1;
+      var O = 8;
+      var I = 8;
       var H = 2;
       var W = 3;
 

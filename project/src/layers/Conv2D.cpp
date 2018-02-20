@@ -23,6 +23,20 @@ Conv2DBase::Conv2DBase(int inStrideY, int inStrideX, bool inIsDeconvolution,
    padInputsWithZero = false;
    weightsOriginal = 0;
 
+
+   strideShiftX = 1;
+   strideShiftY = 1;
+   if (isDeconvolution)
+   {
+      while( 1<<strideShiftX < strideX)
+         strideShiftX++;
+      while( 1<<strideShiftY < strideY)
+         strideShiftY++;
+      if ( (1<<strideShiftX)!=strideX || (1<<strideShiftY)!=strideY)
+         TensorThrow("Deconvolution - only power-of-2 supported");
+   }
+
+
    // Output x Height x Width x Input
    CShape s = inWeights->shape;
    if (!inPWeights && s.size()!=4)
@@ -236,8 +250,6 @@ class Conv2D : public Conv2DBase
    float      *alignedWeights;
    float      *alignedBias;
    int        alignedWeightSize;
-   int        strideShiftX;
-   int        strideShiftY;
 
 
 public:
@@ -251,17 +263,6 @@ public:
       alignedBias = 0;
       alignedWeights = 0;
 
-      strideShiftX = 1;
-      strideShiftY = 1;
-      if (isDeconvolution)
-      {
-         while( 1<<strideShiftX < strideX)
-            strideShiftX++;
-         while( 1<<strideShiftY < strideY)
-            strideShiftY++;
-         if ( (1<<strideShiftX)!=strideX || (1<<strideShiftY)!=strideY)
-            TensorThrow("Deconvolution - only power-of-2 supported");
-      }
 
       #ifdef NUMERIX_SIMD
       interlacedWeights = (outputs & 0x3)==0  && !pweights && (!is1x1 || is1x1Aligned) && !isDeconvolution;

@@ -135,6 +135,9 @@ protected:
    int        destH;
    int        padOx;
    int        padOy;
+   int        strideShiftX;
+   int        strideShiftY;
+
 
 
    Activation activation;

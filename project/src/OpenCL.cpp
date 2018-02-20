@@ -9,6 +9,7 @@
 #include <ctype.h>
 
 extern const char *openclConv2D_cl;
+extern const char *openclDeconv2D_cl;
 extern const char *openclIntelConv2D_cl;
 extern const char *openclMaxPool_cl;
 extern const char *openclConcat_cl;
@@ -885,11 +886,21 @@ class OpenCLConv2D : public Conv2DBase
    bool useIntelTiled1x1;
    bool useIntelTiled3x3;
    bool useIntelTiled3x3x3;
+   bool useIntelDeconv;
    int  threads;
    cl_kernel kernel;
    Shape kernelShape;
    OpenCLLayerData data;
    Tensor *overrideWeights;
+
+   // For deconv
+   int srcX0;
+   int srcY0;
+   int srcX1;
+   int srcY1;
+   int srcTx;
+   int srcTy;
+
 
 
 public:
@@ -904,6 +915,7 @@ public:
       useIntelTiled1x1 = false;
       useIntelTiled3x3 = false;
       useIntelTiled3x3x3 = false;
+      useIntelDeconv = false;
       threads = 16;
       overrideWeights = 0;
 
@@ -972,11 +984,42 @@ public:
 
       useIntelTiled3x3 = strideX==1 && strideY==1 && filterX==3 && filterY==3 && !(inputs&7) && !(outputs&7) && ctx->useIntelMethod;
 
-      if ( (!wasI3x3 && useIntelTiled3x3) || (!wasI3x3x3 && useIntelTiled3x3x3) )
+
+      if ( (!wasI3x3 && useIntelTiled3x3) || (!wasI3x3x3 && useIntelTiled3x3x3) || isDeconvolution )
          rebuildWeights();
 
 
-      if (useIntelTiled1x1 || useIntelTiled3x3 || useIntelTiled3x3x3)
+      if (isDeconvolution)
+      {
+         srcX0 = (-padOx)<<strideShiftX;
+         srcX1 = ( (srcW-1-padOx)<<strideShiftX ) + 1;
+         srcTx = srcX1 - srcX0;
+
+         srcY0 = (-padOy)<<strideShiftY;
+         srcY1 = ( (srcH-1-padOy)<<strideShiftY ) + 1;
+         srcTy = srcY1 - srcY0;
+
+
+         // Iterate over src
+         sprintf(argBuf," -D DEST_W=%d -D DEST_H=%d -D INPUTS=%d -D OUTPUTS=%d",
+                 destW, destH, inputs, outputs);
+         buildOptions += argBuf;
+         sprintf(argBuf," -D SRC_W=%d -D SRC_H=%d",
+                 srcW, srcH, inputs, outputs);
+         buildOptions += argBuf;
+         sprintf(argBuf," -D FILTER_X=%d -D FILTER_Y=%d -D SHIFT_X=%d -D SHIFT_Y=%d",
+                 filterX, filterY, strideShiftX, strideShiftY);
+         buildOptions += argBuf;
+         sprintf(argBuf," -D PAD_X=%d -D PAD_Y=%d -D SRC_TX=%d -D SRC_TY=%d", padOx, padOy, srcTx, srcTy);
+         buildOptions += argBuf;
+
+         const char *prog = openclDeconv2D_cl;
+         if (ctx->useIntelMethod)
+            kernel = ctx->makeKernel("INTEL_DECONV2D", prog, "Deconv2D", buildOptions);
+         else
+            kernel = ctx->makeKernel("DECONV2D", prog, "Deconv2D", buildOptions);
+      }
+      else if (useIntelTiled1x1 || useIntelTiled3x3 || useIntelTiled3x3x3)
       {
          sprintf(argBuf," -D INPUT0_SIZE_X=%d -D INPUT0_SIZE_Y=%d -D INPUT0_FEATURE_NUM=%d ",
                  srcW, srcH, inputs);
@@ -1046,7 +1089,7 @@ public:
       err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &dest);
       err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &w);
       err |= clSetKernelArg(kernel, 3, sizeof(cl_mem), &b);
-      if (!useIntelTiled1x1 && !useIntelTiled3x3 && !useIntelTiled3x3x3)
+      if (!useIntelTiled1x1 && !useIntelTiled3x3 && !useIntelTiled3x3x3 && !isDeconvolution)
       {
          err |= clSetKernelArg(kernel, 4, sizeof(cl_int), &srcW);
          err |= clSetKernelArg(kernel, 5, sizeof(cl_int), &srcH);
@@ -1059,7 +1102,15 @@ public:
       }
 
       size_t *work_offset = 0;
-      if (useIntelTiled1x1)
+
+      if (isDeconvolution)
+      {
+         cl_uint work_dim = 3;
+         size_t globalSize[3] = { (size_t)(srcTx*srcTy), (size_t)outputs/8, (size_t)8  };
+         size_t localSize[3] = { 1, 1, 8 };
+         err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, work_offset, globalSize, localSize, 0, NULL, startKernel());
+      }
+      else if (useIntelTiled1x1)
       {
          int groupCount = srcH;
          cl_uint work_dim = 2;
@@ -1132,7 +1183,36 @@ public:
          overrideWeights = 0;
       }
 
-      if (useIntelTiled3x3 || useIntelTiled3x3x3)
+      if (isDeconvolution)
+      {
+         Shape shape = weights->shape;
+         int outs = shape[0];
+         int h = shape[1];
+         int w = shape[2];
+         int ins = shape[3];
+         overrideWeights = new Tensor( weights->type, shape );
+
+
+         int SW = filterX/strideX;
+         int SH = filterY/strideY;
+
+         int idx = 0;
+         for(int oBase=0;oBase<outs;oBase+=8)
+            for(int iBase=0; iBase<ins; iBase+=8)
+               for(int fyBase=0;fyBase<strideY;fyBase++)
+                  for(int fxBase=0;fxBase<strideX;fxBase++)
+                     for(int sy=0;sy<SH;sy++)
+                        for(int sx=0;sx<SW;sx++)
+                        {
+                           int inX = (fxBase + sx*strideX) % filterX;
+                           int inY = (fyBase + sy*strideY) % filterY;
+                           for(int o=0;o<8;o++)
+                              for(int i=0;i<8;i++)
+                                 overrideWeights->setFloatAt( idx++, weights->getFloat(oBase+o,inY,inX,iBase+i) );
+                        }
+
+      }
+      else if (useIntelTiled3x3 || useIntelTiled3x3x3)
       {
          Shape shape = weights->shape;
          int outs = shape[0];
