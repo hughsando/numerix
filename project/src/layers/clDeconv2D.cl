@@ -93,13 +93,10 @@ __kernel void Deconv2D(const __global float* src, __global float *dest, const __
 
        UNROLL_OUTPUT(Y,{
           int y = destY0 + Y;
-          int fyBase = (y+PAD_Y-(srcFy0<<SHIFT_Y)) & (FILTER_Y-1);
           UNROLL_OUTPUT(X,{
              int x = destX0 + X;
-             int fxBase = (x+PAD_X-(srcFx0<<SHIFT_X)) & (FILTER_X-1);
 
-             const __global float8 *w = ((const __global float8 *)(w0 + 8*SW*SH*8*( fyBase*TW + fxBase ) )) + threadId;
-             //const __global float8 *w = ((const __global float8 *)(w0)) + threadId;
+             const __global float8 *w = ((const __global float8 *)(w0 + 8*SW*SH*8*( Y*TW + X) )) + threadId;
 
              UNROLL_INPUT(SY,{
                 UNROLL_INPUT(SX,{

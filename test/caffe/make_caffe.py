@@ -4,14 +4,17 @@ import sys
 from caffe import layers as L
 from caffe import params as P
 
-O = 8
-I = 8
+O = 16
+I = 24
 H = 2
 W = 3
 
+KS = 3
+Stride = 1
+
 net = caffe.NetSpec()
 net.data = L.Input(shape=[dict(dim=[O, I, H, W])])
-net.deconv = L.Deconvolution(net.data, convolution_param=dict(kernel_size=4, stride=2,num_output=O, pad=1), name="mydeconv" )
+net.deconv = L.Convolution(net.data, convolution_param=dict(kernel_size=KS, stride=Stride,num_output=O, pad=1), name="mydeconv" )
 
 #net.relu = L.ReLU(net.conv)
 #net.maxp = L.Pooling(net.relu,pool=P.Pooling.MAX, kernel_size=2, stride=2, pad=0 )
@@ -36,12 +39,12 @@ def randomize(name):
    param = net.params[name][0]
    param.data[:,:,:,:] = np.random.random_sample( list(param.data.shape) ) - 0.5
    #param.data[:,1:8,:,:] = 0.0
-   #for y in range(2):
-   #   for x in range(2):
+   #for y in range(KS):
+   #   for x in range(KS):
    #      param.data[0,0,y,x] = (y+1)*10+(x+1);
    param = net.params[name][1]
    param.data[:] = np.random.rand( param.data.size ) - 0.5
-   #param.data[:] = 0
+   param.data[:] = 0
 
 randomize('mydeconv')
 #randomize('myconv2')

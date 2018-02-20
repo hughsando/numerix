@@ -22,6 +22,16 @@ Conv2DBase::Conv2DBase(int inStrideY, int inStrideX, bool inIsDeconvolution,
    diSize = 0;
    padInputsWithZero = false;
    weightsOriginal = 0;
+   filterX = filterY = 0;
+   inputs = outputs = 0;
+   srcW = srcH = 0;
+   destW = destH = 0;
+   padOx = padOy = 0;
+   weights = 0;
+   pweights = 0;
+   is1x1Aligned = false;
+   is1x1 = false;
+
 
 
    strideShiftX = 1;
@@ -238,6 +248,8 @@ Tensor *Conv2DBase::run(Tensor *inSrc0, Tensor *inBuffer)
 // -- Conv2D -----------------------
 
 
+#define FLAT_WEIGHTS
+
 class Conv2D : public Conv2DBase
 {
    bool       interlacedWeights;
@@ -262,6 +274,8 @@ public:
       interlacedCount = 0;
       alignedBias = 0;
       alignedWeights = 0;
+      alignedWeightSize = 0;
+      alignedWeightsBuffer = 0;
 
 
       #ifdef NUMERIX_SIMD
@@ -332,8 +346,10 @@ public:
          }
       }
 
+      #ifdef FLAT_WEIGHTS
       if (isDeconvolution)
          createDeconvWeights();
+      #endif
 
       if (interlacedWeights)
          createInterlacedWeights();
@@ -347,14 +363,18 @@ public:
 
       const float *wSrc = (const float *)weights->cpuRead();
 
-      alignedWeightsBuffer = allocFloats(alignedWeightSize*filterX*filterY*outputs);
+      alignedWeightsBuffer = allocFloats(alignedWeightSize*strideX*strideY*outputs);
+
+
+      int xOff = filterX==strideX ? 0 : strideX;
+      int yOff = filterY==strideY ? 0 : strideY;
 
       // y-srcFy0 % filterY
       //float *wDest = alignedWeightsBuffer + outputs*alignedWeightSize*( fyBase*filterY + fxBase );
       float *wDest = alignedWeightsBuffer;
-      for(int fyBase=0;fyBase<filterY;fyBase++)
+      for(int dy=0;dy<strideY;dy++)
       {
-         for(int fxBase=0;fxBase<filterX;fxBase++)
+         for(int dx=0;dx<strideX;dx++)
          {
             for(int o=0;o<outputs;o++)
             {
@@ -362,10 +382,10 @@ public:
 
                for(int fy=0;fy<filterSy;fy++)
                {
-                  int wy = (fyBase+fy*strideY) % filterY;
+                  int wy = (dy+yOff+fy*strideY) % filterY;
                   for(int fx=0;fx<filterSx;fx++)
                   {
-                     int wx = (fxBase+fx*strideX) % filterX;
+                     int wx = (dx+xOff+fx*strideX) % filterX;
                      const float *w = wO + (wy*filterY+wx)*inputs;
                      for(int i=0;i<inputs;i++)
                         *wDest++ = w[i];
@@ -618,23 +638,26 @@ public:
         destX1 = destX0 + FX
 
       */
-      int srcX0 = (-padOx)<<strideShiftX;
-      int srcX1 = ( (destW-1-padOx)<<strideShiftX ) + 1;
+      int srcX0 = (-padOx)>>strideShiftX;
+      int srcX1 = ( (destW-1-padOx)>>strideShiftX ) + 1;
 
-      int srcY0 = (-padOy)<<strideShiftY;
-      int srcY1 = ( (destH-1-padOy)<<strideShiftY ) + 1;
+      int srcY0 = (-padOy)>>strideShiftY;
+      int srcY1 = ( (destH-1-padOy)>>strideShiftY ) + 1;
 
+      //printf("%d,%d %d,%d\n", srcX0, srcX1, srcY0, srcY1);
 
       float *dest0 = (float *)destTensor->cpuWrite();
 
       while(true)
       {
-         int srcFy0 = getNextJob() + srcY0;
+         int srcFy0 = getNextJob();
+         srcFy0 +=  srcY0;
          if (srcFy0>=srcY1)
             break;
 
          int destY0 = (srcFy0<<strideShiftY) + padOy;
-         int destY1 = destY0 + filterY;
+         int destY0Base = destY0;
+         int destY1 = destY0 + strideY;
          if (destY0<0) destY0 = 0;
          if (destY1>destH) destY1 = destH;
 
@@ -697,18 +720,24 @@ public:
             }
 
             int destX0 = (srcFx0<<strideShiftX) + padOx;
+            int destX0Base = destX0;
             int destX1 = std::min(destX0 + strideX,destW);
             if (destX0<0) destX0 = 0;
 
+            //printf("%d: (%d,%d  %d,%d) -> (%d,%d  %d,%d)\n", threadId,
+            //        srcFx0+fx0, srcFy0+fy0, srcFx0+fx1, srcFy0+fy1,
+            //        destX0, destY0, destX1, destY1);
+
             for(int y=destY0; y<destY1; y++)
             {
+               int dy = y-destY0Base;
                float *dest = dest0 + (destW*y + destX0) * outputs;
                for(int x=destX0; x<destX1;x++)
                {
-                  int fxBase = (x+padOx-srcFx0*strideX) % filterX;
-                  int fyBase = (y+padOy-srcFy0*strideY) % filterY;
+                  int dx = x-destX0Base;
 
-                  const float *w = alignedWeights + outputs*alignedWeightSize*( fyBase*filterY + fxBase );
+                  #ifdef FLAT_WEIGHTS
+                  const float *w = alignedWeights + outputs*alignedWeightSize*( dy*strideX + dx );
 
                   for(int o=0;o<outputs;o++)
                   {
@@ -716,36 +745,38 @@ public:
                      *dest++ = sum;
                      w+=alignedWeightSize;
                   }
-               }
-
-               #if 0
-               for(int o=0;o<outputs;o++)
-               {
-                  const float *s = srcPtr;
-                  const float *wO = alignedWeights + o*filterY*filterX*inputs;
-                  float sum = b?b[o]:0.0f;
-
-                  // Natural weight order
-                  for(int fy=0;fy<FY;fy++)
+                  #else
+                  int fxBase = (x-(srcFx0*strideX-padOx) ) & (filterX-1);
+                  int fyBase = (y-(srcFy0*strideY-padOy) ) & (filterY-1);
+                  printf("%d,%d / %d,%d\n", fxBase, fyBase, dx, dy);
+                  for(int o=0;o<outputs;o++)
                   {
-                     int wy = (fyBase+fy*strideY) % filterY;
-                     for(int fx=0;fx<FX;fx++)
+                     const float *s = srcPtr;
+                     const float *wO = alignedWeights + o*filterY*filterX*inputs;
+                     float sum = b?b[o]:0.0f;
+
+                     // Natural weight order
+                     for(int fy=0;fy<FY;fy++)
                      {
-                        int wx = (fxBase+fx*strideX) % filterX;
-                        const float *w = wO + (wy*filterX+wx)*inputs;
-                        for(int i=0;i<inputs;i++)
-                           sum += s[i] * w[i];
-                        s += inputs;
+                        int wy = (fyBase+fy*strideY) % filterY;
+                        for(int fx=0;fx<FX;fx++)
+                        {
+                           int wx = (fxBase+fx*strideX) % filterX;
+                           const float *w = wO + (wy*filterX+wx)*inputs;
+                           for(int i=0;i<inputs;i++)
+                              sum += s[i] * w[i];
+                           s += inputs;
+                        }
                      }
+                     if (activation==actRelu)
+                        *dest++ = std::max( sum, 0.0f );
+                     else if (activation==actLeaky)
+                        *dest++ = std::max( sum, sum*0.1f );
+                     else
+                        *dest++ = sum;
                   }
-                  if (activation==actRelu)
-                     *dest++ = std::max( sum, 0.0f );
-                  else if (activation==actLeaky)
-                     *dest++ = std::max( sum, sum*0.1f );
-                  else
-                     *dest++ = sum;
+                  #endif
                }
-               #endif
             }
          }
       }

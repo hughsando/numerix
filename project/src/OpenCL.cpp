@@ -991,12 +991,12 @@ public:
 
       if (isDeconvolution)
       {
-         srcX0 = (-padOx)<<strideShiftX;
-         srcX1 = ( (srcW-1-padOx)<<strideShiftX ) + 1;
+         srcX0 = (-padOx)>>strideShiftX;
+         srcX1 = ( (destW-1-padOx)>>strideShiftX ) + 1;
          srcTx = srcX1 - srcX0;
 
-         srcY0 = (-padOy)<<strideShiftY;
-         srcY1 = ( (srcH-1-padOy)<<strideShiftY ) + 1;
+         srcY0 = (-padOy)>>strideShiftY;
+         srcY1 = ( (destH-1-padOy)>>strideShiftY ) + 1;
          srcTy = srcY1 - srcY0;
 
 
@@ -1192,6 +1192,8 @@ public:
          int ins = shape[3];
          overrideWeights = new Tensor( weights->type, shape );
 
+         int xOff = filterX==strideX ? 0 : strideX;
+         int yOff = filterY==strideY ? 0 : strideY;
 
          int SW = filterX/strideX;
          int SH = filterY/strideY;
@@ -1199,16 +1201,17 @@ public:
          int idx = 0;
          for(int oBase=0;oBase<outs;oBase+=8)
             for(int iBase=0; iBase<ins; iBase+=8)
-               for(int fyBase=0;fyBase<strideY;fyBase++)
-                  for(int fxBase=0;fxBase<strideX;fxBase++)
+               for(int dy=0;dy<strideY;dy++)
+                  for(int dx=0;dx<strideX;dx++)
                      for(int sy=0;sy<SH;sy++)
                         for(int sx=0;sx<SW;sx++)
                         {
-                           int inX = (fxBase + sx*strideX) % filterX;
-                           int inY = (fyBase + sy*strideY) % filterY;
+                           int wy = (dy+yOff+sy*strideY) % filterY;
+                           int wx = (dx+xOff+sx*strideX) % filterX;
+
                            for(int o=0;o<8;o++)
                               for(int i=0;i<8;i++)
-                                 overrideWeights->setFloatAt( idx++, weights->getFloat(oBase+o,inY,inX,iBase+i) );
+                                 overrideWeights->setFloatAt( idx++, weights->getFloat(oBase+o,wy,wx,iBase+i) );
                         }
 
       }
