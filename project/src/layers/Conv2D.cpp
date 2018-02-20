@@ -341,13 +341,13 @@ public:
 
    void createDeconvWeights()
    {
-      int FX = filterX/strideX;
-      int FY = filterY/strideY;
-      alignedWeightSize = FX*FY*inputs;
+      int filterSx = filterX/strideX;
+      int filterSy = filterY/strideY;
+      alignedWeightSize = filterSx*filterSy*inputs;
 
       const float *wSrc = (const float *)weights->cpuRead();
 
-      alignedWeightsBuffer = allocFloats(alignedWeightSize*strideX*strideY*outputs);
+      alignedWeightsBuffer = allocFloats(alignedWeightSize*filterX*filterY*outputs);
 
       // y-srcFy0 % filterY
       //float *wDest = alignedWeightsBuffer + outputs*alignedWeightSize*( fyBase*filterY + fxBase );
@@ -360,10 +360,10 @@ public:
             {
                const float *wO = alignedWeights + o*inputs*filterX*filterY;
 
-               for(int fy=0;fy<FY;fy++)
+               for(int fy=0;fy<filterSy;fy++)
                {
                   int wy = (fyBase+fy*strideY) % filterY;
-                  for(int fx=0;fx<FX;fx++)
+                  for(int fx=0;fx<filterSx;fx++)
                   {
                      int wx = (fxBase+fx*strideX) % filterX;
                      const float *w = wO + (wy*filterY+wx)*inputs;

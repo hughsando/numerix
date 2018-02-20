@@ -389,6 +389,7 @@ value tdFromDynamic(value inFrom, int inType, value inShape)
    else if (val_is_null(inFrom))
    {
       // Ok if type provided
+      haveType = inType;
    }
 
    if (inType<0)
@@ -409,10 +410,13 @@ value tdFromDynamic(value inFrom, int inType, value inShape)
 
    if (storeType==arrayNull && !bytes.data)
    {
-      if (haveType & (UnsignedInteger|SignedInteger))
-         tensor->setInt32(val_int(inFrom),0, tensor->elementCount);
-      else
-         tensor->setFloat64(val_float(inFrom), 0, tensor->elementCount);
+      if (!val_is_null(inFrom))
+      {
+         if (haveType & (UnsignedInteger|SignedInteger))
+            tensor->setInt32(val_int(inFrom),0, tensor->elementCount);
+         else
+            tensor->setFloat64(val_float(inFrom), 0, tensor->elementCount);
+      }
    }
    else if (haveShape.size()==1 && pointer)
    {
