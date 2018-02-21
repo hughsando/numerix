@@ -24,9 +24,9 @@ class Test
       var modelname = "mynet.caffemodel";
       var model = numerix.Model.load(modelname);
 
-      var I = 24;
-      var H = 2;
-      var W = 3;
+      var I = 16;
+      var H = 1;
+      var W = 1;
 
 
       var img = Tensor.create( 0.0, Nx.float32, [H,W,I]);

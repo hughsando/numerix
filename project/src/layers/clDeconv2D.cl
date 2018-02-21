@@ -120,22 +120,23 @@ __kernel void Deconv2D(const __global float* src, __global float *dest, const __
           })
        });
 
-       __global float *d0 = dest + outBase + threadId;
-       UNROLL_OUTPUT(Y,{
-          int y = destY0 + Y;
-          if (y>=0 && y<=DEST_H)
-          {
-             UNROLL_OUTPUT(X,{
-                int x = destX0 + X;
-                if (x>=0 && x<DEST_W)
-                {
-                   d0[ (y*DEST_W+x)*OUTPUTS ] = ACTIVATION( output_t8[Y][X] );
-                   //d0[ (y*DEST_W+x)*OUTPUTS ] = src8[0][0];
-                }
-             })
-          }
-       })
+       w0 += (SW*SH*8*8)<<(SHIFT_X + SHIFT_Y);
     }
+
+    __global float *d0 = dest + outBase + threadId;
+    UNROLL_OUTPUT(Y,{
+       int y = destY0 + Y;
+       if (y>=0 && y<=DEST_H)
+       {
+          UNROLL_OUTPUT(X,{
+             int x = destX0 + X;
+             if (x>=0 && x<DEST_W)
+             {
+                d0[ (y*DEST_W+x)*OUTPUTS ] = ACTIVATION( output_t8[Y][X] );
+             }
+          })
+       }
+    })
 };
 
 

@@ -4,17 +4,17 @@ import sys
 from caffe import layers as L
 from caffe import params as P
 
-O = 16
-I = 24
-H = 2
-W = 3
+O = 8
+I = 16
+H = 1
+W = 1
 
-KS = 3
-Stride = 1
+KS = 2
+Stride = 2
 
 net = caffe.NetSpec()
 net.data = L.Input(shape=[dict(dim=[O, I, H, W])])
-net.deconv = L.Convolution(net.data, convolution_param=dict(kernel_size=KS, stride=Stride,num_output=O, pad=1), name="mydeconv" )
+net.deconv = L.Deconvolution(net.data, convolution_param=dict(kernel_size=KS, stride=Stride,num_output=O), name="mydeconv" )
 
 #net.relu = L.ReLU(net.conv)
 #net.maxp = L.Pooling(net.relu,pool=P.Pooling.MAX, kernel_size=2, stride=2, pad=0 )
