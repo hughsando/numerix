@@ -7,6 +7,8 @@ import nme.bare.Surface;
 import nme.image.PixelFormat;
 import nme.utils.ByteArray;
 import cpp.vm.Thread;
+using StringTools;
+import Sys.println;
 
 class Main extends Sprite
 {
@@ -33,6 +35,45 @@ class Main extends Sprite
       cpu = args.remove("-cpu");
       if (cpu)
          numerix.Model.enableGpu(false);
+
+      for(a in args)
+         if (a.startsWith("-opencl"))
+         {
+            args.remove(a);
+            var parts = a.split("=");
+            var platforms = numerix.opencl.ClCtx.platforms;
+            if (parts.length!=2)
+            {
+               println("use -opencl=#.#, choose # from:");
+               var pid = 0;
+               for(p in platforms)
+               {
+                  println( " " + pid + "] " + p.name );
+                  var did = 0;
+                  for(d in p.devices)
+                  {
+                     println( "    " + pid + "." + did + "] " + d.name + "(" + d.type + "x" + d.computeUnits + ")" );
+                     did ++;
+                  }
+
+                  pid++;
+               }
+               Sys.exit(0);
+            }
+
+            var val = parts[1];
+            parts = val.split(".");
+            var id = Std.parseInt(parts[0]);
+            var platform = platforms[id];
+            Sys.println("Using opencl platform " + platform.name);
+            var devices = null;
+            if (parts.length==2)
+               devices = [ platform.devices[ Std.parseInt(parts[1]) ] ];
+            var ctx = new numerix.opencl.ClCtx(platform,devices);
+            trace( ctx );
+            numerix.Model.enableGpu(false);
+         }
+
 
       if (args.length>0)
          modelName = args[0];
