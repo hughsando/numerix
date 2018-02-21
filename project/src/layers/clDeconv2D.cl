@@ -50,11 +50,51 @@
 
 #define WEIGHT_SIZE ( SW*SH*INPUTS )
 
-#define READ_T8(ptr,element)  as_float(intel_sub_group_block_read((const __global uint*)(ptr + element)))
+
+#ifdef INTEL
+
+   #define FLOAT_T8( name ) float name
+   #define READ_T8( ptr,element) as_float(intel_sub_group_block_read((const __global uint*)(ptr + element)))
+   #define REF_T8(name) name
+   #define READ_SYNC
+
+   #define ACCUMULATE( output8, src8, w8 ) \
+      output8 = mad( sub_group_broadcast(src8,0), w8.s0, output8 ); \
+      output8 = mad( sub_group_broadcast(src8,1), w8.s1, output8 ); \
+      output8 = mad( sub_group_broadcast(src8,2), w8.s2, output8 ); \
+      output8 = mad( sub_group_broadcast(src8,3), w8.s3, output8 ); \
+      output8 = mad( sub_group_broadcast(src8,4), w8.s4, output8 ); \
+      output8 = mad( sub_group_broadcast(src8,5), w8.s5, output8 ); \
+      output8 = mad( sub_group_broadcast(src8,6), w8.s6, output8 ); \
+      output8 = mad( sub_group_broadcast(src8,7), w8.s7, output8 ); \
+
+
+#else
+
+   #define FLOAT_T8( name ) __local float name[8]
+   #define READ_T8(ptr,element) ((const __global float*)(ptr + element))[threadId]
+   #define REF_T8(name) name[threadId]
+   #define READ_SYNC  barrier(CLK_LOCAL_MEM_FENCE)
+
+   #define ACCUMULATE( output8, src8, w8 ) \
+      output8[threadId] = mad( src8[0], w8.s0, output8[threadId] ); \
+      output8[threadId] = mad( src8[1], w8.s1, output8[threadId] ); \
+      output8[threadId] = mad( src8[2], w8.s2, output8[threadId] ); \
+      output8[threadId] = mad( src8[3], w8.s3, output8[threadId] ); \
+      output8[threadId] = mad( src8[4], w8.s4, output8[threadId] ); \
+      output8[threadId] = mad( src8[5], w8.s5, output8[threadId] ); \
+      output8[threadId] = mad( src8[6], w8.s6, output8[threadId] ); \
+      output8[threadId] = mad( src8[7], w8.s7, output8[threadId] ); \
+
+
+
+#endif
 
 
 __attribute__((reqd_work_group_size(1,1,8)))
+#ifdef INTEL
 __attribute__((intel_reqd_sub_group_size(8)))
+#endif
 __kernel void Deconv2D(const __global float* src, __global float *dest, const __global float *weights, const __global float *bias)
 {
     const int tileId = get_global_id(0);
@@ -67,17 +107,18 @@ __kernel void Deconv2D(const __global float* src, __global float *dest, const __
     const int destX0 = (srcFx0<<SHIFT_X) + PAD_X;
 
     // Tile output,
-    float output_t8[TH][TW]/* x8 theads */;
+    FLOAT_T8( output_t8[TH][TW] ) /* x8 theads */;
 
     // Source tile
-    float src8[SH][SW] /* x8 threads */;
+    FLOAT_T8( src8[SH][SW] ) /* x8 threads */;
 
     const __global float *w0 = weights + outBase*INPUTS*FILTER_X*FILTER_Y;
 
     // Init with bias...
-    output_t8[0][0] = READ_T8(bias,outBase);
+    REF_T8( output_t8[0][0] ) = READ_T8(bias,outBase);
+
     // Copy to outher outputs
-    UNROLL_OUTPUT(I, UNROLL_OUTPUT(J, { if (I||J) output_t8[I][J] = output_t8[0][0]; } ) );
+    UNROLL_OUTPUT(I, UNROLL_OUTPUT(J, { if (I||J) REF_T8(output_t8[I][J]) = REF_T8(output_t8[0][0]); } ) );
 
     for(int i=0;i<INPUTS;i+=8)
     {
@@ -87,9 +128,11 @@ __kernel void Deconv2D(const __global float* src, __global float *dest, const __
          bool validY = (sy>=0 && sy<SRC_H);
          UNROLL_INPUT(X,{
                int sx=X+srcFx0;
-               src8[Y][X] = ( validY && (sx>=0 && sx<SRC_W) ) ?  READ_T8(srcI,(sy*SRC_W + sx)*INPUTS ) : 0.0f;
+               REF_T8(src8[Y][X]) = ( validY && (sx>=0 && sx<SRC_W) ) ?  READ_T8(srcI,(sy*SRC_W + sx)*INPUTS ) : 0.0f;
             })
          })
+
+       READ_SYNC;
 
        UNROLL_OUTPUT(Y,{
           int y = destY0 + Y;
@@ -101,17 +144,6 @@ __kernel void Deconv2D(const __global float* src, __global float *dest, const __
              UNROLL_INPUT(SY,{
                 UNROLL_INPUT(SX,{
                        float8 w8 = w[ (SY*SW+SX)*8 ];
-
-                       #define ACCUMULATE( output8, src8, w8 ) \
-                           output8 = mad( sub_group_broadcast(src8,0), w8.s0, output8 ); \
-                           output8 = mad( sub_group_broadcast(src8,1), w8.s1, output8 ); \
-                           output8 = mad( sub_group_broadcast(src8,2), w8.s2, output8 ); \
-                           output8 = mad( sub_group_broadcast(src8,3), w8.s3, output8 ); \
-                           output8 = mad( sub_group_broadcast(src8,4), w8.s4, output8 ); \
-                           output8 = mad( sub_group_broadcast(src8,5), w8.s5, output8 ); \
-                           output8 = mad( sub_group_broadcast(src8,6), w8.s6, output8 ); \
-                           output8 = mad( sub_group_broadcast(src8,7), w8.s7, output8 ); \
-
 
                        // One output for 8 inputs
                        ACCUMULATE(output_t8[Y][X], src8[SY][SX], w8)
@@ -132,7 +164,7 @@ __kernel void Deconv2D(const __global float* src, __global float *dest, const __
              int x = destX0 + X;
              if (x>=0 && x<DEST_W)
              {
-                d0[ (y*DEST_W+x)*OUTPUTS ] = ACTIVATION( output_t8[Y][X] );
+                d0[ (y*DEST_W+x)*OUTPUTS ] = ACTIVATION( REF_T8( output_t8[Y][X] ) );
              }
           })
        }
