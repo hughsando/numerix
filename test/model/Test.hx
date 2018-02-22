@@ -93,14 +93,12 @@ class Test
          val = NmeTools.loadImageF32( bmpname, scaling );
          var pixels = val.width * val.height;
          var idx = 0;
-         /*
          for(p in 0...pixels)
          {
-            val[idx] = val[idx]-104; idx++;
-            val[idx] = val[idx]-117; idx++;
-            val[idx] = val[idx]-123; idx++;
+            val[idx] = val[idx]-106; idx++;
+            val[idx] = val[idx]-114; idx++;
+            val[idx] = val[idx]-129; idx++;
          }
-         */
       }
       #end
 
@@ -191,7 +189,7 @@ class Test
             var w = shape[1];
             var ints = new Array<Int>();
             for(idx in 0...w*h)
-               ints[idx] = result[idx]>0.5 ? 0xffffffff : 0;
+               ints[idx] = result[idx]>128 ? 0xffffffff : 0;
             var bmp = new nme.display.BitmapData(w,h,true);
             bmp.setVector(new nme.geom.Rectangle(0,0,w,h),ints);
             bmp.encode(nme.bare.Surface.PNG).writeFile("result.png");

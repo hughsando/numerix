@@ -210,10 +210,8 @@ Tensor *Conv2DBase::run(Tensor *inSrc0, Tensor *inBuffer)
 
    if (isDeconvolution)
    {
-      destW = (srcW)*(strideX);
-      destH = (srcH)*(strideY);
-      padOx = filterX==strideX ? 0 : (strideX)>>1;
-      padOy = filterY==strideY ? 0 : (strideY)>>1;
+      padding.getDeconv(srcW, strideX, filterX, destW, padOx);
+      padding.getDeconv(srcH, strideY, filterY, destH, padOy);
    }
    else
    {
@@ -366,8 +364,8 @@ public:
       alignedWeightsBuffer = allocFloats(alignedWeightSize*strideX*strideY*outputs);
 
 
-      int xOff = filterX==strideX ? 0 : strideX;
-      int yOff = filterY==strideY ? 0 : strideY;
+      int xOff = filterX/2;
+      int yOff = filterY/2;
 
       // y-srcFy0 % filterY
       //float *wDest = alignedWeightsBuffer + outputs*alignedWeightSize*( fyBase*filterY + fxBase );
@@ -490,7 +488,7 @@ public:
       */
 
 
-      runThreaded();
+      runThreaded(isDeconvolution);
       src0 = 0;
       destTensor = 0;
       endRun();
@@ -628,23 +626,31 @@ public:
       const float *sIn = (float *)src0->cpuRead();
 
       /*
-        Source pixels
+        
+        for src pixel sx,sy
+        filter start FX/2,FY/2 offset
 
+        int destX1 = ((srcFx0 + FX/2)<<strideShiftX) - padOx + strideX
+                   >= 1 for first srcFx0 ...
 
-        srcFx0 =(destX-padOx)>>strideShiftX;
-        srcFx1 =(destX-padOx+filterX)>>strideShiftX;
+         ->   ((srcFx0 + FX/2)<<strideShiftX) >= 1 + padOx - strideX
+         ->   (srcFx0 + FX/2) >= (1 + padOx - strideX + (strideX-1) ) >> strideShiftX
+         ->   srcFx0 >= ((1 + padOx - strideX + (strideX-1) ) >> strideShiftX) - FX/2
+         ->   srcFx0 >= (padOx) >> strideShiftX) - FX/2
 
-        destX0 = (sx<<strideShiftX) + padOx
-        destX1 = destX0 + FX
+        int destX0 = ((srcFx0 + FX/2)<<strideShiftX) - padOx
+                   < destW for first srcFx0
+        ->  srcFx0 <  ((destW+padOx + strideShiftX-1)>>strideShiftX) - FX/2
 
       */
-      int srcX0 = (-padOx)>>strideShiftX;
-      int srcX1 = ( (destW-1-padOx)>>strideShiftX ) + 1;
 
-      int srcY0 = (-padOy)>>strideShiftY;
-      int srcY1 = ( (destH-1-padOy)>>strideShiftY ) + 1;
+      int srcX0 = ((padOx) >> strideShiftX) - FX/2;
+      int srcX1 = ((destW+padOx + strideX-1)>>strideShiftX) - FX/2;
 
-      //printf("%d,%d %d,%d\n", srcX0, srcX1, srcY0, srcY1);
+      int srcY0 = ((padOy) >> strideShiftY) - FY/2;
+      int srcY1 = ((destH+padOy + strideX-1)>>strideShiftY) - FY/2;
+
+      //printf("%d...%d , %d...%d\n", srcX0, srcX1, srcY0, srcY1);
 
       float *dest0 = (float *)destTensor->cpuWrite();
 
@@ -655,7 +661,7 @@ public:
          if (srcFy0>=srcY1)
             break;
 
-         int destY0 = (srcFy0<<strideShiftY) + padOy;
+         int destY0 = (( srcFy0 + FY/2)<<strideShiftY) - padOy;
          int destY0Base = destY0;
          int destY1 = destY0 + strideY;
          if (destY0<0) destY0 = 0;
@@ -719,10 +725,18 @@ public:
                }
             }
 
-            int destX0 = (srcFx0<<strideShiftX) + padOx;
+            int destX0 = ((srcFx0 + FX/2)<<strideShiftX) - padOx;
             int destX0Base = destX0;
             int destX1 = std::min(destX0 + strideX,destW);
             if (destX0<0) destX0 = 0;
+
+            /*
+            printf("(%d,%d  %d,%d) -> (%d,%d  %d,%d)\n",
+                   srcFx0, srcFy0,
+                   srcFx0 + FX, srcFy0+FY,
+                   destX0Base, destY0Base,
+                   destX0Base+strideX, destY0Base+strideY);
+            */
 
             //printf("%d: (%d,%d  %d,%d) -> (%d,%d  %d,%d)\n", threadId,
             //        srcFx0+fx0, srcFy0+fy0, srcFx0+fx1, srcFy0+fy1,
@@ -746,9 +760,11 @@ public:
                      w+=alignedWeightSize;
                   }
                   #else
-                  int fxBase = (x-(srcFx0*strideX-padOx) ) & (filterX-1);
-                  int fyBase = (y-(srcFy0*strideY-padOy) ) & (filterY-1);
-                  printf("%d,%d / %d,%d\n", fxBase, fyBase, dx, dy);
+                  //int fxBase = (x-(srcFx0*strideX) ) & (filterX-1);
+                  //int fyBase = (y-(srcFy0*strideY) ) & (filterY-1);
+                  int fxBase = dx + filterX/2;
+                  int fyBase = dy + filterY/2;
+                  //printf("%d,%d / %d,%d\n", fxBase, fyBase, dx, dy);
                   for(int o=0;o<outputs;o++)
                   {
                      const float *s = srcPtr;

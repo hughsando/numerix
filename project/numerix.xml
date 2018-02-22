@@ -46,6 +46,8 @@
      <file name="src/layers/Yolo.cpp" />
      <file name="src/layers/GlobalPool.cpp" />
      <file name="src/layers/Softmax.cpp" />
+     <file name="src/layers/Crop.cpp" />
+     <file name="src/layers/Eltwise.cpp" />
 
      <file name="src/Cuda.cpp" if="NX_CUDA"  />
 

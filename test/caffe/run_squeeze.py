@@ -10,13 +10,13 @@ if False:
     model = "../model/data/v3_train"
     im = np.array(Image.open('../model/data/Person_454.png'))[:,:,0:3]
 else:
-    model = "../model/data/v22_train"
+    model = "../model/data/v61"
     im = np.array(Image.open('../model/data/Person.png'))[:,:,0:3]
 
 net = caffe.Net(model+".prototxt", model+".caffemodel", caffe.TEST)
 
 
-#im = im - np.array([104,117,123]);
+im = im - np.array([106,114,129]);
 im = np.moveaxis(im,2,0)
 print(im.shape)
 
@@ -26,7 +26,7 @@ net.forward()
 
 result = net.blobs[ net.outputs[0] ].data[0];
 
-if False:
+if True:
     for k in net.blobs.keys():
         data = net.blobs[k].data[0]
         shape = data.shape;
@@ -49,6 +49,7 @@ print( result.min(), "...", result.max() );
 s = result.shape;
 if (s[0]==1):
     result = np.squeeze(result)
-    result = np.where(result>0.5, 255, 0).astype(np.uint8)
+    #result = np.where(result>0.5, 255, 0).astype(np.uint8)
+    result = np.clip(result, 0, 255).astype(np.uint8)
     result = np.repeat(result,3).reshape(s[1],s[2],3)
     Image.fromarray(result).save('result.png');

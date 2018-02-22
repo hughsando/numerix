@@ -991,12 +991,17 @@ public:
 
       if (isDeconvolution)
       {
-         srcX0 = (-padOx)>>strideShiftX;
-         srcX1 = ( (destW-1-padOx)>>strideShiftX ) + 1;
-         srcTx = srcX1 - srcX0;
+         int SW = filterX/strideX;
+         int SH = filterY/strideY;
 
-         srcY0 = (-padOy)>>strideShiftY;
-         srcY1 = ( (destH-1-padOy)>>strideShiftY ) + 1;
+         int srcX0 = ((padOx) >> strideShiftX) - SW/2;
+         int srcX1 = ((destW+padOx + strideX-1)>>strideShiftX) - SW/2;
+
+
+         int srcY0 = ((padOy) >> strideShiftY) - SH/2;
+         int srcY1 = ((destH+padOy + strideX-1)>>strideShiftY) - SH/2;
+
+         srcTx = srcX1 - srcX0;
          srcTy = srcY1 - srcY0;
 
 

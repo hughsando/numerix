@@ -100,11 +100,12 @@ __kernel void Deconv2D(const __global float* src, __global float *dest, const __
     const int tileId = get_global_id(0);
     const int outBase = get_global_id(1)*8;
     const int threadId = get_local_id(2);
-    const int srcFx0 = (tileId % SRC_TX) + ( (-PAD_X)<<SHIFT_X );
-    const int srcFy0 = (tileId / SRC_TX) + ( (-PAD_Y)<<SHIFT_Y );
 
-    const int destY0 = (srcFy0<<SHIFT_Y) + PAD_Y;
-    const int destX0 = (srcFx0<<SHIFT_X) + PAD_X;
+    const int srcFx0 = (tileId % SRC_TX) + (((PAD_X) >> SHIFT_X) - SW/2);
+    const int srcFy0 = (tileId / SRC_TX) + (((PAD_Y) >> SHIFT_Y) - SH/2);
+
+    const int destY0 = (( srcFy0 + SH/2)<<SHIFT_Y) - PAD_Y;
+    const int destX0 = (( srcFx0 + SW/2)<<SHIFT_X) - PAD_X;
 
     // Tile output,
     FLOAT_T8( output_t8[TH][TW] ) /* x8 theads */;

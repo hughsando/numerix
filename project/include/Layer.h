@@ -41,6 +41,12 @@ typedef std::vector<BBox> Boxes;
 
 void SortBoxes(Boxes &ioBoxes);
 
+enum EltwiseOp
+{
+   EltProduct = 0,
+   EltSum = 1,
+   EltMax = 2,
+};
 
 
 class Layer
@@ -70,6 +76,10 @@ public:
                                Padding padding);
 
    static Layer *createConcat();
+
+   static Layer *createCrop(int inOffsetX, int inOffsetY);
+
+   static Layer *createEltwise(EltwiseOp inOperation);
 
    static Layer *createGlobalPool();
 

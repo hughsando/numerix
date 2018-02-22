@@ -262,6 +262,18 @@ class Model extends numerix.Model
                var lay = new Concat(layer, inputLayers[0],inputLayers[1]);
                layerMap.set(outName,lastLayer = lay);
 
+            case "Eltwise":
+               if (inputLayers.length!=2)
+                  throw "Eltwise - expected 2 inputs";
+               var lay = new Eltwise(layer, inputLayers[0],inputLayers[1]);
+               layerMap.set(outName,lastLayer = lay);
+
+
+            case "Crop":
+               if (inputLayers.length!=2)
+                  throw "Crop - expected 2 inputs";
+               var lay = new Crop(layer, inputLayers[0],inputLayers[1]);
+               layerMap.set(outName,lastLayer = lay);
 
 
             case "Softmax":
@@ -272,7 +284,7 @@ class Model extends numerix.Model
 
 
             default:
-               throw "Unknown layer type " + layer.type;
+               throw "caffe.Model - Unknown layer type " + layer.type;
          }
 
          if (doAdd)//lastLayer!=null && (layers.length==0 || layers[layers.length-1]!=layer) )

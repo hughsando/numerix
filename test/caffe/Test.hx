@@ -13,7 +13,7 @@ class Test
       {
          var platforms = numerix.opencl.ClCtx.platforms;
          // todo - 
-         var platform = platforms[1];
+         var platform = platforms[0];
          Sys.println("Using opencl platform " + platform.name);
          var devices = null;
          var devices = [ platform.devices[0] ];
@@ -24,9 +24,9 @@ class Test
       var modelname = "mynet.caffemodel";
       var model = numerix.Model.load(modelname);
 
-      var I = 16;
-      var H = 1;
-      var W = 1;
+      var I = 8;
+      var H = 2;
+      var W = 2;
 
 
       var img = Tensor.create( 0.0, Nx.float32, [H,W,I]);

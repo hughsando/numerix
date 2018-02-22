@@ -69,6 +69,27 @@ struct Padding
          outPad = 0;
       }
    }
+
+   void getDeconv(int src, int stride, int filter, int &outDest, int &outPad)
+   {
+      // dilation data
+
+      if (type==padCustom)
+      {
+         outPad = custom;
+      }
+      else if (type==padSame)
+      {
+         outPad = (filter-1)>>1;
+      }
+      else // padValid
+      {
+         outPad = 0;
+      }
+
+      outDest = stride * (src - 1) + filter - 2 * outPad;
+   }
+
 };
 
 

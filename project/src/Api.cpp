@@ -811,6 +811,49 @@ DEFINE_PRIME0(layCreateConcat);
 
 
 
+value layCreateCrop(int offX, int offY)
+{
+   Layer *layer = 0;
+   /*
+   #ifdef NX_GPU
+   if ( enableGpu && !layer && gpuInit())
+      layer = gpuCreateCrop();
+   #endif
+   #ifdef NX_OPENCL
+   if (!layer && OclContext::hasCurrent())
+      layer = oclCreateCrop( );
+   #endif
+   */
+   if (!layer)
+      layer = Layer::createCrop(offX, offY);
+
+   return allocLayer(layer);
+}
+DEFINE_PRIME2(layCreateCrop);
+
+
+value layCreateEltwise(int inOperation)
+{
+   Layer *layer = 0;
+   /*
+   #ifdef NX_GPU
+   if ( enableGpu && !layer && gpuInit())
+      layer = gpuCreateCrop();
+   #endif
+   #ifdef NX_OPENCL
+   if (!layer && OclContext::hasCurrent())
+      layer = oclCreateCrop( );
+   #endif
+   */
+   if (!layer)
+      layer = Layer::createEltwise((EltwiseOp)inOperation);
+
+   return allocLayer(layer);
+}
+DEFINE_PRIME1(layCreateEltwise);
+
+
+
 value layCreateReorg(int inStride)
 {
    Layer *layer = Layer::createReorg(inStride);
@@ -1406,6 +1449,16 @@ static void loadCaffeNet(caffe::NetParameter net,value m,bool weightsOnly )
          auto &param = layer.concat_param();
          if (param.has_axis())
             alloc_field(lay, val_id("axis"), alloc_int(param.axis()));
+      }
+      else if (layer_type=="Crop")
+      {
+         auto &param = layer.crop_param();
+         if (param.has_axis())
+         {
+            if (param.axis()!=2)
+               TensorThrow("Only spatial (axis=2) crop is supported");
+         }
+         alloc_field(lay, val_id("offset"), make_int_array( param.offset() ));
       }
       else if (layer_type=="Eltwise")
       {
