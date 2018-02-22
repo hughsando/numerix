@@ -91,6 +91,8 @@
 #endif
 
 
+#ifndef ODD_DECONV2D
+
 __attribute__((reqd_work_group_size(1,1,8)))
 #ifdef INTEL
 __attribute__((intel_reqd_sub_group_size(8)))
@@ -171,6 +173,82 @@ __kernel void Deconv2D(const __global float* src, __global float *dest, const __
        }
     })
 };
+
+#else
+// Odd - not much data-parallelism
+
+
+
+
+__kernel void Deconv2D(const __global float* src, __global float *dest, const __global float *weights, const __global float *bias)
+{
+    const int tileId = get_global_id(0);
+    const int srcFx0 = (tileId % SRC_TX) + (((PAD_X) >> SHIFT_X) - SW/2);
+    const int srcFy0 = (tileId / SRC_TX) + (((PAD_Y) >> SHIFT_Y) - SH/2);
+
+    const int destY0 = (( srcFy0 + SH/2)<<SHIFT_Y) - PAD_Y;
+    const int destX0 = (( srcFx0 + SW/2)<<SHIFT_X) - PAD_X;
+
+    // Source tile
+    float srcTile[SH][SW][INPUTS];
+
+    //const __global float *w0 = weights + outBase*INPUTS*FILTER_X*FILTER_Y;
+
+    UNROLL_INPUT(Y,{
+      int sy=Y+srcFy0;
+      bool validY = (sy>=0 && sy<SRC_H);
+      UNROLL_INPUT(X,{
+            int sx=X+srcFx0;
+            if ( validY && (sx>=0 && sx<SRC_W) )
+            {
+               const __global float *srcI = src + (sy*SRC_W + sx)*INPUTS;
+               for(int i=0;i<INPUTS;i++)
+                  srcTile[Y][X][i] = srcI[i];
+            }
+            else
+            {
+               for(int i=0;i<INPUTS;i++)
+                  srcTile[Y][X][i] = 0.0f;
+            }
+         })
+      })
+
+
+   const __global float *w = weights;
+
+    UNROLL_OUTPUT(Y,{
+       int y = destY0 + Y;
+       UNROLL_OUTPUT(X,{
+          int x = destX0 + X;
+
+          for(int o=0;o<OUTPUTS;o++)
+          {
+             float sum = bias[o];
+
+             for(int i=0;i<INPUTS;i++)
+                UNROLL_INPUT(SY,{
+                   UNROLL_INPUT(SX,{
+                      sum += *w++ * srcTile[SY][SX][i];
+                   })
+                })
+             if (y>=0 && y<=DEST_H && x>=0 && x<DEST_W)
+                dest[ (y*DEST_W+x)*OUTPUTS + o] = ACTIVATION( sum );
+          }
+
+       })
+    });
+};
+
+
+
+
+
+
+
+
+
+
+#endif
 
 
 

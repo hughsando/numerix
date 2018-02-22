@@ -892,6 +892,7 @@ class OpenCLConv2D : public Conv2DBase
    Shape kernelShape;
    OpenCLLayerData data;
    Tensor *overrideWeights;
+   bool group8;
 
    // For deconv
    int srcX0;
@@ -918,6 +919,7 @@ public:
       useIntelDeconv = false;
       threads = 16;
       overrideWeights = 0;
+      group8 = false;
 
       padX = padding.type==Padding::padValid ? 0 : ( (filterX-1)/2 );
       padY = padding.type==Padding::padValid ? 0 : ( (filterY-1)/2 );
@@ -1019,7 +1021,9 @@ public:
          buildOptions += argBuf;
 
          const char *prog = openclDeconv2D_cl;
-         if (ctx->useIntelMethod)
+         if (!group8)
+            kernel = ctx->makeKernel("ODD_DECONV2D", prog, "Deconv2D", buildOptions);
+         else if (ctx->useIntelMethod)
             kernel = ctx->makeKernel("INTEL_DECONV2D", prog, "Deconv2D", buildOptions);
          else
             kernel = ctx->makeKernel("DECONV2D", prog, "Deconv2D", buildOptions);
@@ -1110,10 +1114,20 @@ public:
 
       if (isDeconvolution)
       {
-         cl_uint work_dim = 3;
-         size_t globalSize[3] = { (size_t)(srcTx*srcTy), (size_t)outputs/8, (size_t)8  };
-         size_t localSize[3] = { 1, 1, 8 };
-         err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, work_offset, globalSize, localSize, 0, NULL, startKernel());
+         if (group8)
+         {
+            cl_uint work_dim = 3;
+            size_t globalSize[3] = { (size_t)(srcTx*srcTy), (size_t)outputs/8, (size_t)8  };
+            size_t localSize[3] = { 1, 1, 8 };
+            err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, work_offset, globalSize, localSize, 0, NULL, startKernel());
+         }
+         else
+         {
+            cl_uint work_dim = 1;
+            size_t globalSize[1] = { (size_t)(srcTx*srcTy) };
+            size_t *localSize = 0;
+            err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, work_offset, globalSize, localSize, 0, NULL, startKernel());
+         }
       }
       else if (useIntelTiled1x1)
       {
@@ -1197,28 +1211,46 @@ public:
          int ins = shape[3];
          overrideWeights = new Tensor( weights->type, shape );
 
-         int xOff = filterX==strideX ? 0 : strideX;
-         int yOff = filterY==strideY ? 0 : strideY;
+         int xOff = filterX/2;
+         int yOff = filterY/2;
 
          int SW = filterX/strideX;
          int SH = filterY/strideY;
 
          int idx = 0;
-         for(int oBase=0;oBase<outs;oBase+=8)
-            for(int iBase=0; iBase<ins; iBase+=8)
-               for(int dy=0;dy<strideY;dy++)
-                  for(int dx=0;dx<strideX;dx++)
-                     for(int sy=0;sy<SH;sy++)
-                        for(int sx=0;sx<SW;sx++)
-                        {
-                           int wy = (dy+yOff+sy*strideY) % filterY;
-                           int wx = (dx+xOff+sx*strideX) % filterX;
+         group8 =  ( !(ins&0x7) && !(outs&0x7) );
+         if (group8)
+         {
+            for(int oBase=0;oBase<outs;oBase+=8)
+               for(int iBase=0; iBase<ins; iBase+=8)
+                  for(int dy=0;dy<strideY;dy++)
+                     for(int dx=0;dx<strideX;dx++)
+                        for(int sy=0;sy<SH;sy++)
+                           for(int sx=0;sx<SW;sx++)
+                           {
+                              int wy = (dy+yOff+sy*strideY) % filterY;
+                              int wx = (dx+xOff+sx*strideX) % filterX;
 
-                           for(int o=0;o<8;o++)
-                              for(int i=0;i<8;i++)
-                                 overrideWeights->setFloatAt( idx++, weights->getFloat(oBase+o,wy,wx,iBase+i) );
-                        }
-
+                              for(int o=0;o<8;o++)
+                                 for(int i=0;i<8;i++)
+                                    overrideWeights->setFloatAt( idx++, weights->getFloat(oBase+o,wy,wx,iBase+i) );
+                           }
+         }
+         else
+         {
+            for(int dy=0;dy<strideY;dy++)
+               for(int dx=0;dx<strideX;dx++)
+                  for(int o=0;o<outs;o++)
+                     for(int i=0;i<ins;i++)
+                        for(int sy=0;sy<SH;sy++)
+                           for(int sx=0;sx<SW;sx++)
+                           {
+                              int wy = (dy+yOff+sy*strideY) % filterY;
+                              int wx = (dx+xOff+sx*strideX) % filterX;
+ 
+                              overrideWeights->setFloatAt( idx++, weights->getFloat(o,wy,wx,i) );
+                           }
+         }
       }
       else if (useIntelTiled3x3 || useIntelTiled3x3x3)
       {

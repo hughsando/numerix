@@ -24,7 +24,7 @@ class Test
       var modelname = "mynet.caffemodel";
       var model = numerix.Model.load(modelname);
 
-      var I = 8;
+      var I = 1;
       var H = 2;
       var W = 2;
 
@@ -32,11 +32,11 @@ class Test
       var img = Tensor.create( 0.0, Nx.float32, [H,W,I]);
 
       var idx = 0;
-      for(y in 0...H)
-         for(x in 0...W)
-            for(chan in 0...I)
-               img.set(idx++, ( ((chan*9+12)%13) + ((y*39 + 6)%17) + ((x*37 + 8)%19)  ) * 0.1 );
-      //img.set( (1 * W + 1) * I, 1);
+      //for(y in 0...H)
+      //   for(x in 0...W)
+      //      for(chan in 0...I)
+      //         img.set(idx++, ( ((chan*9+12)%13) + ((y*39 + 6)%17) + ((x*37 + 8)%19)  ) * 0.1 );
+      img.set( (0 * W + 1) * I, 1);
       //img.set( 0, 1.0);
 
       trace(img);

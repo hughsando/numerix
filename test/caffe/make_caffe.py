@@ -4,8 +4,8 @@ import sys
 from caffe import layers as L
 from caffe import params as P
 
-O = 8
-I = 8
+O = 1
+I = 1
 H = 2
 W = 2
 
@@ -38,13 +38,13 @@ np.random.seed( 4 )
 
 def randomize(name):
    param = net.params[name][0]
-   param.data[:,:,:,:] = np.random.random_sample( list(param.data.shape) ) - 0.5
+   #param.data[:,:,:,:] = np.random.random_sample( list(param.data.shape) ) - 0.5
    #param.data[:,1:8,:,:] = 0.0
-   #for y in range(KS):
-   #   for x in range(KS):
-   #      param.data[0,0,y,x] = (y+1)*10+(x+1);
-   param = net.params[name][1]
-   param.data[:] = np.random.rand( param.data.size ) - 0.5
+   for y in range(KS):
+      for x in range(KS):
+         param.data[0,0,y,x] = (y+1)*10+(x+1);
+   #param = net.params[name][1]
+   #param.data[:] = np.random.rand( param.data.size ) - 0.5
    #param.data[:] = 0
 
 randomize('mydeconv')
@@ -53,11 +53,11 @@ randomize('mydeconv')
 net.save("mynet.caffemodel");
 
 inp = np.zeros( shape=(1,I,H,W) )
-for chan in range(I):
-   for y in range(H):
-      for x in range(W):
-         inp[0,chan,y,x] = ( ((chan*9+12)%13) + ((y*39 + 6)%17) + ((x*37 + 8)%19)  ) * 0.1
-#inp[0,0,0,0] = 1
+#for chan in range(I):
+#   for y in range(H):
+#      for x in range(W):
+#         inp[0,chan,y,x] = ( ((chan*9+12)%13) + ((y*39 + 6)%17) + ((x*37 + 8)%19)  ) * 0.1
+inp[0,0,0,1] = 1
 
 net.blobs[ net.inputs[0] ].data[0] = inp
 
