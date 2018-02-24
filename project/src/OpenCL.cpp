@@ -881,12 +881,14 @@ class OpenCLConv2D : public Conv2DBase
 {
    int padX;
    int padY;
+   bool useConv2Do8i8;
    bool useTiled3x3;
    bool useTiled1x1;
    bool useIntelTiled1x1;
    bool useIntelTiled3x3;
    bool useIntelTiled3x3x3;
    bool useIntelDeconv;
+
    int  threads;
    cl_kernel kernel;
    Shape kernelShape;
@@ -914,6 +916,7 @@ public:
       useTiled3x3 = false;
       useTiled1x1 = false;
       useIntelTiled1x1 = false;
+      useConv2Do8i8 = false;
       useIntelTiled3x3 = false;
       useIntelTiled3x3x3 = false;
       useIntelDeconv = false;
@@ -975,10 +978,12 @@ public:
 
       bool wasI3x3 = useIntelTiled3x3;
       bool wasI3x3x3 = useIntelTiled3x3x3;
+      bool waso8i8 = useConv2Do8i8;
 
       useTiled1x1 = is1x1 && threads;
       useIntelTiled1x1 = is1x1 && (threads>=8) && !(outputs&15) && ctx->useIntelMethod;
-      useTiled3x3 = strideX==1 && strideY==1 && filterX==3 && filterY==3 && !(inputs&3) && threads;
+      useConv2Do8i8 = !(outputs&7) && !(inputs&7) && strideX==1 && strideY==1;
+      useTiled3x3 = !useConv2Do8i8 && strideX==1 && strideY==1 && filterX==3 && filterY==3 && !(inputs&3) && threads;
       useIntelTiled3x3x3 = filterX==3 && filterY==3 && inputs==3 && !(outputs&15) && strideX==2 && strideY==2 && ctx->useIntelMethod;
 
       //printf("useIntelTiled3x3 ----- %d:  %d %d %d %d %d %d %d\n", useIntelTiled3x3x3,
@@ -987,7 +992,7 @@ public:
       useIntelTiled3x3 = strideX==1 && strideY==1 && filterX==3 && filterY==3 && !(inputs&7) && !(outputs&7) && ctx->useIntelMethod;
 
 
-      if ( (!wasI3x3 && useIntelTiled3x3) || (!wasI3x3x3 && useIntelTiled3x3x3) || isDeconvolution )
+      if ( (!wasI3x3 && useIntelTiled3x3) || (!wasI3x3x3 && useIntelTiled3x3x3) || (waso8i8!=useConv2Do8i8) || isDeconvolution )
          rebuildWeights();
 
 
@@ -1027,6 +1032,26 @@ public:
             kernel = ctx->makeKernel("INTEL_DECONV2D", prog, "Deconv2D", buildOptions);
          else
             kernel = ctx->makeKernel("DECONV2D", prog, "Deconv2D", buildOptions);
+      }
+      else if (useConv2Do8i8)
+      {
+         srcTx = filterX<=3 ? 2 : 2;
+         srcTy = filterY<=3 ? 2 : 2;
+
+         sprintf(argBuf," -D SRC_W=%d -D SRC_H=%d -D INPUTS=%d ", srcW, srcH, inputs);
+         buildOptions += argBuf;
+         sprintf(argBuf," -D DEST_W=%d -D DEST_H=%d -D OUTPUTS=%d", destW, destH, outputs);
+         buildOptions += argBuf;
+         sprintf(argBuf," -D FILTER_X=%d -D FILTER_Y=%d ", filterX, filterY);
+         buildOptions += argBuf;
+         sprintf(argBuf," -D TW=%d -D TH=%d ", srcTx, srcTy);
+         buildOptions += argBuf;
+         sprintf(argBuf," -D PAD_X=%d -D PAD_Y=%d ", padX, padY);
+         buildOptions += argBuf;
+         if (ctx->useIntelMethod)
+            buildOptions += " -D INTEL_SUBGROUPS";
+
+         kernel = ctx->makeKernel("CONV2D_O8I8", openclConv2D_cl, "Conv2Do8i8", buildOptions);
       }
       else if (useIntelTiled1x1 || useIntelTiled3x3 || useIntelTiled3x3x3)
       {
@@ -1098,7 +1123,7 @@ public:
       err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &dest);
       err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &w);
       err |= clSetKernelArg(kernel, 3, sizeof(cl_mem), &b);
-      if (!useIntelTiled1x1 && !useIntelTiled3x3 && !useIntelTiled3x3x3 && !isDeconvolution)
+      if (!useConv2Do8i8 && !useIntelTiled1x1 && !useIntelTiled3x3 && !useIntelTiled3x3x3 && !isDeconvolution)
       {
          err |= clSetKernelArg(kernel, 4, sizeof(cl_int), &srcW);
          err |= clSetKernelArg(kernel, 5, sizeof(cl_int), &srcH);
@@ -1128,6 +1153,16 @@ public:
             size_t *localSize = 0;
             err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, work_offset, globalSize, localSize, 0, NULL, startKernel());
          }
+      }
+      else if (useConv2Do8i8)
+      {
+         cl_uint work_dim = 3;
+         size_t xGroups = (destW+srcTx-1)/srcTx;
+         size_t yGroups = (destH+srcTy-1)/srcTy;
+         size_t outputGroups = outputs/8;
+         size_t localSize[3] = { 1, 1, 8 };
+         size_t globalSize[3] = { xGroups*localSize[0], yGroups*localSize[1], outputGroups*localSize[2] };
+         err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, work_offset, globalSize, localSize, 0, NULL, startKernel());
       }
       else if (useIntelTiled1x1)
       {
@@ -1252,7 +1287,7 @@ public:
                            }
          }
       }
-      else if (useIntelTiled3x3 || useIntelTiled3x3x3)
+      else if (useIntelTiled3x3 || useIntelTiled3x3x3 || useConv2Do8i8)
       {
          Shape shape = weights->shape;
          int outs = shape[0];
