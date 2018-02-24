@@ -6,7 +6,6 @@
 
 #if defined(cl_intel_subgroups)
 #pragma OPENCL EXTENSION  cl_intel_subgroups : enable
-#define INTEL_SUBGROUPS
 #endif
 
 #define SW (FILTER_X+TW-1)
@@ -20,7 +19,7 @@
     if (N>3) { const int VAR =3; loop; } \
     if (N>4) { const int VAR =4; loop; } \
     if (N>5) { const int VAR =5; loop; } \
-    if (N>5) { const int VAR =6; loop; } \
+    if (N>6) { const int VAR =6; loop; } \
     if (N>7) { const int VAR =7; loop; } \
     if (N>8) { const int VAR =8; loop; } \
     if (N>9) { const int VAR =9; loop; } \
@@ -32,11 +31,14 @@
 #ifdef INTEL_SUBGROUPS
 
    #define FLOAT_T8( name ) float name
+   #define FLOAT_T8x8( name ) float8 name
    #define READ_T8( ptr,element) as_float(intel_sub_group_block_read((const __global uint*)(ptr + element)))
    #define REF_T8(name) name
    #define READ_SYNC
 
-   #define ACCUMULATE( output8, src8, w8 ) \
+   #define READ_T8_Thread(ptr,element)  as_float8(intel_sub_group_block_read8((const __global uint*)(ptr + element)))
+
+   #define ACCUMULATEx8( output8, src8, w8 ) \
       output8 = mad( sub_group_broadcast(src8,0), w8.s0, output8 ); \
       output8 = mad( sub_group_broadcast(src8,1), w8.s1, output8 ); \
       output8 = mad( sub_group_broadcast(src8,2), w8.s2, output8 ); \
@@ -50,19 +52,24 @@
 #else
 
    #define FLOAT_T8( name ) __local float name[8]
+   #define FLOAT_T8x8( name ) __local float8 name[8]
    #define READ_T8(ptr,element) ((const __global float*)(ptr + element))[threadId]
+   #define READ_T8_Thread(ptr,element) ((const __global float8*)(ptr + element))[threadId]
    #define REF_T8(name) name[threadId]
    #define READ_SYNC  barrier(CLK_LOCAL_MEM_FENCE)
 
-   #define ACCUMULATE( output8, src8, w8 ) \
-      output8[threadId] = mad( src8[0], w8.s0, output8[threadId] ); \
-      output8[threadId] = mad( src8[1], w8.s1, output8[threadId] ); \
-      output8[threadId] = mad( src8[2], w8.s2, output8[threadId] ); \
-      output8[threadId] = mad( src8[3], w8.s3, output8[threadId] ); \
-      output8[threadId] = mad( src8[4], w8.s4, output8[threadId] ); \
-      output8[threadId] = mad( src8[5], w8.s5, output8[threadId] ); \
-      output8[threadId] = mad( src8[6], w8.s6, output8[threadId] ); \
-      output8[threadId] = mad( src8[7], w8.s7, output8[threadId] ); \
+
+
+
+   #define ACCUMULATEx8( output8, src8, w8 ) \
+      output8 = mad( src8[0], w8.s0, output8 ); \
+      output8 = mad( src8[1], w8.s1, output8 ); \
+      output8 = mad( src8[2], w8.s2, output8 ); \
+      output8 = mad( src8[3], w8.s3, output8 ); \
+      output8 = mad( src8[4], w8.s4, output8 ); \
+      output8 = mad( src8[5], w8.s5, output8 ); \
+      output8 = mad( src8[6], w8.s6, output8 ); \
+      output8 = mad( src8[7], w8.s7, output8 ); \
 
 
 
@@ -82,21 +89,20 @@ __kernel void Conv2Do8i8(const __global float* src, __global float *dest, const 
     const int threadId = get_local_id(2);
 
     const int srcFx0 = (tileX * TW) - PAD_X;
-    const int srcFy0 = (tileX * TH) - PAD_Y;
+    const int srcFy0 = (tileY * TH) - PAD_Y;
 
-    const int destY0 = (tileX * TW);
-    const int destX0 = (tileY * TH);
+    const int destX0 = (tileX * TW);
+    const int destY0 = (tileY * TH);
 
     // Tile output,
-    FLOAT_T8( output_t8[TH][TW] ) /* x8 theads */;
-
+    float output_t8[TH][TW] /* x8 theads */;
 
 
     // Init with bias...
-    REF_T8( output_t8[0][0] ) = READ_T8(bias,outBase);
+    output_t8[0][0] = READ_T8(bias,outBase);
 
     // Copy to outher outputs
-    LOOP(J, TH, LOOP(I, TW, { if (I||J) REF_T8(output_t8[J][I]) = REF_T8(output_t8[0][0]); } ) );
+    LOOP(J, TH, LOOP(I, TW, { if (I||J) output_t8[J][I] = output_t8[0][0]; } ) );
 
     for(int i=0;i<INPUTS;i+=8)
     {
@@ -117,15 +123,16 @@ __kernel void Conv2Do8i8(const __global float* src, __global float *dest, const 
 
        READ_SYNC;
 
-       const __global float8 *w0 = (const __global float8 *)(weights + outBase*INPUTS*FILTER_X*FILTER_Y + i*FILTER_X*FILTER_Y);
+       const __global float8 *w0 = (const __global float8 *)(weights + outBase*INPUTS*FILTER_X*FILTER_Y + i*FILTER_X*FILTER_Y*8);
 
        LOOP(SY,FILTER_Y,{
            LOOP(SX,FILTER_X,{
-               float8 w8 = w0[ SY*FILTER_X+SX ];
+              float8 w8 = READ_T8_Thread( w0, ((SY*FILTER_X+SX)*8) );
+
                LOOP(Y,TH,{
                     LOOP(X,TW,{
-                       // One output for 8 inputs
-                       ACCUMULATE(output_t8[Y][X], src8[Y+SY][X+SX], w8)
+                       // 8 output(threads/[threadId]) for 8 inputs(float8 vector)
+                       ACCUMULATEx8(output_t8[Y][X], src8[Y+SY][X+SX], w8)
                    })
                })
           })
@@ -140,7 +147,7 @@ __kernel void Conv2Do8i8(const __global float* src, __global float *dest, const 
              int x = destX0 + X;
              if (x>=0 && x<DEST_W)
              {
-                d0[ (y*DEST_W+x)*OUTPUTS ] = ACTIVATION( REF_T8( output_t8[Y][X] ) );
+                d0[ (y*DEST_W+x)*OUTPUTS ] = ACTIVATION( output_t8[Y][X] );
              }
           })
        }

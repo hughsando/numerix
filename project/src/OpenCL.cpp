@@ -980,16 +980,16 @@ public:
       bool wasI3x3x3 = useIntelTiled3x3x3;
       bool waso8i8 = useConv2Do8i8;
 
-      useTiled1x1 = is1x1 && threads;
-      useIntelTiled1x1 = is1x1 && (threads>=8) && !(outputs&15) && ctx->useIntelMethod;
       useConv2Do8i8 = !(outputs&7) && !(inputs&7) && strideX==1 && strideY==1;
+      useTiled1x1 = !useConv2Do8i8 && is1x1 && threads;
+      useIntelTiled1x1 = !useConv2Do8i8 && is1x1 && (threads>=8) && !(outputs&15) && ctx->useIntelMethod;
       useTiled3x3 = !useConv2Do8i8 && strideX==1 && strideY==1 && filterX==3 && filterY==3 && !(inputs&3) && threads;
       useIntelTiled3x3x3 = filterX==3 && filterY==3 && inputs==3 && !(outputs&15) && strideX==2 && strideY==2 && ctx->useIntelMethod;
 
       //printf("useIntelTiled3x3 ----- %d:  %d %d %d %d %d %d %d\n", useIntelTiled3x3x3,
       //       filterX==3, filterY==3, inputs==3, threads, strideX==2, strideY==2, ctx->useIntelMethod );
 
-      useIntelTiled3x3 = strideX==1 && strideY==1 && filterX==3 && filterY==3 && !(inputs&7) && !(outputs&7) && ctx->useIntelMethod;
+      useIntelTiled3x3 = !useConv2Do8i8 && strideX==1 && strideY==1 && filterX==3 && filterY==3 && !(inputs&7) && !(outputs&7) && ctx->useIntelMethod;
 
 
       if ( (!wasI3x3 && useIntelTiled3x3) || (!wasI3x3x3 && useIntelTiled3x3x3) || (waso8i8!=useConv2Do8i8) || isDeconvolution )
@@ -1123,6 +1123,8 @@ public:
       err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &dest);
       err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &w);
       err |= clSetKernelArg(kernel, 3, sizeof(cl_mem), &b);
+
+      // TODO - useConv2Do8i8 variable width & height
       if (!useConv2Do8i8 && !useIntelTiled1x1 && !useIntelTiled3x3 && !useIntelTiled3x3x3 && !isDeconvolution)
       {
          err |= clSetKernelArg(kernel, 4, sizeof(cl_int), &srcW);
@@ -1237,13 +1239,15 @@ public:
          overrideWeights = 0;
       }
 
+      Shape shape = weights->shape;
+      int outs = shape[0];
+      int h = shape[1];
+      int w = shape[2];
+      int ins = shape[3];
+ 
+
       if (isDeconvolution)
       {
-         Shape shape = weights->shape;
-         int outs = shape[0];
-         int h = shape[1];
-         int w = shape[2];
-         int ins = shape[3];
          overrideWeights = new Tensor( weights->type, shape );
 
          int xOff = filterX/2;
@@ -1287,13 +1291,21 @@ public:
                            }
          }
       }
-      else if (useIntelTiled3x3 || useIntelTiled3x3x3 || useConv2Do8i8)
+      else if (useConv2Do8i8)
       {
-         Shape shape = weights->shape;
-         int outs = shape[0];
-         int h = shape[1];
-         int w = shape[2];
-         int ins = shape[3];
+         overrideWeights = new Tensor( weights->type, shape );
+
+         int idx = 0;
+         for(int oBase=0;oBase<outs;oBase+=8)
+            for(int iBase=0; iBase<ins; iBase+=8)
+                for(int y=0;y<h;y++)
+                   for(int x=0;x<w;x++)
+                      for(int i=0;i<8;i++)
+                         for(int o=0;o<8;o++)
+                            overrideWeights->setFloatAt( idx++, weights->getFloat(oBase+o,y,x,iBase+i) );
+      }
+      else if (useIntelTiled3x3 || useIntelTiled3x3x3)
+      {
          overrideWeights = new Tensor( weights->type, shape );
 
          int outputGroups = useIntelTiled3x3x3 ? 16 : 8;
