@@ -888,6 +888,7 @@ class OpenCLConv2D : public Conv2DBase
    bool useIntelTiled3x3;
    bool useIntelTiled3x3x3;
    bool useIntelWeights;
+   bool firstDeconv;
 
    int  threads;
    cl_kernel kernel;
@@ -923,6 +924,7 @@ public:
       threads = 16;
       overrideWeights = 0;
       group8 = false;
+      firstDeconv = true;
 
       padX = padding.type==Padding::padValid ? 0 : ( (filterX-1)/2 );
       padY = padding.type==Padding::padValid ? 0 : ( (filterY-1)/2 );
@@ -980,29 +982,33 @@ public:
       bool wasI3x3x3 = useIntelTiled3x3x3;
       bool waso8i8 = useConv2Do8i8;
       bool wasIntelWeights = useIntelWeights;
-      bool wasDeconv = isDeconvolution;
 
-      useConv2Do8i8 = !(outputs&7) && !(inputs&7) && strideX==1 && strideY==1;
+      //useTiled1x1 =  is1x1 && threads;
+      //useIntelTiled1x1 = is1x1 && (threads>=8) && !(outputs&15) && ctx->useIntelMethod;
+
+       //useIntelTiled3x3 = strideX==1 && strideY==1 && filterX==3 && filterY==3 && !(inputs&7) && !(outputs&7) && ctx->useIntelMethod;
+
+      useConv2Do8i8 = !isDeconvolution && !useIntelTiled3x3 && !useTiled1x1 && !(outputs&7) && !(inputs&7) && strideX==1 && strideY==1;
       useIntelWeights = useConv2Do8i8 && ctx->useIntelMethod;
 
-      useTiled1x1 = !useConv2Do8i8 && is1x1 && threads;
-      useIntelTiled1x1 = !useConv2Do8i8 && is1x1 && (threads>=8) && !(outputs&15) && ctx->useIntelMethod;
+
       useTiled3x3 = !useConv2Do8i8 && strideX==1 && strideY==1 && filterX==3 && filterY==3 && !(inputs&3) && threads;
       useIntelTiled3x3x3 = filterX==3 && filterY==3 && inputs==3 && !(outputs&15) && strideX==2 && strideY==2 && ctx->useIntelMethod;
 
       //printf("useIntelTiled3x3 ----- %d:  %d %d %d %d %d %d %d\n", useIntelTiled3x3x3,
       //       filterX==3, filterY==3, inputs==3, threads, strideX==2, strideY==2, ctx->useIntelMethod );
 
-      useIntelTiled3x3 = !useConv2Do8i8 && strideX==1 && strideY==1 && filterX==3 && filterY==3 && !(inputs&7) && !(outputs&7) && ctx->useIntelMethod;
 
 
       if ( (wasI3x3 != useIntelTiled3x3) || (wasI3x3x3 != useIntelTiled3x3x3) || (waso8i8!=useConv2Do8i8) ||
-             (wasDeconv != isDeconvolution) || (wasIntelWeights && useIntelWeights) )
+             (firstDeconv && isDeconvolution) || (wasIntelWeights && useIntelWeights) )
          rebuildWeights();
 
 
       if (isDeconvolution)
       {
+         firstDeconv = false;
+
          int SW = filterX/strideX;
          int SH = filterY/strideY;
 
@@ -1142,7 +1148,7 @@ public:
 
          //printf("%d:  %dx%dx%d -> %dx%dx%d\n", err, srcW, srcH, inputs, destW, destH, outputs);
       }
-      else if (!useConv2Do8i8 && !useIntelTiled1x1 && !useIntelTiled3x3 && !useIntelTiled3x3x3 && !isDeconvolution)
+      else if (!useIntelTiled1x1 && !useIntelTiled3x3 && !useIntelTiled3x3x3 && !isDeconvolution)
       {
          err |= clSetKernelArg(kernel, 4, sizeof(cl_int), &srcW);
          err |= clSetKernelArg(kernel, 5, sizeof(cl_int), &srcH);

@@ -77,14 +77,14 @@
    #define READ_SYNC  barrier(CLK_LOCAL_MEM_FENCE)
 
    #define ACCUMULATE( output8, src8, w8 ) \
-      output8[threadId] = mad( src8[0], w8.s0, output8[threadId] ); \
-      output8[threadId] = mad( src8[1], w8.s1, output8[threadId] ); \
-      output8[threadId] = mad( src8[2], w8.s2, output8[threadId] ); \
-      output8[threadId] = mad( src8[3], w8.s3, output8[threadId] ); \
-      output8[threadId] = mad( src8[4], w8.s4, output8[threadId] ); \
-      output8[threadId] = mad( src8[5], w8.s5, output8[threadId] ); \
-      output8[threadId] = mad( src8[6], w8.s6, output8[threadId] ); \
-      output8[threadId] = mad( src8[7], w8.s7, output8[threadId] ); \
+      output8 = mad( src8[0], w8.s0, output8 ); \
+      output8 = mad( src8[1], w8.s1, output8 ); \
+      output8 = mad( src8[2], w8.s2, output8 ); \
+      output8 = mad( src8[3], w8.s3, output8 ); \
+      output8 = mad( src8[4], w8.s4, output8 ); \
+      output8 = mad( src8[5], w8.s5, output8 ); \
+      output8 = mad( src8[6], w8.s6, output8 ); \
+      output8 = mad( src8[7], w8.s7, output8 ); \
 
 
 
@@ -110,7 +110,7 @@ __kernel void Deconv2D(const __global float* src, __global float *dest, const __
     const int destX0 = (( srcFx0 + SW/2)<<SHIFT_X) - PAD_X;
 
     // Tile output,
-    FLOAT_T8( output_t8[TH][TW] ) /* x8 theads */;
+    float output_t8[TH][TW] /* x8 theads */;
 
     // Source tile
     FLOAT_T8( src8[SH][SW] ) /* x8 threads */;
@@ -118,10 +118,10 @@ __kernel void Deconv2D(const __global float* src, __global float *dest, const __
     const __global float *w0 = weights + outBase*INPUTS*FILTER_X*FILTER_Y;
 
     // Init with bias...
-    REF_T8( output_t8[0][0] ) = READ_T8(bias,outBase);
+    output_t8[0][0] = READ_T8(bias,outBase);
 
     // Copy to outher outputs
-    UNROLL_OUTPUT(I, UNROLL_OUTPUT(J, { if (I||J) REF_T8(output_t8[I][J]) = REF_T8(output_t8[0][0]); } ) );
+    UNROLL_OUTPUT(I, UNROLL_OUTPUT(J, { if (I||J) output_t8[I][J] = output_t8[0][0]; } ) );
 
     for(int i=0;i<INPUTS;i+=8)
     {
@@ -155,19 +155,21 @@ __kernel void Deconv2D(const __global float* src, __global float *dest, const __
           })
        });
 
+       READ_SYNC;
+
        w0 += (SW*SH*8*8)<<(SHIFT_X + SHIFT_Y);
     }
 
     __global float *d0 = dest + outBase + threadId;
     UNROLL_OUTPUT(Y,{
        int y = destY0 + Y;
-       if (y>=0 && y<=DEST_H)
+       if (y>=0 && y<DEST_H)
        {
           UNROLL_OUTPUT(X,{
              int x = destX0 + X;
              if (x>=0 && x<DEST_W)
              {
-                d0[ (y*DEST_W+x)*OUTPUTS ] = ACTIVATION( REF_T8( output_t8[Y][X] ) );
+                d0[ (y*DEST_W+x)*OUTPUTS ] = ACTIVATION( output_t8[Y][X] );
              }
           })
        }

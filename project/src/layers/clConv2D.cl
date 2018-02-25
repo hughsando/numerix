@@ -25,8 +25,6 @@
     if (N>9) { const int VAR =9; loop; } \
 }
 
-#define WEIGHT_SIZE ( FILTER_X*FILTER_Y*INPUTS )
-
 
 #ifdef INTEL_SUBGROUPS
 
@@ -91,8 +89,8 @@ __kernel void Conv2Do8i8(const __global float* src, __global float *dest,
     const int outBase = get_global_id(2)&~7;
     const int threadId = get_local_id(2);
 
-    const int srcFx0 = (tileX * TW) - PAD_X;
-    const int srcFy0 = (tileY * TH) - PAD_Y;
+    const signed int srcFx0 = (tileX * (signed int)TW) - PAD_X;
+    const signed int srcFy0 = (tileY * (signed int)TH) - PAD_Y;
 
     const int destX0 = (tileX * TW);
     const int destY0 = (tileY * TH);
@@ -140,15 +138,17 @@ __kernel void Conv2Do8i8(const __global float* src, __global float *dest,
                })
           })
        });
+
+       READ_SYNC;
     }
     __global float *d0 = dest + outBase + threadId;
     LOOP(Y,TH,{
        int y = destY0 + Y;
-       if (y>=0 && y<=destH)
+       if (y<destH)
        {
           LOOP(X,TW,{
              int x = destX0 + X;
-             if (x>=0 && x<destW)
+             if (x<destW)
              {
                 d0[ (y*destW+x)*outputs ] = ACTIVATION( output_t8[Y][X] );
              }

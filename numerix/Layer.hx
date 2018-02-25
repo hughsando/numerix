@@ -13,6 +13,9 @@ class Layer
    static public var showTimes(default,set) = false;
    static public var totalTime = 0.0;
 
+   public static var makeReference = false;
+   public static var checkReference = false;
+
 
 
    public var name:String;
@@ -136,7 +139,20 @@ class Layer
             }
             else
                println(' $this $diff'+"ms");
-           println(" = " + resultBuffer.min + " " + resultBuffer.max + " " + resultBuffer[ resultBuffer.elementCount - 1]);
+
+            if (makeReference)
+            {
+               var filename = "reference/" + name.split("/").join("_") + ".nx";
+               numerix.Io.writeFile(filename,resultBuffer);
+            }
+            if (checkReference)
+            {
+               var filename = "reference/" + name.split("/").join("_") + ".nx";
+               var check:Tensor = numerix.Io.readFile(filename);
+               compareLayers(check,resultBuffer);
+            }
+
+            // println(" = " + resultBuffer.min + " " + resultBuffer.max + " " + resultBuffer[ resultBuffer.elementCount - 1]);
          }
       }
 
@@ -144,6 +160,38 @@ class Layer
       //   println( resultBuffer + "=" + resultBuffer[0] + "..." + resultBuffer[resultBuffer.channels] + " " + resultBuffer[1]);
 
       return resultBuffer;
+   }
+
+   function compareLayers(src:Tensor, test:Tensor)
+   {
+      if (src.elementCount != test.elementCount)
+      {
+         Sys.println("## Error - different element counts");
+      }
+      var diffs = 0;
+      for(i in 0...src.elementCount)
+      {
+         if ( Math.abs(src[i]-test[i]) > 0.001 )
+         {
+            if (diffs==0)
+            {
+               var where = [];
+               var idx = i;
+               var shape = src.shape;
+               for( s in  0...shape.length)
+               {
+                  where.push( idx % shape[ shape.length-1-s ] );
+                  idx = Std.int( idx / shape[ shape.length-1-s ] );
+                }
+                Sys.println('## First error at $idx : $where, ref='+src[i]+" got="+test[i]);
+            }
+            diffs++;
+         }
+      }
+      if (diffs>0)
+      {
+            Sys.println("## Error - different elements " + diffs + "/" + src.elementCount);
+      }
    }
 
    public function setActivation(inActication:Int)
