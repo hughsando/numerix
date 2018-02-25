@@ -81,7 +81,10 @@ __attribute__((reqd_work_group_size(1,1,8)))
 #ifdef INTEL_SUBGROUPS
 __attribute__((intel_reqd_sub_group_size(8)))
 #endif
-__kernel void Conv2Do8i8(const __global float* src, __global float *dest, const __global float *weights, const __global float *bias)
+__kernel void Conv2Do8i8(const __global float* src, __global float *dest,
+       const __global float *weights, const __global float *bias,
+       const int srcW, const int srcH, const int inputs,
+       const int destW, const int destH, const int outputs)
 {
     const int tileX = get_global_id(0);
     const int tileY = get_global_id(1);
@@ -104,7 +107,7 @@ __kernel void Conv2Do8i8(const __global float* src, __global float *dest, const 
     // Copy to outher outputs
     LOOP(J, TH, LOOP(I, TW, { if (I||J) output_t8[J][I] = output_t8[0][0]; } ) );
 
-    for(int i=0;i<INPUTS;i+=8)
+    for(int i=0;i<inputs;i+=8)
     {
        // Source tile
        FLOAT_T8( src8[SH][SW] ) /* x8 threads */;
@@ -114,16 +117,16 @@ __kernel void Conv2Do8i8(const __global float* src, __global float *dest, const 
        const __global float *srcI = src + i;
        LOOP(Y,SH,{
          int sy=Y+srcFy0;
-         bool validY = (sy>=0 && sy<SRC_H);
+         bool validY = (sy>=0 && sy<srcH);
          LOOP(X,SW,{
                int sx=X+srcFx0;
-               REF_T8(src8[Y][X]) = ( validY && (sx>=0 && sx<SRC_W) ) ?  READ_T8(srcI,(sy*SRC_W + sx)*INPUTS ) : 0.0f;
+               REF_T8(src8[Y][X]) = ( validY && (sx>=0 && sx<srcW) ) ?  READ_T8(srcI,(sy*srcW + sx)*inputs ) : 0.0f;
             })
          })
 
        READ_SYNC;
 
-       const __global float8 *w0 = (const __global float8 *)(weights + outBase*INPUTS*FILTER_X*FILTER_Y + i*FILTER_X*FILTER_Y*8);
+       const __global float8 *w0 = (const __global float8 *)(weights + outBase*inputs*FILTER_X*FILTER_Y + i*FILTER_X*FILTER_Y*8);
 
        LOOP(SY,FILTER_Y,{
            LOOP(SX,FILTER_X,{
@@ -141,13 +144,13 @@ __kernel void Conv2Do8i8(const __global float* src, __global float *dest, const 
     __global float *d0 = dest + outBase + threadId;
     LOOP(Y,TH,{
        int y = destY0 + Y;
-       if (y>=0 && y<=DEST_H)
+       if (y>=0 && y<=destH)
        {
           LOOP(X,TW,{
              int x = destX0 + X;
-             if (x>=0 && x<DEST_W)
+             if (x>=0 && x<destW)
              {
-                d0[ (y*DEST_W+x)*OUTPUTS ] = ACTIVATION( output_t8[Y][X] );
+                d0[ (y*destW+x)*outputs ] = ACTIVATION( output_t8[Y][X] );
              }
           })
        }

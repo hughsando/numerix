@@ -125,10 +125,10 @@ class Test
       Sys.println("Using CPU implementation");
       var refResult = null;
 
-      var Inputs = 24;
-      var Outputs = 32;
-      var SrcW = 17;
-      var SrcH = 17;
+      var Inputs = 384;
+      var Outputs = 48;
+      var SrcW = 31;
+      var SrcH = 23;
 
       for(mode in 0...platforms.length+1)
       {
@@ -170,6 +170,7 @@ class Test
             refResult = result;
          else
          {
+            var errorCount = 0;
             var shape = refResult.shape;
             var idx = 0;
             for(y in 0...shape[0])
@@ -178,11 +179,18 @@ class Test
                    {
                        if (Math.abs(refResult[idx]-result[idx])>0.001)
                        {
-                          Sys.println('Bad index [$y,$x,$ch], ' + refResult[idx] + "!=" + result[idx] + " d=" + (refResult[idx]-result[idx]) );
+                          if (errorCount==0)
+                             Sys.println('Bad index [$y,$x,$ch], ' + refResult[idx] + "!=" + result[idx] + " d=" + (refResult[idx]-result[idx]) );
+                          else if (errorCount==1)
+                             Sys.println(" +..");
+                          errorCount ++;
                        }
                        idx++;
                    }
-            Sys.println("Verified " + shape);
+            if (errorCount==0)
+               Sys.println("Verified " + shape);
+            else
+               Sys.println("Errors " + errorCount + "/" + refResult.elementCount);
          }
      }
 

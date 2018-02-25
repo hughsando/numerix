@@ -887,7 +887,7 @@ class OpenCLConv2D : public Conv2DBase
    bool useIntelTiled1x1;
    bool useIntelTiled3x3;
    bool useIntelTiled3x3x3;
-   bool useIntelDeconv;
+   bool useIntelWeights;
 
    int  threads;
    cl_kernel kernel;
@@ -919,7 +919,7 @@ public:
       useConv2Do8i8 = false;
       useIntelTiled3x3 = false;
       useIntelTiled3x3x3 = false;
-      useIntelDeconv = false;
+      useIntelWeights = false;
       threads = 16;
       overrideWeights = 0;
       group8 = false;
@@ -979,8 +979,12 @@ public:
       bool wasI3x3 = useIntelTiled3x3;
       bool wasI3x3x3 = useIntelTiled3x3x3;
       bool waso8i8 = useConv2Do8i8;
+      bool wasIntelWeights = useIntelWeights;
+      bool wasDeconv = isDeconvolution;
 
       useConv2Do8i8 = !(outputs&7) && !(inputs&7) && strideX==1 && strideY==1;
+      useIntelWeights = useConv2Do8i8 && ctx->useIntelMethod;
+
       useTiled1x1 = !useConv2Do8i8 && is1x1 && threads;
       useIntelTiled1x1 = !useConv2Do8i8 && is1x1 && (threads>=8) && !(outputs&15) && ctx->useIntelMethod;
       useTiled3x3 = !useConv2Do8i8 && strideX==1 && strideY==1 && filterX==3 && filterY==3 && !(inputs&3) && threads;
@@ -992,7 +996,8 @@ public:
       useIntelTiled3x3 = !useConv2Do8i8 && strideX==1 && strideY==1 && filterX==3 && filterY==3 && !(inputs&7) && !(outputs&7) && ctx->useIntelMethod;
 
 
-      if ( (!wasI3x3 && useIntelTiled3x3) || (!wasI3x3x3 && useIntelTiled3x3x3) || (waso8i8!=useConv2Do8i8) || isDeconvolution )
+      if ( (wasI3x3 != useIntelTiled3x3) || (wasI3x3x3 != useIntelTiled3x3x3) || (waso8i8!=useConv2Do8i8) ||
+             (wasDeconv != isDeconvolution) || (wasIntelWeights && useIntelWeights) )
          rebuildWeights();
 
 
@@ -1038,10 +1043,10 @@ public:
          srcTx = filterX<=3 ? 2 : 2;
          srcTy = filterY<=3 ? 2 : 2;
 
-         sprintf(argBuf," -D SRC_W=%d -D SRC_H=%d -D INPUTS=%d ", srcW, srcH, inputs);
-         buildOptions += argBuf;
-         sprintf(argBuf," -D DEST_W=%d -D DEST_H=%d -D OUTPUTS=%d", destW, destH, outputs);
-         buildOptions += argBuf;
+         //sprintf(argBuf," -D SRC_W=%d -D SRC_H=%d -D INPUTS=%d ", srcW, srcH, inputs);
+         //buildOptions += argBuf;
+         //sprintf(argBuf," -D DEST_W=%d -D DEST_H=%d -D OUTPUTS=%d", destW, destH, outputs);
+         //buildOptions += argBuf;
          sprintf(argBuf," -D FILTER_X=%d -D FILTER_Y=%d ", filterX, filterY);
          buildOptions += argBuf;
          sprintf(argBuf," -D TW=%d -D TH=%d ", srcTx, srcTy);
@@ -1125,7 +1130,19 @@ public:
       err |= clSetKernelArg(kernel, 3, sizeof(cl_mem), &b);
 
       // TODO - useConv2Do8i8 variable width & height
-      if (!useConv2Do8i8 && !useIntelTiled1x1 && !useIntelTiled3x3 && !useIntelTiled3x3x3 && !isDeconvolution)
+      if (useConv2Do8i8)
+      {
+         err |= clSetKernelArg(kernel, 4, sizeof(cl_int), &srcW);
+         err |= clSetKernelArg(kernel, 5, sizeof(cl_int), &srcH);
+         err |= clSetKernelArg(kernel, 6, sizeof(cl_int), &inputs);
+
+         err |= clSetKernelArg(kernel, 7, sizeof(cl_int), &destW);
+         err |= clSetKernelArg(kernel, 8, sizeof(cl_int), &destH);
+         err |= clSetKernelArg(kernel, 9, sizeof(cl_int), &outputs);
+
+         //printf("%d:  %dx%dx%d -> %dx%dx%d\n", err, srcW, srcH, inputs, destW, destH, outputs);
+      }
+      else if (!useConv2Do8i8 && !useIntelTiled1x1 && !useIntelTiled3x3 && !useIntelTiled3x3x3 && !isDeconvolution)
       {
          err |= clSetKernelArg(kernel, 4, sizeof(cl_int), &srcW);
          err |= clSetKernelArg(kernel, 5, sizeof(cl_int), &srcH);
@@ -1300,9 +1317,16 @@ public:
             for(int iBase=0; iBase<ins; iBase+=8)
                 for(int y=0;y<h;y++)
                    for(int x=0;x<w;x++)
-                      for(int i=0;i<8;i++)
+                   {
+                      if (useIntelWeights)
+                         for(int i=0;i<8;i++)
+                            for(int o=0;o<8;o++)
+                               overrideWeights->setFloatAt( idx++, weights->getFloat(oBase+o,y,x,iBase+i) );
+                      else
                          for(int o=0;o<8;o++)
-                            overrideWeights->setFloatAt( idx++, weights->getFloat(oBase+o,y,x,iBase+i) );
+                            for(int i=0;i<8;i++)
+                               overrideWeights->setFloatAt( idx++, weights->getFloat(oBase+o,y,x,iBase+i) );
+                   }
       }
       else if (useIntelTiled3x3 || useIntelTiled3x3x3)
       {

@@ -136,7 +136,7 @@ class Layer
             }
             else
                println(' $this $diff'+"ms");
-           //println(" = " + resultBuffer.min + " " + resultBuffer.max + " " + resultBuffer[ resultBuffer.elementCount - 1]);
+           println(" = " + resultBuffer.min + " " + resultBuffer.max + " " + resultBuffer[ resultBuffer.elementCount - 1]);
          }
       }
 

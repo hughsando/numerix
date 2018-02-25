@@ -114,7 +114,7 @@ class Test
          {
             if (!loop)
                Layer.enablePerLayerTiming();
-            var max = loop ? 100000000 : 100;
+            var max = loop ? 100000000 : 1;
             var t0 = haxe.Timer.stamp();
             for(go in 0...max)
             {
@@ -131,7 +131,7 @@ class Test
             var time = (haxe.Timer.stamp()-t0);
             Layer.showTimes = true;
             result = model.run(val,allowResize);
-            println("Time 100: " + Std.int(time*10) + "ms");
+            println("Time 1: " + Std.int(time*1000) + "ms");
          }
 
          var boxes = model.outputLayer.getBoxes();
