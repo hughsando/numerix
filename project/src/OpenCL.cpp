@@ -13,6 +13,7 @@ extern const char *openclDeconv2D_cl;
 extern const char *openclIntelConv2D_cl;
 extern const char *openclMaxPool_cl;
 extern const char *openclConcat_cl;
+extern const char *openclEltwise_cl;
 
 
 // This allows to to profile layers. 
@@ -873,6 +874,153 @@ Layer *oclCreateConcat( )
 }
 
 
+// --- Eltwise --------------------------------------------------------------------
+
+class OclEltwise : public OpenCLLayer
+{
+   int cropIndex;
+   int cropX;
+   int cropY;
+   int lastChannels;
+   cl_kernel kernel;
+   EltwiseOp op;
+
+public:
+   OclEltwise(EltwiseOp inOp)
+   {
+      op = inOp;
+      cropIndex = -1;
+      cropX = 0;
+      cropY = 0;
+      lastChannels = -1;
+   }
+
+   void setCropIndex(int inIndex, int inDx, int inDy)
+   {
+      cropIndex = inIndex;
+      cropX = inDx;
+      cropY = inDy;
+   }
+
+
+
+   void initKernel(OpenCLContext *ctx, int inChannels)
+   {
+      char buildOptions[1024];
+      sprintf(buildOptions," -D OP=%d -D CHANNELS=%d", (int)op, inChannels);
+      const char *prog = openclEltwise_cl;
+      kernel = ctx->makeKernel("ELTWISE", prog,"Eltwise", buildOptions);
+   }
+
+   virtual Tensor *run(Tensor *inSrc0, Tensor *inSrc1, Tensor *inBuffer)
+   {
+
+      if (inSrc0->type != inSrc1->type || inSrc0->type!=Float32)
+         TensorThrow("Eltwise - input types must be float32");
+
+      CShape sin0 = inSrc0->shape;
+      CShape sin1 = inSrc1->shape;
+      if (sin0.size()!=3 || sin1.size()!=3)
+         TensorThrow("Eltwise only supports H*W*C tensors");
+
+      if (sin0[2]!=sin1[2])
+         TensorThrow("Eltwise - mismatch channel count");
+
+      int dx0 = 0;
+      int dy0 = 0;
+      int dx1 = 0;
+      int dy1 = 0;
+      int destH = sin0[0];
+      int destW = sin0[1];
+      if (cropIndex==1)
+      {
+         dx0 = cropX;
+         dy0 = cropY;
+         destH = sin1[0];
+         destW = sin1[1];
+      }
+      else if (cropIndex==0)
+      {
+         dx1 = cropX;
+         dy1 = cropY;
+      }
+      if (sin0[0]-dy0<destH || sin0[1]-dx0<destH || sin1[0]-dy1<destH || sin1[1]-dx1<destH)
+         TensorThrow("Eltwise - mismatch size");
+
+      int channels = sin0[2];
+
+
+      OpenCLContext *ctx = (OpenCLContext *)gOclContext;
+      if (!ctx)
+         TensorThrow("Eltwise - no OpenCL context");
+
+      if (channels!=lastChannels)
+         kernel = 0;
+      if (!kernel)
+      {
+         lastChannels = channels;
+         initKernel(ctx,channels);
+      }
+
+      Tensor *result = Tensor::makeBuffer(inBuffer, destW, destH, channels, inSrc0->type);
+
+
+      // TODO - source offset
+      const OclData *src0 = inSrc0->oclRead();
+      const OclData *src1 = inSrc1->oclRead();
+
+      OclData *dest = result->oclWrite();
+
+      cl_int err = 0;
+      int src0Stride = sin0[1]*channels;
+      int src1Stride = sin1[1]*channels;
+      int destStride = result->shape[1]*channels;
+      err |= clSetKernelArg(kernel, 0, sizeof(cl_mem), &src0);
+      err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &src1);
+      err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &dest);
+      err |= clSetKernelArg(kernel, 3, sizeof(int), &src0Stride);
+      err |= clSetKernelArg(kernel, 4, sizeof(int), &src1Stride);
+      err |= clSetKernelArg(kernel, 5, sizeof(int), &destStride);
+
+      if (err)
+      {
+         printf("Error setting kernal arg %d\n", err);
+         TensorThrow("OclEltwise - error setting args");
+      }
+
+      if (!ctx)
+         TensorThrow("OclEltwise - no current ocl context");
+
+      size_t globalSize[3] = { (size_t)destW, (size_t)destH, (size_t)(8) };
+      size_t localSize[3] = { 1, 1, 8 };
+ 
+      cl_uint work_dim = 3;
+      err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, 0/*Work offset*/, globalSize, localSize, 0, NULL, startKernel());
+      if (err)
+         TensorThrow("OclEltwise - could not clEnqueueNDRangeKernel");
+
+      if (Layer::accurateTimes)
+      {
+         err = clFinish(ctx->queue0);
+         if (err)
+         {
+            printf("Error in clFinish = %d\n", err);
+            TensorThrow("OclEltwise - Error waiting clFinish");
+         }
+      }
+
+      return result;
+   }
+
+};
+
+
+Layer *oclCreateEltwise(EltwiseOp inOp )
+{
+   return new OclEltwise(inOp);
+}
+
+
 // --- Conv2D --------------------------------------------------------------------
 
 
@@ -1046,8 +1194,8 @@ public:
       }
       else if (useConv2Do8i8)
       {
-         srcTx = filterX<=3 ? 2 : 2;
-         srcTy = filterY<=3 ? 2 : 2;
+         srcTx = filterX<=3 ? 4 : 2;
+         srcTy = filterY<=3 ? 4 : 2;
 
          //sprintf(argBuf," -D SRC_W=%d -D SRC_H=%d -D INPUTS=%d ", srcW, srcH, inputs);
          //buildOptions += argBuf;

@@ -290,6 +290,8 @@ class Model extends numerix.Model
          if (doAdd)//lastLayer!=null && (layers.length==0 || layers[layers.length-1]!=layer) )
             addLayer(lastLayer);
       }
+
+      optimizeLayers();
    }
 
    static var caffeLoad = Loader.load("caffeLoad","sso");

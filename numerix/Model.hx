@@ -89,6 +89,39 @@ class Model
       return null;
    }
 
+   public function optimizeLayers()
+   {
+      for(layer in layers)
+      {
+         if (Std.is(layer,Crop))
+         {
+            var crop:Crop = cast layer;
+            if (crop.outputs.length==1 && crop.inputs.length==2)
+            {
+               var out = crop.outputs[0];
+               if (Std.is(out, Eltwise))
+               {
+                  var eltwise:Eltwise = cast out;
+                  var idx = eltwise.inputs[0]==crop ? 0 : 1;
+                  var other = eltwise.inputs[ 1-idx ];
+
+                  if (other==crop.inputs[1])
+                  {
+                     var inLayer = crop.inputs[0];
+                     var toCrop = inLayer.outputs.indexOf(crop);
+                     inLayer.outputs[toCrop] = eltwise;
+
+                     eltwise.inputs[idx] = inLayer;
+                     eltwise.setCropIndex(1-idx, crop.offsetX, crop.offsetY );
+                     crop.inputs = [];
+                     crop.outputs = [];
+                  }
+               }
+            }
+         }
+      }
+   }
+
    public static function  enableGpu(inEnable:Bool)
    {
       nxEnableGpu(inEnable);

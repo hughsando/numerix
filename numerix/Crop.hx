@@ -3,12 +3,11 @@ package numerix;
 class Crop extends Layer
 {
    static var id = 0;
-   var offsetX(default,null):Int;
-   var offsetY(default,null):Int;
+   public var offsetX(default,null):Int;
+   public var offsetY(default,null):Int;
 
    public function new(config:Dynamic, input0:Layer,input1:Layer)
    {
-   trace("crop " + input0 + " " + input1);
       super(config,input0,input1);
       if (name==null)
          name = "crop_" + (id++);

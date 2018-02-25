@@ -94,6 +94,13 @@ struct Padding
 
 
 
+enum EltwiseOp
+{
+   EltProduct = 0,
+   EltSum = 1,
+   EltMax = 2,
+};
+
 }// end namespace numerix
 
 

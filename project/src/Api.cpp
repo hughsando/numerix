@@ -835,22 +835,33 @@ DEFINE_PRIME2(layCreateCrop);
 value layCreateEltwise(int inOperation)
 {
    Layer *layer = 0;
-   /*
-   #ifdef NX_GPU
-   if ( enableGpu && !layer && gpuInit())
-      layer = gpuCreateCrop();
-   #endif
+
+   //#ifdef NX_GPU
+   //if ( enableGpu && !layer && gpuInit())
+   //   layer = gpuCreateCrop();
+   //#endif
    #ifdef NX_OPENCL
    if (!layer && OclContext::hasCurrent())
-      layer = oclCreateCrop( );
+      layer = oclCreateEltwise((EltwiseOp)inOperation);
    #endif
-   */
+
    if (!layer)
       layer = Layer::createEltwise((EltwiseOp)inOperation);
 
    return allocLayer(layer);
 }
 DEFINE_PRIME1(layCreateEltwise);
+
+
+void laySetCropIndex(value inLayer, int inIndex, int inX, int inY)
+{
+   TO_LAYER;
+   if (layer)
+      layer->setCropIndex(inIndex, inX, inY);
+}
+DEFINE_PRIME4v(laySetCropIndex);
+
+
 
 
 

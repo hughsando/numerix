@@ -41,12 +41,6 @@ typedef std::vector<BBox> Boxes;
 
 void SortBoxes(Boxes &ioBoxes);
 
-enum EltwiseOp
-{
-   EltProduct = 0,
-   EltSum = 1,
-   EltMax = 2,
-};
 
 
 class Layer
@@ -104,6 +98,8 @@ public:
    virtual void getBoxes(Boxes &outBoxes) { }
 
    virtual void setPadInput() { }
+
+   virtual void setCropIndex(int inIndex, int inDx, int inDy) { }
 
    virtual void setActivation(Activation inActivation) { }
 

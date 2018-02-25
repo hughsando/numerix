@@ -51,12 +51,15 @@
 
      <file name="src/Cuda.cpp" if="NX_CUDA"  />
 
-     <file name="src/OpenCL.cpp" if="NX_OPENCL"  />
-     <file name="src/layers/clConv2D.cl" embedName="openclConv2D_cl" if="NX_OPENCL"  />
-     <file name="src/layers/clDeconv2D.cl" embedName="openclDeconv2D_cl" if="NX_OPENCL"  />
-     <file name="src/layers/clIntelConv2D.cl" embedName="openclIntelConv2D_cl" if="NX_OPENCL"  />
-     <file name="src/layers/clMaxPool.cl" embedName="openclMaxPool_cl" if="NX_OPENCL"  />
-     <file name="src/layers/clConcat.cl" embedName="openclConcat_cl" if="NX_OPENCL"  />
+     <section if="NX_OPENCL">
+        <file name="src/OpenCL.cpp" />
+        <file name="src/layers/clConv2D.cl" embedName="openclConv2D_cl"  />
+        <file name="src/layers/clDeconv2D.cl" embedName="openclDeconv2D_cl"  />
+        <file name="src/layers/clIntelConv2D.cl" embedName="openclIntelConv2D_cl"  />
+        <file name="src/layers/clMaxPool.cl" embedName="openclMaxPool_cl"  />
+        <file name="src/layers/clConcat.cl" embedName="openclConcat_cl"  />
+        <file name="src/layers/clEltwise.cl" embedName="openclEltwise_cl"  />
+     </section>
 
      <section if="linux||rpi" >
         <compilerflag value="-Isrc/movidius" />

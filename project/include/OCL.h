@@ -36,6 +36,8 @@ Layer *oclCreateMaxPool(int inSizeX, int inSizeY,
 
 Layer *oclCreateConcat();
 
+Layer *oclCreateEltwise(EltwiseOp inOp);
+
 Layer *oclCreateYolo(const std::vector<float> &inAnchors,int inBoxCount, int inClassCount, float inThresh);
 
 
