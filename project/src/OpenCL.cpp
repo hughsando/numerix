@@ -693,59 +693,12 @@ Layer *oclCreateMaxPool(int sizeX, int sizeY,
 
 // --- Concat --------------------------------------
 
-static const char *oclConcatProg = 
-"__kernel void Concat(const __global float* src0, const __global float *src1, __global float* dest, const int srcW, const int srcH) {\n"
-    "const int x = get_global_id(0);\n"
-    "const int y = get_global_id(1);\n"
-    "__global float *d = dest + (y*srcW + x)*(IN0+IN1);\n"
-
-    "if (IN0&15) {\n"
-       "const __global float *i0 = src0 + (y*srcW + x)*IN0;\n"
-       "for(int f=0;f<IN0;f++) {\n"
-          "d[f] = i0[f];\n"
-       "}\n"
-     "} else {\n"
-       "const __global float4 *i0 = (const __global float4 *)(src0 + (y*srcW + x)*IN0);\n"
-       "__global float4 *d4 = (__global float4 *)(d);\n"
-       "for(int f=0;f<IN0;f+=16) {\n"
-          "d4[0] = i0[0];\n"
-          "d4[1] = i0[1];\n"
-          "d4[2] = i0[2];\n"
-          "d4[3] = i0[3];\n"
-          "i0+=4;\n"
-          "d4+=4;\n"
-       "}\n"
-     "}\n"
-    "d+=IN0;\n"
-
-    "if (IN1&15) {\n"
-       "const __global float *i1 = src1 + (y*srcW + x)*IN1;\n"
-       "for(int f=0;f<IN0;f++) {\n"
-          "d[f] = i1[f];\n"
-       "}\n"
-     "} else {\n"
-       "const __global float4 *i1 = (const __global float4 *)(src1 + (y*srcW + x)*IN1);\n"
-       "__global float4 *d4 = (__global float4 *)(d);\n"
-       "for(int f=0;f<IN1;f+=16) {\n"
-          "d4[0] = i1[0];\n"
-          "d4[1] = i1[1];\n"
-          "d4[2] = i1[2];\n"
-          "d4[3] = i1[3];\n"
-          "i1+=4;\n"
-          "d4+=4;\n"
-       "}\n"
-     "}\n"
-"}"
-;
-
-
 
 class OpenCLConcat : public OpenCLLayer
 {
    cl_kernel  kernel;
    int lastIn0;
    int lastIn1;
-   bool intelMethod;
 
 public:
    OpenCLConcat( )
@@ -756,7 +709,6 @@ public:
 
       lastIn0 = lastIn1 = 0;
       kernel = 0;
-      intelMethod = false;
    }
 
    ~OpenCLConcat()
@@ -769,8 +721,7 @@ public:
       lastIn1 = in1;
       char buildOptions[1024];
       sprintf(buildOptions," -DIN0=%d -DIN1=%d", in0, in1);
-      intelMethod = ctx->useIntelMethod && !(in0 & 15) && !(in1 & 15);
-      const char *prog = intelMethod ? openclConcat_cl : oclConcatProg;
+      const char *prog = openclConcat_cl;
       kernel = ctx->makeKernel("CONCAT", prog,"Concat", buildOptions);
    }
 
@@ -807,7 +758,6 @@ public:
 
       Tensor *result = Tensor::makeBuffer(inBuffer, srcW, srcH, channels, inSrc0->type);
 
-
       const OclData *src0 = inSrc0->oclRead();
       const OclData *src1 = inSrc1->oclRead();
 
@@ -817,11 +767,6 @@ public:
       err |= clSetKernelArg(kernel, 0, sizeof(cl_mem), &src0);
       err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &src1);
       err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &dest);
-      if (!intelMethod)
-      {
-         err |= clSetKernelArg(kernel, 3, sizeof(int), &srcW);
-         err |= clSetKernelArg(kernel, 4, sizeof(int), &srcH);
-      }
 
       if (err)
       {
@@ -832,24 +777,12 @@ public:
       if (!ctx)
          TensorThrow("OpenCLConcat - no current ocl context");
 
-      if (intelMethod)
-      {
-         size_t globalSize[2] = { (size_t)(srcW*srcH), 16 };
-         size_t localSize[2] = { 1, 16 };
-         cl_uint work_dim = 2;
-         err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, 0/*Work offset*/, globalSize, localSize, 0, NULL, startKernel());
-         if (err)
-            TensorThrow("OpenCLConcat - could not clEnqueueNDRangeKernel");
-      }
-      else
-      {
-         size_t globalSize[2] = { (size_t)srcW, (size_t)srcH };
- 
-         cl_uint work_dim = 2;
-         err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, 0/*Work offset*/, globalSize, 0, 0, NULL, startKernel());
-         if (err)
-            TensorThrow("OpenCLConcat - could not clEnqueueNDRangeKernel");
-      }
+      size_t globalSize[2] = { (size_t)(srcW*srcH), 16 };
+      size_t localSize[2] = { 1, 16 };
+      cl_uint work_dim = 2;
+      err = clEnqueueNDRangeKernel(ctx->queue0, kernel, work_dim, 0/*Work offset*/, globalSize, localSize, 0, NULL, startKernel());
+      if (err)
+         TensorThrow("OpenCLConcat - could not clEnqueueNDRangeKernel");
 
       if (Layer::accurateTimes)
       {
@@ -1132,9 +1065,9 @@ public:
       bool wasIntelWeights = useIntelWeights;
 
       //useTiled1x1 =  is1x1 && threads;
-      //useIntelTiled1x1 = is1x1 && (threads>=8) && !(outputs&15) && ctx->useIntelMethod;
+      useIntelTiled1x1 = is1x1 && (threads>=8) && !(outputs&15) && ctx->useIntelMethod;
 
-       //useIntelTiled3x3 = strideX==1 && strideY==1 && filterX==3 && filterY==3 && !(inputs&7) && !(outputs&7) && ctx->useIntelMethod;
+       useIntelTiled3x3 = strideX==1 && strideY==1 && filterX==3 && filterY==3 && !(inputs&7) && !(outputs&7) && ctx->useIntelMethod;
 
       useConv2Do8i8 = !isDeconvolution && !useIntelTiled3x3 && !useTiled1x1 && !(outputs&7) && !(inputs&7) && strideX==1 && strideY==1;
       useIntelWeights = useConv2Do8i8 && ctx->useIntelMethod;
@@ -1197,10 +1130,6 @@ public:
          srcTx = filterX<=3 ? 4 : 2;
          srcTy = filterY<=3 ? 4 : 2;
 
-         //sprintf(argBuf," -D SRC_W=%d -D SRC_H=%d -D INPUTS=%d ", srcW, srcH, inputs);
-         //buildOptions += argBuf;
-         //sprintf(argBuf," -D DEST_W=%d -D DEST_H=%d -D OUTPUTS=%d", destW, destH, outputs);
-         //buildOptions += argBuf;
          sprintf(argBuf," -D FILTER_X=%d -D FILTER_Y=%d ", filterX, filterY);
          buildOptions += argBuf;
          sprintf(argBuf," -D TW=%d -D TH=%d ", srcTx, srcTy);

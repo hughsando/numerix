@@ -1,7 +1,6 @@
 
 #if defined(cl_intel_subgroups)
 #pragma OPENCL EXTENSION  cl_intel_subgroups : enable
-#endif
 
 __attribute__((intel_reqd_sub_group_size(16)))
 __kernel void Concat(const __global uint* inSrc0, const __global uint *inSrc1, __global uint* inDest)
@@ -42,3 +41,28 @@ __kernel void Concat(const __global uint* inSrc0, const __global uint *inSrc1, _
           intel_sub_group_block_write(dest + i1,  intel_sub_group_block_read(src1 + i1));
     }
 }
+
+
+#else
+
+__kernel void Concat(const __global float* inSrc0, const __global float *inSrc1, __global float* inDest) {
+
+    const int offset = get_global_id(0);
+    const int threadId = get_global_id(1);
+
+    __global float* dest = inDest + offset * (IN0+IN1) + threadId;
+    const __global float* src0 = inSrc0 + offset * IN0 + threadId;
+    const __global float* src1 = inSrc1 + offset * IN1 + threadId;
+
+    for(int f=0;f<IN0;f+=16)
+       dest[f] = src0[f];
+
+    dest +=IN0;
+
+    for(int f=0;f<IN1;f+=16)
+       dest[f] = src1[f];
+}
+
+#endif
+
+

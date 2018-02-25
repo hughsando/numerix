@@ -21,6 +21,7 @@ class Main extends Sprite
    var timeField:TextField;
    var labelFormat:TextFormat;
    var colours:Array<Int>;
+   var resultBmp:Bitmap;
    var mirror:Bool;
    var sync:Bool;
    var cpu:Bool;
@@ -148,6 +149,11 @@ class Main extends Sprite
             bitmap.y = 0;
             bitmap.x = (stage.stageWidth-sw)*0.5;
          }
+
+
+         resultBmp.width = w/3;
+         resultBmp.height = h/3;
+
          overlay.x = bitmap.x;
          overlay.y = bitmap.y;
          if (mirror)
@@ -168,7 +174,15 @@ class Main extends Sprite
       return field;
    }
 
-   public function onDetection(boxes:Array<Box>, time:Float)
+   public function onImage(bmp:BitmapData, time:Float)
+   {
+      detectorBusy = false;
+      timeField.text = (Std.int(time*100000) * 0.01 ) + "ms";
+      if (bmp!=null)
+         resultBmp.bitmapData = bmp;
+   }
+
+   public function onBoxes(boxes:Array<Box>, time:Float)
    {
       if (boxes!=null)
       {
@@ -217,6 +231,11 @@ class Main extends Sprite
             addChild(bitmap);
             overlay = new Sprite();
             addChild(overlay);
+
+            resultBmp = new Bitmap();
+            addChild(resultBmp);
+            resultBmp.bitmapData = new BitmapData(100,60,false,0xffff0000);
+
             timeField = new TextField();
             timeField.autoSize = TextFieldAutoSize.LEFT;
             var fmt = new TextFormat();
@@ -235,14 +254,25 @@ class Main extends Sprite
                bmpTensor = Tensor.empty(Nx.float32, [h,w,3] );
              }
 
-            var trans = Surface.FLOAT_UNIT_SCALE;
+            //var trans = Surface.FLOAT_UNIT_SCALE;
+            var trans = Surface.FLOAT_UNSCALED;
             camera.bitmapData.getFloats32( bmpTensor.data, 0, 0, PixelFormat.pfRGB, trans );
+
+            var pixels = bmpTensor.width * bmpTensor.height;
+            var idx = 0;
+            for(p in 0...pixels)
+            {
+               bmpTensor[idx] = bmpTensor[idx]-106; idx++;
+               bmpTensor[idx] = bmpTensor[idx]-114; idx++;
+               bmpTensor[idx] = bmpTensor[idx]-129; idx++;
+            }
+
 
             detectorBusy = true;
             if (sync)
-               detector.runModelSync(bmpTensor, onDetection );
+               detector.runModelSync(bmpTensor, onImage /*onBoxes*/ );
             else
-               detector.runModelAsync(bmpTensor, onDetection );
+               detector.runModelAsync(bmpTensor, onImage /*onBoxes*/ );
          }
       }
    }
