@@ -715,6 +715,20 @@ void layConv2DSetActication(value inLayer, int inActivation)
 DEFINE_PRIME2v(layConv2DSetActication)
 
 
+void layConv2DRemoveMean(value inLayer, value inMean)
+{
+   TO_LAYER
+   std::vector<float> mean;
+   int len = val_array_size(inMean);
+   for(int i=0;i<len;i++)
+      mean.push_back( val_number( val_array_i(inMean,i) ) );
+
+   layer->removeMean(mean);
+}
+DEFINE_PRIME2v(layConv2DRemoveMean)
+
+
+
 value layCreateMaxPool(value inSize, value inStrides, int inPadding)
 {
    int sx = 1;

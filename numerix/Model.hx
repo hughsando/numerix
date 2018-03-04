@@ -89,6 +89,15 @@ class Model
       return null;
    }
 
+   public function removeMean(mean:Array<Float>)
+   {
+      var layer = makeInputLayer();
+      if (layer==null || layer.outputs.length!=1)
+         throw "Invalid input layer";
+
+      layer.outputs[0].removeMean(mean);
+   }
+
    public function optimizeLayers()
    {
       for(layer in layers)

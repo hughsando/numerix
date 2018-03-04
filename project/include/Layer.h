@@ -81,8 +81,6 @@ public:
 
    static Layer *createReorg(int inStride);
 
-   static Layer *createYolo(const std::vector<float> &inAnchors,int inBoxCount, int inClassCount, float inThresh);
-
    static Layer *createMovidius(const std::string &inDeviceName, const unsigned char *graphData, size_t dataLength, CShape outputSize);
 
 
@@ -99,11 +97,15 @@ public:
 
    virtual void setPadInput() { }
 
+   virtual void removeMean( const std::vector<float> &inMean ) { }
+
    virtual void setCropIndex(int inIndex, int inDx, int inDy) { }
 
    virtual void setActivation(Activation inActivation) { }
 
    virtual double getRunTime();
+
+   static Layer *createYolo(const std::vector<float> &inAnchors,int inBoxCount, int inClassCount, float inThresh);
 
    int getNextJob();
    void startRun();
@@ -174,6 +176,9 @@ public:
    void setActivation(Activation inActivation) { activation=inActivation; }
 
    void reduceInputs(int inCount);
+
+   void removeMean( const std::vector<float> &inMean );
+
 
    Tensor *run(Tensor *inSrc0, Tensor *inBuffer);
 

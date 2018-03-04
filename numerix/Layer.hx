@@ -81,6 +81,11 @@ class Layer
    {
    }
 
+   public function removeMean(mean:Array<Float>)
+   {
+      throw "Can't remove mean from this layer";
+   }
+
    public function invalidateAll()
    {
       if (valid)

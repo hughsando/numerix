@@ -169,6 +169,30 @@ void Conv2DBase::reduceInputs(int inCount)
 }
 
 
+void Conv2DBase::removeMean( const std::vector<float> &inMean )
+{
+   if (inMean.size() != inputs)
+      TensorThrow("Conv2D invalid mean length");
+
+   // O = output[o] = Sum W[o][fy][fx][i] * I[i] + B[o]
+   //                   fx,fy,i
+   //   replace = I[i] with (I[i]-mean[i])
+   // output[o] =  O + Sum W[o][fy][fx][i] * (-mean[i])
+   float *b = (float *)bias->cpuWrite();
+   for(int o=0;o<outputs;o++)
+   {
+      double delta = 0;
+      for(int fy=0;fy<filterY;fy++)
+         for(int fx=0;fx<filterY;fx++)
+            for(int i=0;i<inputs;i++)
+               delta += inMean[i] * weights->getFloat(o,fy,fx,i);
+      b[o] -= delta;
+   }
+   rebuildWeights();
+
+}
+
+
 Tensor *Conv2DBase::run(Tensor *inSrc0, Tensor *inBuffer)
 {
    if (inSrc0->type != Float32)

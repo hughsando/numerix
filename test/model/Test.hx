@@ -91,13 +91,19 @@ class Test
          //var scaling = NmeTools.TRANS_UNIT_SCALE;
          var scaling = NmeTools.TRANS_UNSCALED;
          val = NmeTools.loadImageF32( bmpname, scaling );
-         var pixels = val.width * val.height;
-         var idx = 0;
-         for(p in 0...pixels)
+
+         if (true)
+            model.removeMean([106.0, 114, 129]);
+         else
          {
-            val[idx] = val[idx]-106; idx++;
-            val[idx] = val[idx]-114; idx++;
-            val[idx] = val[idx]-129; idx++;
+            var pixels = val.width * val.height;
+            var idx = 0;
+            for(p in 0...pixels)
+            {
+               val[idx] = val[idx]-106; idx++;
+               val[idx] = val[idx]-114; idx++;
+               val[idx] = val[idx]-129; idx++;
+            }
          }
       }
       #end

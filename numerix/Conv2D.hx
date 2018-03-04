@@ -69,6 +69,12 @@ class Conv2D extends Layer
          throw 'Unknown padding $pad';
    }
 
+
+   override public function removeMean(mean:Array<Float>)
+   {
+      layConv2DRemoveMean(handle, mean);
+   }
+
    override public function setActivation(inActication:Int)
    {
       activation = inActication;
@@ -122,6 +128,7 @@ class Conv2D extends Layer
 
    static var layCreateConv2D = Loader.load("layCreateConv2D","oiiooobbo");
    static var layConv2DSetNorm = Loader.load("layConv2DSetNorm","oooov");
+   static var layConv2DRemoveMean = Loader.load("layConv2DRemoveMean","oov");
    static var layConv2DSetActication = Loader.load("layConv2DSetActication","oiv");
 
 
