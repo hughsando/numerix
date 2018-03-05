@@ -1,0 +1,11 @@
+{
+  "name": "numerix",
+  "url": "https://github.com/hughsando",
+  "license": "Non-commercial",
+  "tags": [ "cpp", "haxe", "nme", "ml", "ai" ],
+  "description": "Accelerated numerix framework for haxe",
+  "version": "0.1.0",
+  "releasenote": "see Changes.md",
+  "contributors": [ "gamehaxe" ],
+  "dependencies": {}
+}
